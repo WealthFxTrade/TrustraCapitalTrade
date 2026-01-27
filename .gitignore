@@ -1,13 +1,11 @@
-# Node
+# -------- Node / Backend --------
 node_modules/
 .env
 
-# Logs
+# -------- Logs & System --------
 logs/
 *.log
-
-# OS files
 .DS_Store
 
-# Build output (if any)
+# -------- Build & Output --------
 dist/
