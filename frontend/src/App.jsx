@@ -18,13 +18,18 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Keep token in localStorage
   useEffect(() => {
-    if (token) localStorage.setItem('token', token);
-    else localStorage.removeItem('token');
+    if (token) {
+      localStorage.setItem('token', token);
+    } else {
+      localStorage.removeItem('token');
+    }
   }, [token]);
 
+  // Verify token and load user data
   useEffect(() => {
-    const verify = async () => {
+    const verifyUser = async () => {
       if (!token) {
         setLoading(false);
         return;
@@ -35,7 +40,9 @@ function App() {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        if (!res.ok) throw new Error('Invalid token');
+        if (!res.ok) {
+          throw new Error('Invalid or expired token');
+        }
 
         const data = await res.json();
         setUser(data.user);
@@ -48,31 +55,69 @@ function App() {
       }
     };
 
-    verify();
+    verifyUser();
   }, [token]);
 
-  const logout = () => {
+  const handleLogout = () => {
     setToken('');
     setUser(null);
     localStorage.removeItem('token');
+    navigate('/');
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
+        <div className="text-xl">Loading...</div>
+      </div>
+    );
   }
 
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public routes */}
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login setToken={setToken} />} />
         <Route path="/register" element={<Register setToken={setToken} />} />
-        <Route path="/plan-selection" element={token ? <PlanSelection token={token} setUser={setUser} /> : <Navigate to="/register" replace />} />
-        <Route path="/dashboard" element={token ? <Dashboard token={token} user={user} logout={logout} /> : <Navigate to="/login" replace />} />
-        <Route path="/admin" element={token && user?.role === 'admin' ? <AdminPanel token={token} /> : <Navigate to="/" replace />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
+        {/* Protected routes */}
+        <Route
+          path="/plan-selection"
+          element={
+            token ? (
+              <PlanSelection token={token} setUser={setUser} />
+            ) : (
+              <Navigate to="/register" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/dashboard"
+          element={
+            token ? (
+              <Dashboard token={token} user={user} logout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/admin"
+          element={
+            token && user?.role === 'admin' ? (
+              <AdminPanel token={token} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
+        />
+
+        {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
