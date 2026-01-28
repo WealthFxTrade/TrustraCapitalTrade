@@ -16,17 +16,22 @@ dotenv.config();
 
 const app = express();
 
-// Security headers
+// === PROXY TRUST (REQUIRED ON RENDER) ===
+app.set('trust proxy', 1);
+
+// === Security headers ===
 app.use(helmet());
 
-// Rate limit auth endpoints
+// === Rate limit auth endpoints ===
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // limit each IP to 10 requests per window
+  standardHeaders: true, // return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false,    // disable `X-RateLimit-*` headers
   message: { error: 'Too many requests, please try again later.' }
 });
 
-// CORS
+// === CORS configuration ===
 const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173',
@@ -48,11 +53,11 @@ app.use(cors({
 
 app.options('*', cors());
 
-// Body parsers
+// === Body parsers ===
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Root & health
+// === Root & health check routes ===
 app.get('/', (req, res) => {
   res.send('TrustraCapitalTrade Backend is running! Visit /api/health');
 });
@@ -67,22 +72,24 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Routes with rate limit on auth
+// === Routes with rate limiter on auth ===
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/user', userRoutes);
 
-// 404 handler
+// === 404 handler ===
 app.use((req, res) => {
-  res.status(404).json({ message: `Route not found: \( {req.method} \){req.originalUrl}` });
+  res.status(404).json({
+    message: `Route not found: ${req.method} ${req.originalUrl}`
+  });
 });
 
-// Error handler
+// === Global error handler ===
 app.use((err, req, res, next) => {
-  console.error(`[\( {req.method} \){req.originalUrl}]`, err.stack || err);
+  console.error(`[${req.method} ${req.originalUrl}]`, err.stack || err);
   res.status(500).json({ message: 'Internal server error' });
 });
 
-// MongoDB connection
+// === MongoDB connection ===
 const mongoURI = process.env.MONGO_URI;
 if (!mongoURI) {
   console.error('❌ MONGO_URI not set');
@@ -105,13 +112,13 @@ const connectDB = async (retries = 5) => {
 
 connectDB();
 
-// Start server
+// === Start server ===
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`🚀 Backend running on port ${PORT}`);
 });
 
-// Graceful shutdown
+// === Graceful shutdown ===
 process.on('SIGTERM', () => {
   console.log('SIGTERM received – shutting down');
   server.close(() => process.exit(0));
