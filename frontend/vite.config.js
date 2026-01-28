@@ -6,9 +6,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://trustracapitalfx-d8w7.onrender.com',
+        target: 'https://trustracapitaltrade-backend.onrender.com',
         changeOrigin: true,
         secure: true,
+        rewrite: (path) => path.replace(/^\/api/, '/api')
       }
     }
   }
