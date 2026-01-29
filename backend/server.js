@@ -1,4 +1,3 @@
-// backend/server.js
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -14,46 +13,44 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 
 dotenv.config();
-
 const app = express();
 
 /* ---------------- SECURITY & MIDDLEWARE ---------------- */
 app.use(helmet());
 
-// Rate limiting on auth routes (very important to prevent brute-force)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,                  // stricter for production
+  windowMs: 15 * 60 * 1000,
+  max: 20,
   message: { success: false, message: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// CORS — only allow trusted origins
 const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked origin: ${origin}`);
-      callback(null, false);
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) callback(null, true);
+      else {
+        console.warn(`CORS blocked origin: ${origin}`);
+        callback(null, false);
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 
 // Handle preflight OPTIONS requests
 app.options('*', cors());
 
-// Body parsers with size limit (prevents DoS)
+// Body parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -84,24 +81,21 @@ app.use('/api/user', userRoutes);
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route not found: \( {req.method} \){req.originalUrl}`,
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
 
 /* ---------------- GLOBAL ERROR HANDLER ---------------- */
 app.use((err, req, res, next) => {
-  console.error(`[ERROR] \( {req.method} \){req.originalUrl}:`, err.stack || err.message);
-  res.status(500).json({
-    success: false,
-    message: 'Internal server error',
-  });
+  console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err.stack || err.message);
+  res.status(500).json({ success: false, message: 'Internal server error' });
 });
 
 /* ---------------- MONGODB CONNECTION ---------------- */
 const connectDB = async () => {
   if (!process.env.MONGO_URI) {
     console.error('⚠️ MONGO_URI is not set in environment variables');
-    process.exit(1); // Crash early in production
+    process.exit(1);
   }
 
   const maxRetries = 5;
@@ -117,12 +111,12 @@ const connectDB = async () => {
       break;
     } catch (err) {
       retries++;
-      console.error(`MongoDB connection failed (attempt \( {retries}/ \){maxRetries}):`, err.message);
+      console.error(`MongoDB connection failed (attempt ${retries}/${maxRetries}):`, err.message);
       if (retries === maxRetries) {
         console.error('Max retries reached. Exiting...');
         process.exit(1);
       }
-      await new Promise(resolve => setTimeout(resolve, 5000)); // 5s backoff
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // 5s backoff
     }
   }
 };
@@ -131,7 +125,6 @@ connectDB();
 
 /* ---------------- START SERVER ---------------- */
 const PORT = process.env.PORT || 5000;
-
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);

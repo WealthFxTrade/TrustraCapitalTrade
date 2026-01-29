@@ -10,100 +10,37 @@ const planReturns = {
 };
 
 const userSchema = new mongoose.Schema({
-  fullName: {
-    type: String,
-    required: [true, 'Full name is required'],
-    trim: true,
-    minlength: [2, 'Full name must be at least 2 characters']
-  },
-  email: {
-    type: String,
-    required: [true, 'Email is required'],
-    unique: true,
-    lowercase: true,
-    trim: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email address']
-  },
-  password: {
-    type: String,
-    required: [true, 'Password is required'],
-    minlength: [8, 'Password must be at least 8 characters long'],
-    select: false
-  },
-  balance: {
-    type: Number,
-    default: 0,
-    min: [0, 'Balance cannot be negative']
-  },
-  plan: {
-    type: String,
-    enum: ['None', 'Rio Starter', 'Rio Basic', 'Rio Standard', 'Rio Advanced', 'Rio Elite'],
-    default: 'None'
-  },
-  role: {
-    type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
-  },
-  kycStatus: {
-    type: String,
-    enum: ['pending', 'verified', 'rejected'],
-    default: 'pending'
-  },
-  kycDocuments: {
-    type: [String],
-    default: []
-  },
-  isVerified: {
-    type: Boolean,
-    default: false
-  },
-  verificationToken: {
-    type: String,
-    sparse: true
-  },
-  verificationTokenExpires: {
-    type: Date,
-    sparse: true
-  },
-  lastProfitUpdate: {
-    type: Date,
-    default: Date.now
-  }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  fullName: { type: String, required: true, trim: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password: { type: String, required: true, select: false },
+  balance: { type: Number, default: 0, min: 0 },
+  plan: { type: String, enum: ['None', ...Object.keys(planReturns)], default: 'None' },
+  role: { type: String, enum: ['user','admin'], default: 'user' },
+  kycStatus: { type: String, enum: ['pending','verified','rejected'], default: 'pending' },
+  isVerified: { type: Boolean, default: false },
+  verificationToken: String,
+  verificationTokenExpires: Date,
+  btcIndex: { type: Number, default: 0 },
+  btcAddress: { type: String, default: '' }
+}, { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } });
+
+// Virtual dailyRate
+userSchema.virtual('dailyRate').get(function() {
+  if (!this.plan || this.plan === 'None') return 0;
+  return planReturns[this.plan] / 30;
 });
 
-// Virtual daily rate
-userSchema.virtual('dailyRate').get(function () {
-  if (this.plan === 'None' || !this.plan) return 0;
-  return (planReturns[this.plan] || 0) / 30;
-});
-
-// Hash password before save
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-
-  try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Compare password method
-userSchema.methods.comparePassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
-
-// Prevent negative balance
-userSchema.pre('save', function (next) {
-  if (this.balance < 0) this.balance = 0;
+// Hash password
+userSchema.pre('save', async function(next){
+  if(!this.isModified('password')) return next();
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
   next();
 });
+
+// Compare password
+userSchema.methods.comparePassword = async function(password){
+  return await bcrypt.compare(password, this.password);
+};
 
 export default mongoose.model('User', userSchema);
