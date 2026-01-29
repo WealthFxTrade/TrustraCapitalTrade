@@ -2,7 +2,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 
-// All pages are in src/components/
 import Landing from './components/Landing';
 import Login from './components/Login';
 import Register from './components/Register';
@@ -16,13 +15,13 @@ import ResendVerification from './components/ResendVerification';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
 
-export default function App() {
+function App() {
   const [token, setToken] = useState(() => localStorage.getItem('token') || '');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Sync token to localStorage
+  // Keep token in localStorage
   useEffect(() => {
     if (token) {
       localStorage.setItem('token', token);
@@ -31,7 +30,7 @@ export default function App() {
     }
   }, [token]);
 
-  // Verify token & load user
+  // Verify token and load user data on mount / token change
   useEffect(() => {
     const verifyUser = async () => {
       if (!token) {
@@ -51,12 +50,12 @@ export default function App() {
         const data = await res.json();
         setUser(data.user);
       } catch (err) {
-        console.error('Auth verification failed:', err);
+        console.error('Auth verification failed:', err.message);
         setToken('');
         localStorage.removeItem('token');
-        navigate('/login');
+        navigate('/login', { replace: true });
       } finally {
-        setLoading(false);
+        setLoading(false); // Always stop loading
       }
     };
 
@@ -67,7 +66,7 @@ export default function App() {
     setToken('');
     setUser(null);
     localStorage.removeItem('token');
-    navigate('/');
+    navigate('/', { replace: true });
   };
 
   if (loading) {
@@ -79,7 +78,7 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<Landing />} />
@@ -95,22 +94,42 @@ export default function App() {
         {/* Protected routes */}
         <Route
           path="/plan-selection"
-          element={token ? <PlanSelection token={token} setUser={setUser} /> : <Navigate to="/register" replace />}
+          element={
+            token ? (
+              <PlanSelection token={token} setUser={setUser} />
+            ) : (
+              <Navigate to="/register" replace />
+            )
+          }
         />
 
         <Route
           path="/dashboard"
-          element={token ? <Dashboard token={token} user={user} logout={handleLogout} /> : <Navigate to="/login" replace />}
+          element={
+            token ? (
+              <Dashboard token={token} user={user} logout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
         />
 
         <Route
           path="/admin"
-          element={token && user?.role === 'admin' ? <AdminPanel token={token} /> : <Navigate to="/" replace />}
+          element={
+            token && user?.role === 'admin' ? (
+              <AdminPanel token={token} />
+            ) : (
+              <Navigate to="/" replace />
+            )
+          }
         />
 
         {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }
+
+export default App;
