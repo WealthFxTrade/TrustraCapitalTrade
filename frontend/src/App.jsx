@@ -17,7 +17,7 @@ function App() {
   const [token, setToken] = useState(() => localStorage.getItem('token') || '');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();  // Added this — fixes the navigate error
+  const navigate = useNavigate();
 
   // Sync token to localStorage
   useEffect(() => {
@@ -28,7 +28,7 @@ function App() {
     }
   }, [token]);
 
-  // Verify token & fetch user on mount / token change
+  // Verify token & fetch user
   useEffect(() => {
     const verifyUser = async () => {
       if (!token) {
@@ -42,18 +42,18 @@ function App() {
         });
 
         if (!res.ok) {
-          throw new Error('Invalid or expired token');
+          throw new Error(`Auth failed: \( {res.status} \){res.statusText}`);
         }
 
         const data = await res.json();
         setUser(data.user);
       } catch (err) {
-        console.error('Auth verification failed:', err);
+        console.error('Auth verification failed:', err.message);
         setToken('');
         localStorage.removeItem('token');
-        navigate('/login');
+        navigate('/login', { replace: true });
       } finally {
-        setLoading(false);
+        setLoading(false); // ALWAYS stop loading — prevents infinite spinner
       }
     };
 
@@ -64,13 +64,13 @@ function App() {
     setToken('');
     setUser(null);
     localStorage.removeItem('token');
-    navigate('/');
+    navigate('/', { replace: true });
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
-        <div className="text-xl animate-pulse">Loading...</div>
+        <div className="text-xl animate-pulse">Loading... Please wait</div>
       </div>
     );
   }
@@ -119,7 +119,7 @@ function App() {
           }
         />
 
-        {/* Catch-all redirect to home */}
+        {/* Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
