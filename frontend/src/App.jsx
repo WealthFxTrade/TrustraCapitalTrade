@@ -2,6 +2,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 
+// All pages are in src/components/
 import Landing from './components/Landing';
 import Login from './components/Login';
 import Register from './components/Register';
@@ -10,10 +11,12 @@ import Dashboard from './components/Dashboard';
 import AdminPanel from './components/AdminPanel';
 import Terms from './components/Terms';
 import Privacy from './components/Privacy';
+import VerifyEmail from './components/VerifyEmail';
+import ResendVerification from './components/ResendVerification';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
 
-function App() {
+export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem('token') || '');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +31,7 @@ function App() {
     }
   }, [token]);
 
-  // Verify token & fetch user
+  // Verify token & load user
   useEffect(() => {
     const verifyUser = async () => {
       if (!token) {
@@ -42,18 +45,18 @@ function App() {
         });
 
         if (!res.ok) {
-          throw new Error(`Auth failed: \( {res.status} \){res.statusText}`);
+          throw new Error('Invalid or expired token');
         }
 
         const data = await res.json();
         setUser(data.user);
       } catch (err) {
-        console.error('Auth verification failed:', err.message);
+        console.error('Auth verification failed:', err);
         setToken('');
         localStorage.removeItem('token');
-        navigate('/login', { replace: true });
+        navigate('/login');
       } finally {
-        setLoading(false); // ALWAYS stop loading — prevents infinite spinner
+        setLoading(false);
       }
     };
 
@@ -64,13 +67,13 @@ function App() {
     setToken('');
     setUser(null);
     localStorage.removeItem('token');
-    navigate('/', { replace: true });
+    navigate('/');
   };
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
-        <div className="text-xl animate-pulse">Loading... Please wait</div>
+        <div className="text-xl animate-pulse">Loading...</div>
       </div>
     );
   }
@@ -85,38 +88,24 @@ function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
 
+        {/* Email verification & resend */}
+        <Route path="/verify-email/:token" element={<VerifyEmail />} />
+        <Route path="/resend-verification" element={<ResendVerification />} />
+
         {/* Protected routes */}
         <Route
           path="/plan-selection"
-          element={
-            token ? (
-              <PlanSelection token={token} setUser={setUser} />
-            ) : (
-              <Navigate to="/register" replace />
-            )
-          }
+          element={token ? <PlanSelection token={token} setUser={setUser} /> : <Navigate to="/register" replace />}
         />
 
         <Route
           path="/dashboard"
-          element={
-            token ? (
-              <Dashboard token={token} user={user} logout={handleLogout} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
+          element={token ? <Dashboard token={token} user={user} logout={handleLogout} /> : <Navigate to="/login" replace />}
         />
 
         <Route
           path="/admin"
-          element={
-            token && user?.role === 'admin' ? (
-              <AdminPanel token={token} />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
+          element={token && user?.role === 'admin' ? <AdminPanel token={token} /> : <Navigate to="/" replace />}
         />
 
         {/* Catch-all */}
@@ -125,5 +114,3 @@ function App() {
     </BrowserRouter>
   );
 }
-
-export default App;
