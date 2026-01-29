@@ -1,73 +1,66 @@
+// backend/routes/auth.js
 import express from 'express';
-import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { sendVerificationEmail } from '../utils/email.js';
-import { generateUserAddress } from '../utils/bitcoin.js';
-import bcrypt from 'bcryptjs';
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey';
+const JWT_EXPIRES_IN = '7d'; // token validity
 
-// REGISTER
-router.post('/register', async (req,res)=>{
-  const { fullName, email, password } = req.body;
+/* ---------------- REGISTER ---------------- */
+router.post('/register', async (req, res) => {
   try {
-    if(!fullName || !email || !password) return res.status(400).json({success:false, message:'All fields required'});
-    if(password.length<8) return res.status(400).json({success:false,message:'Password ≥ 8 characters'});
+    const { fullName, email, password } = req.body;
+    if (!fullName || !email || !password) {
+      return res.status(400).json({ success: false, message: 'All fields are required' });
+    }
 
-    const exists = await User.findOne({email});
-    if(exists) return res.status(400).json({success:false,message:'Email exists'});
+    // Check if user exists (case-insensitive)
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(409).json({ success: false, message: 'Email already registered' });
+    }
 
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = Date.now() + 24*60*60*1000;
-
-    const lastUser = await User.findOne().sort({btcIndex:-1});
-    const index = lastUser ? lastUser.btcIndex + 1 : 0;
-
-    const btcAddress = generateUserAddress(index);
-
-    const user = new User({
-      fullName,email,password,verificationToken:token,
-      verificationTokenExpires:expires,
-      btcIndex:index,
-      btcAddress
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const newUser = await User.create({
+      fullName,
+      email: email.toLowerCase(),
+      password: hashedPassword,
     });
-    await user.save();
-    await sendVerificationEmail(user,token);
 
-    res.status(201).json({success:true,message:'Account created. Check email for verification.'});
-  } catch(err){
-    console.error(err);
-    res.status(500).json({success:false,message:'Server error'});
+    res.status(201).json({ success: true, message: 'User registered successfully' });
+  } catch (err) {
+    console.error('[REGISTER ERROR]', err);
+    res.status(500).json({ success: false, message: 'Server error during registration' });
   }
 });
 
-// VERIFY EMAIL
-router.get('/verify-email/:token', async (req,res)=>{
-  try{
-    const user = await User.findOne({verificationToken:req.params.token, verificationTokenExpires:{$gt:Date.now()}});
-    if(!user) return res.status(400).json({success:false,message:'Invalid or expired token'});
-    user.isVerified = true;
-    user.verificationToken = undefined;
-    user.verificationTokenExpires = undefined;
-    await user.save();
-    res.json({success:true,message:'Email verified.'});
-  } catch(err){console.error(err);res.status(500).json({success:false,message:'Server error'})}
-});
+/* ---------------- LOGIN ---------------- */
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
 
-// LOGIN
-router.post('/login', async (req,res)=>{
-  const { email,password } = req.body;
-  try{
-    const user = await User.findOne({email}).select('+password');
-    if(!user) return res.status(401).json({success:false,message:'Invalid credentials'});
-    if(!user.isVerified) return res.status(403).json({success:false,message:'Verify email first'});
-    const match = await bcrypt.compare(password,user.password);
-    if(!match) return res.status(401).json({success:false,message:'Invalid credentials'});
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
 
-    const token = jwt.sign({id:user._id,email:user.email,role:user.role},process.env.JWT_SECRET,{expiresIn:'30d'});
-    res.json({success:true, token, user:{id:user._id,fullName:user.fullName,email:user.email,plan:user.plan,btcAddress:user.btcAddress}});
-  } catch(err){console.error(err); res.status(500).json({success:false,message:'Server error'})}
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+
+    res.json({ success: true, token, user: { id: user._id, fullName: user.fullName, email: user.email } });
+  } catch (err) {
+    console.error('[LOGIN ERROR]', err);
+    res.status(500).json({ success: false, message: 'Server error during login' });
+  }
 });
 
 export default router;

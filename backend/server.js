@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 
-// Cron job
+// Cron jobs (if any)
 import './cron/profitCron.js';
 
 // Routes
@@ -13,48 +13,50 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 
 dotenv.config();
+
 const app = express();
 
 /* ---------------- SECURITY & MIDDLEWARE ---------------- */
 app.use(helmet());
 
+// Trust proxy headers (needed for Render, Heroku, Nginx, etc.)
+app.set('trust proxy', 1);
+
+// Rate limiting (for auth routes)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // stricter in production
   message: { success: false, message: 'Too many requests from this IP, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
+// CORS — allow only trusted origins
 const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
 ];
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) callback(null, true);
-      else {
-        console.warn(`CORS blocked origin: ${origin}`);
-        callback(null, false);
-      }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    console.warn(`CORS blocked origin: ${origin}`);
+    callback(null, false);
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','DELETE','OPTIONS','PATCH'],
+  allowedHeaders: ['Content-Type','Authorization'],
+}));
 
 // Handle preflight OPTIONS requests
 app.options('*', cors());
 
-// Body parsers
+// Body parsers with size limit
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-/* ---------------- HEALTH & STATUS ENDPOINTS ---------------- */
+/* ---------------- HEALTH CHECK ---------------- */
 app.get('/', (req, res) => {
   res.json({
     status: 'OK',
@@ -116,7 +118,7 @@ const connectDB = async () => {
         console.error('Max retries reached. Exiting...');
         process.exit(1);
       }
-      await new Promise((resolve) => setTimeout(resolve, 5000)); // 5s backoff
+      await new Promise(resolve => setTimeout(resolve, 5000)); // 5s backoff
     }
   }
 };
