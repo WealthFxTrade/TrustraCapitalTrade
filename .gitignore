@@ -1,11 +1,55 @@
-# -------- Node / Backend --------
+# Node.js / Dependencies
 node_modules/
-.env
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnpm-debug.log
+.pnpm-lock.yaml   # optional — if you use pnpm
 
-# -------- Logs & System --------
+# Environment & Secrets
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+backend/.env
+frontend/.env
+
+# Build outputs
+dist/
+build/
+.next/            # if you ever use Next.js
+out/              # if you use Next.js export
+
+# Logs & temp files
 logs/
 *.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .DS_Store
+Thumbs.db
 
-# -------- Build & Output --------
-dist/
+# Editor / IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing & coverage
+coverage/
+.nyc_output/
+
+# Render / Vercel build artifacts
+.render/
+.vercel/
+
+# Optional: ignore large media/files you don't want in Git
+*.zip
+*.rar
+*.7z
+*.pdf
+*.jpg
+*.png
+*.mov
