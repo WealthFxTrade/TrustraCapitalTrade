@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 
 import Landing from './components/Landing';
@@ -17,8 +17,9 @@ function App() {
   const [token, setToken] = useState(() => localStorage.getItem('token') || '');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();  // Added this — fixes the navigate error
 
-  // Keep token in localStorage
+  // Sync token to localStorage
   useEffect(() => {
     if (token) {
       localStorage.setItem('token', token);
@@ -27,7 +28,7 @@ function App() {
     }
   }, [token]);
 
-  // Verify token and load user data
+  // Verify token & fetch user on mount / token change
   useEffect(() => {
     const verifyUser = async () => {
       if (!token) {
@@ -50,13 +51,14 @@ function App() {
         console.error('Auth verification failed:', err);
         setToken('');
         localStorage.removeItem('token');
+        navigate('/login');
       } finally {
         setLoading(false);
       }
     };
 
     verifyUser();
-  }, [token]);
+  }, [token, navigate]);
 
   const handleLogout = () => {
     setToken('');
@@ -68,7 +70,7 @@ function App() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
-        <div className="text-xl">Loading...</div>
+        <div className="text-xl animate-pulse">Loading...</div>
       </div>
     );
   }
@@ -117,7 +119,7 @@ function App() {
           }
         />
 
-        {/* Catch-all */}
+        {/* Catch-all redirect to home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

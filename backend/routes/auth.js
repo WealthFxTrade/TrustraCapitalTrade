@@ -1,79 +1,68 @@
-// backend/routes/auth.js
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import User from '../models/User.js';
-import sendVerificationEmail from '../utils/email.js';
+import { sendVerificationEmail } from '../utils/email.js';
 
 const router = express.Router();
 
-// =============================================
-// REGISTER / SIGNUP
-// =============================================
+// REGISTER
 router.post('/register', async (req, res) => {
   const { fullName, email, password } = req.body;
 
   try {
-    // Input validation
     if (!fullName?.trim() || !email?.trim() || !password) {
-      return res.status(400).json({ success: false, message: 'All fields are required' });
+      return res.status(400).json({ success: false, message: 'All fields required' });
     }
 
     if (password.length < 8) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
+      return res.status(400).json({ success: false, message: 'Password ≥ 8 characters' });
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ success: false, message: 'Invalid email format' });
+      return res.status(400).json({ success: false, message: 'Invalid email' });
     }
 
-    // Check duplicate
-    let user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (user) {
+    const existing = await User.findOne({ email: email.trim().toLowerCase() });
+    if (existing) {
       return res.status(400).json({ success: false, message: 'Email already registered' });
     }
 
-    // Hash password
     const salt = await bcrypt.genSalt(12);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashed = await bcrypt.hash(password, salt);
 
-    // Generate verification token
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = Date.now() + 24 * 60 * 60 * 1000;
 
-    // Create user
-    user = new User({
+    const user = new User({
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
-      password: hashedPassword,
-      verificationToken,
-      verificationTokenExpires,
+      password: hashed,
+      verificationToken: token,
+      verificationTokenExpires: expires
     });
 
     await user.save();
 
-    // Send verification email
-    await sendVerificationEmail(user, verificationToken);
+    await sendVerificationEmail(user, token);
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Please check your email to verify your account.',
+      message: 'Account created. Check your email to verify.'
     });
   } catch (err) {
-    console.error('[REGISTER ERROR]', err.stack || err);
-    res.status(500).json({ success: false, message: 'Server error during registration' });
+    console.error('[REGISTER ERROR]', err);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// =============================================
 // VERIFY EMAIL
-// =============================================
 router.get('/verify-email/:token', async (req, res) => {
   try {
     const user = await User.findOne({
       verificationToken: req.params.token,
-      verificationTokenExpires: { $gt: Date.now() },
+      verificationTokenExpires: { $gt: Date.now() }
     });
 
     if (!user) {
@@ -85,20 +74,22 @@ router.get('/verify-email/:token', async (req, res) => {
     user.verificationTokenExpires = undefined;
     await user.save();
 
-    res.json({ success: true, message: 'Email verified! You can now log in.' });
+    res.json({ success: true, message: 'Email verified. You can now log in.' });
   } catch (err) {
-    console.error('[VERIFY EMAIL ERROR]', err);
+    console.error('[VERIFY ERROR]', err);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// =============================================
 // LOGIN
-// =============================================
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    if (!email?.trim() || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password required' });
+    }
+
     const user = await User.findOne({ email: email.trim().toLowerCase() });
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -108,8 +99,8 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Please verify your email first' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
@@ -127,8 +118,8 @@ router.post('/login', async (req, res) => {
         fullName: user.fullName,
         email: user.email,
         role: user.role,
-        plan: user.plan,
-      },
+        plan: user.plan
+      }
     });
   } catch (err) {
     console.error('[LOGIN ERROR]', err);
