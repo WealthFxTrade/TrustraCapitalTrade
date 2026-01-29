@@ -1,274 +1,211 @@
 // src/components/Dashboard.jsx
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { LogOut, DollarSign, TrendingUp, ArrowRight, CreditCard } from 'lucide-react';
 
 const BACKEND_URL = 'https://trustracapitaltrade-backend.onrender.com';
 
-export default function Dashboard({ token, logout }) {
-  const navigate = useNavigate();
-
-  const [user, setUser] = useState(null);
+export default function Dashboard({ token, user, setUser, logout }) {
+  const [balance, setBalance] = useState(null);
+  const [plan, setPlan] = useState(null);
+  const [dailyRate, setDailyRate] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [depositAmount, setDepositAmount] = useState('');
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [message, setMessage] = useState('');
-  const [depositLoading, setDepositLoading] = useState(false);
-  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
-  // Fetch user data & transactions on mount
   useEffect(() => {
     if (!token) {
-      navigate('/login');
+      navigate('/login', { replace: true });
       return;
     }
 
-    const fetchData = async () => {
+    const fetchDashboardData = async () => {
       try {
-        // Fetch user profile
-        const userRes = await fetch(`${BACKEND_URL}/api/user/me`, {
+        const res = await fetch(`${BACKEND_URL}/api/user/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!userRes.ok) throw new Error('Failed to load user data');
-        const userData = await userRes.json();
-        setUser(userData.user);
+        if (!res.ok) throw new Error('Failed to load profile');
+        const data = await res.json();
+        setBalance(data.user.balance);
+        setPlan(data.user.plan);
+        setDailyRate(data.dailyRate);
 
-        // Fetch transaction history
         const txRes = await fetch(`${BACKEND_URL}/api/user/transactions`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!txRes.ok) throw new Error('Failed to load transactions');
-        const txData = await txRes.json();
-        setTransactions(txData);
+        if (txRes.ok) {
+          const txData = await txRes.json();
+          setTransactions(txData.transactions || []);
+        }
       } catch (err) {
-        setError(err.message);
+        console.error(err);
+        setError(err.message || 'Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    fetchDashboardData();
   }, [token, navigate]);
 
-  const handleDeposit = async (e) => {
-    e.preventDefault();
-    if (!depositAmount || depositAmount <= 0) return setMessage('Enter a valid amount');
-
-    setDepositLoading(true);
-    setMessage('');
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/user/deposit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ amount: Number(depositAmount) }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Deposit failed');
-
-      setUser(data.user);
-      setMessage('Deposit successful!');
-      setDepositAmount('');
-    } catch (err) {
-      setMessage(err.message);
-    } finally {
-      setDepositLoading(false);
-    }
-  };
-
-  const handleWithdraw = async (e) => {
-    e.preventDefault();
-    if (!withdrawAmount || withdrawAmount <= 0) return setMessage('Enter a valid amount');
-
-    setWithdrawLoading(true);
-    setMessage('');
-
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/user/withdraw`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ amount: Number(withdrawAmount) }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Withdrawal failed');
-
-      setUser(data.user);
-      setMessage('Withdrawal successful!');
-      setWithdrawAmount('');
-    } catch (err) {
-      setMessage(err.message);
-    } finally {
-      setWithdrawLoading(false);
-    }
+  const handleLogout = () => {
+    logout();
+    navigate('/', { replace: true });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-indigo-400 text-xl">Loading dashboard...</div>
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <div className="text-xl animate-pulse flex items-center gap-3">
+          <TrendingUp className="h-6 w-6 animate-spin" />
+          Loading dashboard...
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950">
-        <div className="text-red-400 text-xl">{error}</div>
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <p className="text-red-400 mb-8">{error}</p>
+          <button
+            onClick={handleLogout}
+            className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium transition"
+          >
+            Logout & Try Again
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6 md:p-12">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <header className="flex justify-between items-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-indigo-400">Dashboard</h1>
-          <button
-            onClick={logout}
-            className="px-8 py-4 bg-red-600 hover:bg-red-700 rounded-xl font-bold transition"
+    <div className="min-h-screen bg-gray-950 text-white">
+      {/* Header */}
+      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <span className="flex items-center space-x-2">
+              <DollarSign className="h-8 w-8 text-indigo-500" />
+              <span className="text-xl font-bold">TrustraCapital</span>
+            </span>
+            <div className="flex items-center space-x-6">
+              <div className="hidden md:flex items-center gap-2">
+                <span className="text-sm text-gray-400">Welcome,</span>
+                <span className="font-medium">{user?.fullName || user?.email}</span>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-gray-300 hover:text-red-400 transition"
+              >
+                <LogOut className="h-5 w-5" /> Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Balance & Plan */}
+        <div className="bg-gradient-to-br from-indigo-900/30 to-gray-900 border border-indigo-800/50 rounded-2xl p-8 mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <p className="text-gray-400 mb-1">Current Balance</p>
+            <p className="text-4xl font-bold text-green-400">
+              ${balance?.toLocaleString('en-US', { minimumFractionDigits: 2 }) || '0.00'}
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-gray-400 mb-1">Active Plan</p>
+            <p className="text-xl font-semibold text-indigo-400">{plan || 'None'}</p>
+            {dailyRate > 0 && (
+              <p className="text-sm text-green-400 mt-1">
+                Daily Rate: {(dailyRate * 100).toFixed(2)}%
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="grid md:grid-cols-3 gap-6 mb-10">
+          <Link
+            to="/plan-selection"
+            state={{ token, setUser }}
+            className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 hover:border-indigo-600 transition-all hover:shadow-lg hover:shadow-indigo-900/20 flex flex-col items-start gap-3"
           >
-            Logout
-          </button>
-        </header>
+            <h3 className="text-xl font-semibold flex items-center gap-2">
+              <TrendingUp className="h-6 w-6 text-indigo-500" /> Change Plan
+            </h3>
+            <p className="text-gray-400 text-sm">Upgrade or switch investment strategy</p>
+          </Link>
 
-        {/* User Info Cards */}
-        <div className="grid md:grid-cols-3 gap-8 mb-12">
-          <div className="bg-gray-800 rounded-2xl p-8 border border-indigo-600/30">
-            <h3 className="text-xl text-gray-400 mb-2">Balance</h3>
-            <p className="text-5xl font-bold text-green-400">
-              ${user?.balance?.toFixed(2) || '0.00'}
-            </p>
-          </div>
+          <Link
+            to="/deposit"
+            state={{ token, setUser }}
+            className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 hover:border-indigo-600 transition-all hover:shadow-lg hover:shadow-indigo-900/20 flex flex-col items-start gap-3"
+          >
+            <h3 className="text-xl font-semibold flex items-center gap-2">
+              <ArrowRight className="h-6 w-6 text-green-500" /> Deposit Funds
+            </h3>
+            <p className="text-gray-400 text-sm">Add funds to your account</p>
+          </Link>
 
-          <div className="bg-gray-800 rounded-2xl p-8 border border-indigo-600/30">
-            <h3 className="text-xl text-gray-400 mb-2">Active Plan</h3>
-            <p className="text-4xl font-bold text-indigo-400">{user?.plan || 'None'}</p>
-          </div>
-
-          <div className="bg-gray-800 rounded-2xl p-8 border border-indigo-600/30">
-            <h3 className="text-xl text-gray-400 mb-2">KYC Status</h3>
-            <p
-              className="text-3xl font-bold"
-              style={{
-                color:
-                  user?.kycStatus === 'verified'
-                    ? '#22c55e'
-                    : user?.kycStatus === 'pending'
-                    ? '#eab308'
-                    : '#ef4444',
-              }}
-            >
-              {user?.kycStatus?.toUpperCase() || 'Not Submitted'}
-            </p>
-          </div>
+          <Link
+            to="/withdraw"
+            state={{ token, setUser }}
+            className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 hover:border-indigo-600 transition-all hover:shadow-lg hover:shadow-indigo-900/20 flex flex-col items-start gap-3"
+          >
+            <h3 className="text-xl font-semibold flex items-center gap-2">
+              <CreditCard className="h-6 w-6 text-blue-500" /> Withdraw
+            </h3>
+            <p className="text-gray-400 text-sm">Request withdrawal</p>
+          </Link>
         </div>
 
-        {/* Deposit & Withdrawal Forms */}
-        <div className="grid md:grid-cols-2 gap-8 mb-12">
-          {/* Deposit */}
-          <div className="bg-gray-800 rounded-2xl p-8 border border-green-600/30">
-            <h3 className="text-2xl font-bold mb-6 text-green-400">Deposit Funds</h3>
-            <form onSubmit={handleDeposit}>
-              <input
-                type="number"
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-                placeholder="Amount in USD"
-                className="w-full p-4 mb-4 bg-gray-900 border border-gray-700 rounded-lg text-white text-xl"
-                min="10"
-                step="0.01"
-                required
-                disabled={depositLoading}
-              />
-              <button
-                type="submit"
-                disabled={depositLoading}
-                className="w-full py-4 bg-green-600 hover:bg-green-700 rounded-lg font-bold transition disabled:opacity-50"
-              >
-                {depositLoading ? 'Processing...' : 'Deposit Now'}
-              </button>
-            </form>
-          </div>
-
-          {/* Withdraw */}
-          <div className="bg-gray-800 rounded-2xl p-8 border border-red-600/30">
-            <h3 className="text-2xl font-bold mb-6 text-red-400">Withdraw Funds</h3>
-            <form onSubmit={handleWithdraw}>
-              <input
-                type="number"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                placeholder="Amount in USD"
-                className="w-full p-4 mb-4 bg-gray-900 border border-gray-700 rounded-lg text-white text-xl"
-                min="10"
-                max={user?.balance || 0}
-                step="0.01"
-                required
-                disabled={withdrawLoading}
-              />
-              <button
-                type="submit"
-                disabled={withdrawLoading}
-                className="w-full py-4 bg-red-600 hover:bg-red-700 rounded-lg font-bold transition disabled:opacity-50"
-              >
-                {withdrawLoading ? 'Processing...' : 'Withdraw Now'}
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Messages */}
-        {message && (
-          <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white px-8 py-4 rounded-xl border border-indigo-600 shadow-2xl z-50">
-            {message}
-          </div>
-        )}
-
-        {/* Transaction History */}
-        <div className="bg-gray-800 rounded-2xl p-8 border border-indigo-600/30">
-          <h3 className="text-2xl font-bold mb-6 text-indigo-400">Transaction History</h3>
+        {/* Recent Transactions */}
+        <section className="bg-gray-800/30 border border-gray-700 rounded-2xl p-6">
+          <h2 className="text-2xl font-bold mb-6">Recent Transactions</h2>
           {transactions.length === 0 ? (
-            <p className="text-gray-400 text-center py-8">No transactions yet.</p>
+            <p className="text-gray-400 text-center py-8">No transactions yet</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left">
+              <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-700">
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Amount</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Description</th>
+                  <tr className="border-b border-gray-700 text-left text-gray-400 text-sm">
+                    <th className="pb-4 pr-6">Type</th>
+                    <th className="pb-4 pr-6">Amount</th>
+                    <th className="pb-4 pr-6">Date</th>
+                    <th className="pb-4">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((tx) => (
-                    <tr key={tx._id} className="border-b border-gray-800">
-                      <td className="py-3 px-4">{new Date(tx.createdAt).toLocaleDateString()}</td>
-                      <td className="py-3 px-4 capitalize">{tx.type}</td>
-                      <td className="py-3 px-4 font-bold" style={{ color: tx.type === 'deposit' || tx.type === 'profit' ? '#22c55e' : '#ef4444' }}>
-                        ${tx.amount.toFixed(2)}
+                  {transactions.slice(0, 5).map((tx, i) => (
+                    <tr key={i} className="border-b border-gray-800 last:border-0">
+                      <td className="py-4 pr-6">{tx.type}</td>
+                      <td className="py-4 pr-6">
+                        <span className={tx.amount > 0 ? 'text-green-400' : 'text-red-400'}>
+                          {tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toLocaleString()}
+                        </span>
                       </td>
-                      <td className="py-3 px-4 capitalize">{tx.status}</td>
-                      <td className="py-3 px-4">{tx.description}</td>
+                      <td className="py-4 pr-6 text-gray-400">{new Date(tx.createdAt).toLocaleDateString()}</td>
+                      <td className="py-4">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            tx.status === 'completed' ? 'bg-green-900/50 text-green-400' : 'bg-yellow-900/50 text-yellow-400'
+                          }`}
+                        >
+                          {tx.status}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }

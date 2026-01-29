@@ -20,7 +20,10 @@ export default function Login({ setToken }) {
       const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
       });
 
       const data = await res.json();
@@ -35,7 +38,6 @@ export default function Login({ setToken }) {
       navigate('/dashboard');
     } catch (err) {
       setError(err.message || 'Invalid credentials or server error');
-      console.error('Login error:', err);
     } finally {
       setLoading(false);
     }

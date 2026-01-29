@@ -1,135 +1,74 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
 import Landing from './components/Landing';
 import Login from './components/Login';
 import Register from './components/Register';
-import PlanSelection from './components/PlanSelection';
 import Dashboard from './components/Dashboard';
-import AdminPanel from './components/AdminPanel';
-import Terms from './components/Terms';
-import Privacy from './components/Privacy';
-import VerifyEmail from './components/VerifyEmail';
-import ResendVerification from './components/ResendVerification';
+import PlanSelection from './components/PlanSelection';
+import Deposit from './components/Deposit';
+import Withdraw from './components/Withdraw';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
+const TOKEN_KEY = 'trustra_token';
+const USER_KEY = 'trustra_user';
 
-function App() {
-  const [token, setToken] = useState(() => localStorage.getItem('token') || '');
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+export default function App() {
+  const [token, setToken] = useState(localStorage.getItem(TOKEN_KEY) || '');
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem(USER_KEY)) || null);
 
-  // Keep token in localStorage
   useEffect(() => {
-    if (token) {
-      localStorage.setItem('token', token);
-    } else {
-      localStorage.removeItem('token');
-    }
-  }, [token]);
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
 
-  // Verify token and load user data on mount / token change
-  useEffect(() => {
-    const verifyUser = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
+    if (user) localStorage.setItem(USER_KEY, JSON.stringify(user));
+    else localStorage.removeItem(USER_KEY);
+  }, [token, user]);
 
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/user/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!res.ok) {
-          throw new Error('Invalid or expired token');
-        }
-
-        const data = await res.json();
-        setUser(data.user);
-      } catch (err) {
-        console.error('Auth verification failed:', err.message);
-        setToken('');
-        localStorage.removeItem('token');
-        navigate('/login', { replace: true });
-      } finally {
-        setLoading(false); // Always stop loading
-      }
-    };
-
-    verifyUser();
-  }, [token, navigate]);
-
-  const handleLogout = () => {
+  const logout = () => {
     setToken('');
     setUser(null);
-    localStorage.removeItem('token');
-    navigate('/', { replace: true });
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
-        <div className="text-xl animate-pulse">Loading...</div>
-      </div>
-    );
-  }
 
   return (
     <Router>
       <Routes>
-        {/* Public routes */}
         <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login setToken={setToken} />} />
-        <Route path="/register" element={<Register setToken={setToken} />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/privacy" element={<Privacy />} />
 
-        {/* Email verification & resend */}
-        <Route path="/verify-email/:token" element={<VerifyEmail />} />
-        <Route path="/resend-verification" element={<ResendVerification />} />
-
-        {/* Protected routes */}
         <Route
-          path="/plan-selection"
-          element={
-            token ? (
-              <PlanSelection token={token} setUser={setUser} />
-            ) : (
-              <Navigate to="/register" replace />
-            )
-          }
+          path="/login"
+          element={token ? <Navigate to="/dashboard" replace /> : <Login setToken={setToken} setUser={setUser} />}
+        />
+
+        <Route
+          path="/register"
+          element={token ? <Navigate to="/dashboard" replace /> : <Register setToken={setToken} setUser={setUser} />}
         />
 
         <Route
           path="/dashboard"
-          element={
-            token ? (
-              <Dashboard token={token} user={user} logout={handleLogout} />
-            ) : (
-              <Navigate to="/login" replace />
-            )
-          }
+          element={token ? <Dashboard token={token} user={user} logout={logout} /> : <Navigate to="/login" replace />}
         />
 
         <Route
-          path="/admin"
-          element={
-            token && user?.role === 'admin' ? (
-              <AdminPanel token={token} />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          }
+          path="/plan-selection"
+          element={token ? <PlanSelection token={token} setUser={setUser} /> : <Navigate to="/login" replace />}
         />
 
-        {/* Catch-all */}
+        <Route
+          path="/deposit"
+          element={token ? <Deposit token={token} setUser={setUser} /> : <Navigate to="/login" replace />}
+        />
+
+        <Route
+          path="/withdraw"
+          element={token ? <Withdraw token={token} setUser={setUser} /> : <Navigate to="/login" replace />}
+        />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );
 }
-
-export default App;
