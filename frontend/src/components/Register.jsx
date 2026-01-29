@@ -1,46 +1,28 @@
 // src/components/Register.jsx
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
-const BACKEND_URL = 'https://trustracapitaltrade-backend.onrender.com';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
 
 export default function Register() {
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setError('');
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
-    const { fullName, email, password, confirmPassword } = formData;
-
-    // Basic client-side validation
-    if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
-      setError('All fields are required');
-      return;
+    // Client-side validation
+    if (!fullName.trim()) return setError('Full name is required');
+    if (!email.trim() || !email.includes('@') || !email.includes('.')) {
+      return setError('Please enter a valid email address');
     }
-
     if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
+      return setError('Password must be at least 8 characters long');
     }
 
     setLoading(true);
@@ -61,6 +43,7 @@ export default function Register() {
       const data = await response.json();
 
       if (!response.ok) {
+        // Show exact error from backend
         throw new Error(data.message || 'Registration failed');
       }
 
@@ -68,16 +51,17 @@ export default function Register() {
       localStorage.setItem('token', data.token);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+      setError(err.message || 'Server error — please try again later');
+      console.error('Registration error:', err);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
-      <div className="w-full max-w-md bg-gray-800 rounded-2xl p-8 border border-indigo-600/40 shadow-xl">
-        <h2 className="text-3xl font-bold text-center text-indigo-400 mb-8">Create Account</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4 py-12">
+      <div className="w-full max-w-md bg-gray-800 rounded-2xl p-8 border border-indigo-600/40 shadow-2xl">
+        <h2 className="text-3xl font-bold text-center mb-8 text-indigo-400">Create Account</h2>
 
         {error && (
           <div className="mb-6 p-4 bg-red-900/50 border border-red-600 rounded-lg text-red-300 text-center">
@@ -93,12 +77,11 @@ export default function Register() {
             </label>
             <input
               id="fullName"
-              name="fullName"
               type="text"
-              value={formData.fullName}
-              onChange={handleChange}
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              placeholder="John Doe"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+              placeholder="Alysia A"
               required
               autoFocus
             />
@@ -111,12 +94,11 @@ export default function Register() {
             </label>
             <input
               id="email"
-              name="email"
               type="email"
-              value={formData.email}
-              onChange={handleChange}
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value.trim().toLowerCase())}
+              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+              placeholder="muhammadhadeed05@gmail.com"
               required
             />
           </div>
@@ -128,41 +110,33 @@ export default function Register() {
             </label>
             <input
               id="password"
-              name="password"
               type="password"
-              value={formData.password}
-              onChange={handleChange}
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 transition"
+              placeholder="••••••••••••"
               required
               minLength={8}
             />
             <p className="mt-1 text-xs text-gray-500">Minimum 8 characters</p>
           </div>
 
-          {/* Confirm Password */}
-          <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300 mb-2">
-              Confirm Password
-            </label>
-            <input
-              id="confirmPassword"
-              name="confirmPassword"
-              type="password"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Creating Account...' : 'Create Account & Continue'}
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <svg className="animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Creating Account...
+              </span>
+            ) : (
+              'Create Account & Continue'
+            )}
           </button>
         </form>
 
