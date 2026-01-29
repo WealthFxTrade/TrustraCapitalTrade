@@ -1,148 +1,117 @@
+// backend/server.js
 import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import helmet from 'helmet';
+import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import dotenv from 'dotenv';
 
-// Cron jobs (if any)
-import './cron/profitCron.js';
-
-// Routes
 import authRoutes from './routes/auth.js';
-import userRoutes from './routes/user.js';
 
 dotenv.config();
 
 const app = express();
 
-/* ---------------- SECURITY & MIDDLEWARE ---------------- */
-app.use(helmet());
-
-// Trust proxy headers (needed for Render, Heroku, Nginx, etc.)
+/* ===========================
+   TRUST PROXY (RENDER FIX)
+=========================== */
 app.set('trust proxy', 1);
 
-// Rate limiting (for auth routes)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20, // stricter in production
-  message: { success: false, message: 'Too many requests from this IP, please try again later.' },
+/* ===========================
+   BASIC MIDDLEWARE
+=========================== */
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+/* ===========================
+   CORS CONFIG
+=========================== */
+const allowedOrigins = [
+  'https://trustra-capital-trade.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000'
+];
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+  })
+);
+
+console.log('Frontend allowed:', allowedOrigins.join(', '));
+
+/* ===========================
+   RATE LIMITING
+=========================== */
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// CORS — allow only trusted origins
-const allowedOrigins = [
-  'https://trustra-capital-trade.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-];
+app.use('/api', limiter);
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-    console.warn(`CORS blocked origin: ${origin}`);
-    callback(null, false);
-  },
-  credentials: true,
-  methods: ['GET','POST','PUT','DELETE','OPTIONS','PATCH'],
-  allowedHeaders: ['Content-Type','Authorization'],
-}));
-
-// Handle preflight OPTIONS requests
-app.options('*', cors());
-
-// Body parsers with size limit
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-/* ---------------- HEALTH CHECK ---------------- */
+/* ===========================
+   ROUTES
+=========================== */
 app.get('/', (req, res) => {
-  res.json({
-    status: 'OK',
-    message: 'TrustraCapitalTrade Backend is running',
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development',
-    timestamp: new Date().toISOString(),
-  });
+  res.json({ status: 'Trustra Capital Trade API running 🚀' });
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    mongoConnected: mongoose.connection.readyState === 1,
-    uptime: process.uptime(),
-  });
-});
+app.use('/api/auth', authRoutes);
 
-/* ---------------- ROUTES ---------------- */
-app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/user', userRoutes);
+/* ===========================
+   DB CONNECTION
+=========================== */
+const PORT = process.env.PORT || 10000;
+const MONGO_URI = process.env.MONGO_URI;
 
-/* ---------------- 404 HANDLER ---------------- */
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `Route not found: ${req.method} ${req.originalUrl}`,
-  });
-});
+if (!MONGO_URI) {
+  console.error('❌ MONGO_URI missing');
+  process.exit(1);
+}
 
-/* ---------------- GLOBAL ERROR HANDLER ---------------- */
-app.use((err, req, res, next) => {
-  console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err.stack || err.message);
-  res.status(500).json({ success: false, message: 'Internal server error' });
-});
-
-/* ---------------- MONGODB CONNECTION ---------------- */
-const connectDB = async () => {
-  if (!process.env.MONGO_URI) {
-    console.error('⚠️ MONGO_URI is not set in environment variables');
+mongoose
+  .connect(MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected successfully'))
+  .catch((err) => {
+    console.error('❌ MongoDB connection failed:', err.message);
     process.exit(1);
-  }
+  });
 
-  const maxRetries = 5;
-  let retries = 0;
-
-  while (retries < maxRetries) {
-    try {
-      await mongoose.connect(process.env.MONGO_URI, {
-        serverSelectionTimeoutMS: 10000,
-        maxPoolSize: 10,
-      });
-      console.log('✅ MongoDB connected successfully');
-      break;
-    } catch (err) {
-      retries++;
-      console.error(`MongoDB connection failed (attempt ${retries}/${maxRetries}):`, err.message);
-      if (retries === maxRetries) {
-        console.error('Max retries reached. Exiting...');
-        process.exit(1);
-      }
-      await new Promise(resolve => setTimeout(resolve, 5000)); // 5s backoff
-    }
-  }
-};
-
-connectDB();
-
-/* ---------------- START SERVER ---------------- */
-const PORT = process.env.PORT || 5000;
+/* ===========================
+   START SERVER
+=========================== */
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Frontend allowed: ${allowedOrigins.join(', ')}`);
 });
 
-/* ---------------- GRACEFUL SHUTDOWN ---------------- */
-const shutdown = (signal) => {
+/* ===========================
+   GRACEFUL SHUTDOWN (NO CALLBACKS)
+=========================== */
+const shutdown = async (signal) => {
   console.log(`${signal} received — shutting down gracefully`);
+
+  try {
+    await mongoose.connection.close();
+    console.log('✅ MongoDB connection closed');
+  } catch (err) {
+    console.error('❌ Error closing MongoDB:', err.message);
+  }
+
   server.close(() => {
-    mongoose.connection.close(false, () => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    });
+    console.log('🛑 HTTP server closed');
+    process.exit(0);
   });
 };
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
