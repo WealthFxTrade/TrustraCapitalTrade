@@ -1,49 +1,44 @@
 // backend/config/bitcoin.js
+import dotenv from 'dotenv';
+dotenv.config(); // Must be first
+
 import * as bitcoin from 'bitcoinjs-lib';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
 
-// ──────────────────────────────────────────────
-// BIP32 instance (using tiny-secp256k1 as recommended ECC lib)
+// ──────────────────────────────
+// BIP32 instance (tiny-secp256k1)
 export const bip32 = BIP32Factory(ecc);
 
-// ──────────────────────────────────────────────
-// Network (mainnet default, testnet via env)
+// ──────────────────────────────
+// Network (mainnet by default)
 export const network = process.env.BITCOIN_NETWORK === 'testnet'
   ? bitcoin.networks.testnet
   : bitcoin.networks.bitcoin;
 
 export const isMainnet = network === bitcoin.networks.bitcoin;
 
-// ──────────────────────────────────────────────
-// Root node from XPUB (extended public key)
+// ──────────────────────────────
+// Root node from XPUB
 if (!process.env.BITCOIN_XPUB) {
   throw new Error(
-    'BITCOIN_XPUB is not defined in environment variables. ' +
-    'Set it to your xpub/ypub/zpub key.'
+    'BITCOIN_XPUB is not defined in environment variables. Set it to your xpub/ypub/zpub key.'
   );
 }
 
-export let rootNode;
-try {
-  rootNode = bip32.fromBase58(process.env.BITCOIN_XPUB, network);
-} catch (err) {
-  throw new Error(`Invalid BITCOIN_XPUB format: ${err.message}`);
-}
-
-// Export the root node under the name 'root' for compatibility with your existing imports
+export const rootNode = bip32.fromBase58(process.env.BITCOIN_XPUB, network);
 export const root = rootNode;
 
-// ──────────────────────────────────────────────
-// Standard derivation paths (BIP44 / BIP49 / BIP84)
+// ──────────────────────────────
+// XPUB-safe derivation paths (non-hardened)
 export const paths = {
-  legacy: `m/44'/${isMainnet ? 0 : 1}'/0'/0`,          // P2PKH
-  nestedSegwit: `m/49'/${isMainnet ? 0 : 1}'/0'/0`,    // P2SH-P2WPKH
-  nativeSegwit: `m/84'/${isMainnet ? 0 : 1}'/0'/0`,    // P2WPKH (recommended)
+  legacy: '0',       // XPUB-safe branch
+  nestedSegwit: '0', // XPUB-safe branch
+  nativeSegwit: '0', // XPUB-safe branch
 };
 
 /**
- * Derive a Bitcoin address at a specific index
+ * Derive a Bitcoin address at a specific index from XPUB
  * @param {number} index - Address index (0, 1, 2...)
  * @param {'legacy'|'nestedSegwit'|'nativeSegwit'} [type='nativeSegwit']
  * @returns {{ address: string, path: string, publicKey: Buffer }}
@@ -52,7 +47,7 @@ export function deriveAddress(index = 0, type = 'nativeSegwit') {
   const pathPrefix = paths[type];
   if (!pathPrefix) throw new Error(`Invalid address type: ${type}`);
 
-  const path = `\( {pathPrefix}/ \){index}`;
+  const path = `${pathPrefix}/${index}`; // XPUB-safe path
   const child = rootNode.derivePath(path);
 
   let address;
@@ -77,13 +72,13 @@ export function getNextReceiveAddress(index = 0) {
   return deriveAddress(index, 'nativeSegwit');
 }
 
-// Optional: clean API export
+// Optional export
 export const bitcoinConfig = {
   network,
   isMainnet,
   bip32,
   rootNode,
-  root,               // ← for compatibility
+  root,
   paths,
   deriveAddress,
   getNextReceiveAddress,
