@@ -1,46 +1,28 @@
+// backend/utils/generateBtcAddress.js
 import { deriveAddress } from '../config/bitcoin.js';
 import url from 'url';
 
-// ES module helpers
+// ES module equivalents of __filename and __dirname
 const __filename = url.fileURLToPath(import.meta.url);
+const __dirname = url.fileURLToPath(new URL('.', import.meta.url));
 
 /**
- * Generate a single BTC address
- * @param {number} index - Address index
- * @param {'legacy'|'nestedSegwit'|'nativeSegwit'} type - Address type (default: 'nativeSegwit')
- * @returns {string} BTC address
+ * Generate and print multiple Bitcoin addresses of different types
+ * @param {number} count - how many addresses per type
  */
-export const generateBtcAddress = (index = 0, type = 'nativeSegwit') => {
-  const { address } = deriveAddress(index, type);
-  return address;
-};
+export function generateAddresses(count = 5) {
+  const types = ['legacy', 'nestedSegwit', 'nativeSegwit'];
 
-/**
- * Generate multiple BTC addresses
- * @param {number} count - Number of addresses
- * @param {number} startIndex - Starting index (default 0)
- * @param {'legacy'|'nestedSegwit'|'nativeSegwit'} type - Address type (default: 'nativeSegwit')
- * @returns {Array<{ index: number, address: string, path: string, pubKey: string }>}
- */
-export const generateBtcAddresses = (count = 1, startIndex = 0, type = 'nativeSegwit') => {
-  const addresses = [];
-  for (let i = 0; i < count; i++) {
-    const index = startIndex + i;
-    const { address, path, publicKey } = deriveAddress(index, type);
-    addresses.push({
-      index,
-      address,
-      path,
-      pubKey: publicKey.toString('hex'),
-    });
-  }
-  return addresses;
-};
+  types.forEach((type) => {
+    console.log(`\n=== ${type} addresses ===`);
+    for (let i = 0; i < count; i++) {
+      const addr = deriveAddress(i, type);
+      console.log(`${i}: ${addr.address} (path: ${addr.path})`);
+    }
+  });
+}
 
-// Test block
+// If the script is run directly, generate addresses
 if (process.argv[1] === __filename) {
-  console.log('Single BTC address:', generateBtcAddress(0));
-
-  console.log('Batch of 5 BTC addresses:');
-  console.table(generateBtcAddresses(5));
+  generateAddresses(5);
 }
