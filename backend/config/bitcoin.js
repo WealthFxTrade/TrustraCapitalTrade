@@ -1,103 +1,84 @@
 // backend/config/bitcoin.js
 import * as bitcoin from 'bitcoinjs-lib';
-import { BIP32Factory } from 'bip32';
+import { BIP32Factory } from 'bip32';          // ← named import (correct)
 import * as ecc from 'tiny-secp256k1';
 
-// BIP32 instance (tiny-secp256k1 is the recommended ECC lib for bitcoinjs-lib v6+)
-const bip32 = BIP32Factory(ecc);
+// Create BIP32 instance with ECC library
+export const bip32 = BIP32Factory(ecc);
 
-// ──────────────────────────────────────────────
-//  Network configuration
-// ──────────────────────────────────────────────
-export const NETWORK = process.env.BITCOIN_NETWORK === 'testnet'
+// Bitcoin network (mainnet by default, or testnet via env)
+export const network = process.env.BITCOIN_NETWORK === 'testnet'
   ? bitcoin.networks.testnet
   : bitcoin.networks.bitcoin;
 
-export const IS_MAINNET = NETWORK === bitcoin.networks.bitcoin;
+export const isMainnet = network === bitcoin.networks.bitcoin;
 
-// ──────────────────────────────────────────────
-//  XPUB (extended public key) from environment
-// ──────────────────────────────────────────────
+// Root node from XPUB
 if (!process.env.BITCOIN_XPUB) {
-  throw new Error(
-    'BITCOIN_XPUB is not defined in environment variables. ' +
-    'Set it to your extended public key (xpub/ypub/zpub...)'
-  );
+  throw new Error('BITCOIN_XPUB is not defined in environment variables');
 }
 
-let rootNode;
+let root;
 try {
-  rootNode = bip32.fromBase58(process.env.BITCOIN_XPUB, NETWORK);
+  root = bip32.fromBase58(process.env.BITCOIN_XPUB, network);
 } catch (err) {
   throw new Error(`Invalid BITCOIN_XPUB format: ${err.message}`);
 }
 
+export const rootNode = root;
+
 // ──────────────────────────────────────────────
-//  Standard derivation paths (BIP44, BIP84)
+//  Standard derivation paths
 // ──────────────────────────────────────────────
-export const DERIVATION_PATHS = {
-  // Legacy (P2PKH) — BIP44
-  legacy: `m/44'/${IS_MAINNET ? 0 : 1}'/0'/0`,
-  // Native SegWit (P2WPKH) — BIP84
-  nativeSegwit: `m/84'/${IS_MAINNET ? 0 : 1}'/0'/0`,
-  // Nested SegWit (P2SH-P2WPKH) — BIP49
-  nestedSegwit: `m/49'/${IS_MAINNET ? 0 : 1}'/0'/0`,
+export const paths = {
+  legacy: `m/44'/${isMainnet ? 0 : 1}'/0'/0`,          // BIP44 (P2PKH)
+  nestedSegwit: `m/49'/${isMainnet ? 0 : 1}'/0'/0`,    // BIP49 (P2SH-P2WPKH)
+  nativeSegwit: `m/84'/${isMainnet ? 0 : 1}'/0'/0`,    // BIP84 (P2WPKH)
 };
 
 /**
- * Derive a Bitcoin address at a specific index using the given path prefix
- * @param {number} index - Change (0=receive, 1=change) and address index
- * @param {'legacy' | 'nativeSegwit' | 'nestedSegwit'} [type='nativeSegwit']
- * @returns {{ address: string, path: string, publicKey: Buffer }}
+ * Derive a Bitcoin address at a specific index
+ * @param {number} index - Address index (0, 1, 2...)
+ * @param {'legacy' | 'nestedSegwit' | 'nativeSegwit'} [type='nativeSegwit']
+ * @returns {{ address: string, path: string }}
  */
 export function deriveAddress(index = 0, type = 'nativeSegwit') {
-  if (!Number.isInteger(index) || index < 0) {
-    throw new Error('Index must be a non-negative integer');
-  }
-
-  const pathPrefix = DERIVATION_PATHS[type];
-  if (!pathPrefix) {
-    throw new Error(`Invalid address type: ${type}`);
-  }
+  const pathPrefix = paths[type];
+  if (!pathPrefix) throw new Error(`Invalid address type: ${type}`);
 
   const path = `\( {pathPrefix}/ \){index}`;
   const child = rootNode.derivePath(path);
 
   let address;
   if (type === 'legacy') {
-    address = bitcoin.payments.p2pkh({ pubkey: child.publicKey, network: NETWORK }).address;
+    address = bitcoin.payments.p2pkh({ pubkey: child.publicKey, network }).address;
   } else if (type === 'nestedSegwit') {
     address = bitcoin.payments.p2sh({
-      redeem: bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network: NETWORK }),
-      network: NETWORK,
+      redeem: bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network }),
+      network,
     }).address;
   } else {
     // nativeSegwit (default)
-    address = bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network: NETWORK }).address;
+    address = bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network }).address;
   }
 
-  return {
-    address,
-    path,
-    publicKey: child.publicKey,
-    privateKey: child.privateKey ? child.privateKey.toString('hex') : null, // only if hardened path allows
-  };
+  return { address, path };
 }
 
 /**
- * Get the next unused receive address (example — you would track used indices in DB)
- * @param {number} [startIndex=0]
+ * Get next receive address (example – track index in DB per user)
  */
-export function getNextReceiveAddress(startIndex = 0) {
-  return deriveAddress(startIndex, 'nativeSegwit');
+export function getNextReceiveAddress(index = 0) {
+  return deriveAddress(index, 'nativeSegwit');
 }
 
-// Export everything as a clean API object
+// Export everything as a clean API
 export const bitcoinConfig = {
-  network: NETWORK,
-  isMainnet: IS_MAINNET,
+  network,
+  isMainnet,
+  bip32,
   rootNode,
+  paths,
   deriveAddress,
   getNextReceiveAddress,
-  paths: DERIVATION_PATHS,
 };
