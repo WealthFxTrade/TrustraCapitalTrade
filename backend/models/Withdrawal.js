@@ -1,5 +1,5 @@
 // backend/models/Withdrawal.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const withdrawalSchema = new mongoose.Schema(
   {
@@ -7,7 +7,7 @@ const withdrawalSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: [true, 'User is required'],
-      index: true, // faster queries
+      index: true,
     },
 
     btcAddress: {
@@ -15,10 +15,7 @@ const withdrawalSchema = new mongoose.Schema(
       required: [true, 'Bitcoin address is required'],
       trim: true,
       validate: {
-        validator: function (v) {
-          // Basic BTC address validation (legacy + SegWit + Taproot)
-          return /^(1|3|bc1q|bc1p)[a-zA-Z0-9]{25,39}$/.test(v);
-        },
+        validator: (v) => /^(1|3|bc1q|bc1p)[a-zA-Z0-9]{25,39}$/.test(v),
         message: 'Invalid Bitcoin address format',
       },
     },
@@ -36,36 +33,15 @@ const withdrawalSchema = new mongoose.Schema(
       index: true,
     },
 
-    txHash: {
-      type: String,
-      trim: true,
-      sparse: true, // allow null/undefined
-    },
+    txHash: { type: String, trim: true, sparse: true },
 
-    adminNote: {
-      type: String,
-      trim: true,
-      maxlength: 500,
-    },
+    adminNote: { type: String, trim: true, maxlength: 500 },
 
-    // Optional: store fiat equivalent at time of request
-    fiatEquivalent: {
-      type: Number,
-      min: 0,
-    },
+    fiatEquivalent: { type: Number, min: 0 },
 
-    // Optional: fee deducted
-    fee: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
+    fee: { type: Number, default: 0, min: 0 },
 
-    // Optional: net amount sent (amount - fee)
-    netAmount: {
-      type: Number,
-      min: 0,
-    },
+    netAmount: { type: Number, min: 0 },
   },
   {
     timestamps: true,
@@ -74,7 +50,7 @@ const withdrawalSchema = new mongoose.Schema(
   }
 );
 
-// Virtual: formatted createdAt
+// Virtual for frontend-friendly createdAt
 withdrawalSchema.virtual('formattedCreatedAt').get(function () {
   return this.createdAt.toLocaleString('en-US', {
     year: 'numeric',
@@ -85,16 +61,17 @@ withdrawalSchema.virtual('formattedCreatedAt').get(function () {
   });
 });
 
-// Pre-save hook: calculate netAmount if fee is set
+// Pre-save hook: calculate netAmount
 withdrawalSchema.pre('save', function (next) {
-  if (this.fee !== undefined && this.amount !== undefined) {
+  if (this.amount !== undefined && this.fee !== undefined) {
     this.netAmount = this.amount - this.fee;
   }
   next();
 });
 
-// Index for faster queries
+// Indexes for fast queries
 withdrawalSchema.index({ user: 1, status: 1 });
 withdrawalSchema.index({ createdAt: -1 });
 
-module.exports = mongoose.model('Withdrawal', withdrawalSchema);
+// ESM export
+export default mongoose.model('Withdrawal', withdrawalSchema);

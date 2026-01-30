@@ -1,23 +1,28 @@
 // backend/routes/adminUsers.js
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const User = require('../models/User');
-const Transaction = require('../models/Transaction');
-const Withdrawal = require('../models/Withdrawal');
-const { protect, admin } = require('../middleware/auth');
+import express from 'express';
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto'; // for secure temp password generation
+
+import User from '../models/User.js';
+import Transaction from '../models/Transaction.js';
+import Withdrawal from '../models/Withdrawal.js';
+import AuditLog from '../models/AuditLog.js';
+import { protect, admin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// All routes require admin privileges
+// All routes are protected + admin-only
 router.use(protect, admin);
 
 /**
  * GET /api/admin/users
- * List all users (with optional search & pagination)
+ * List users with search & pagination
  */
 router.get('/', async (req, res) => {
   try {
     const { search = '', page = 1, limit = 20 } = req.query;
+    const skip = (page - 1) * limit;
 
     const query = search.trim()
       ? {
@@ -31,8 +36,9 @@ router.get('/', async (req, res) => {
     const users = await User.find(query)
       .select('-password -resetPasswordToken -resetPasswordExpires -verificationToken -verificationTokenExpires')
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
 
     const total = await User.countDocuments(query);
 
@@ -47,30 +53,36 @@ router.get('/', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Admin users list error:', err.message);
+    console.error('Admin list users error:', err.message);
     res.status(500).json({ success: false, message: 'Failed to fetch users' });
   }
 });
 
 /**
  * GET /api/admin/users/:id
- * Get full user profile + recent transactions
+ * User profile + recent activity
  */
 router.get('/:id', async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findById(req.params.id)
+      .select('-password -resetPasswordToken -resetPasswordExpires -verificationToken -verificationTokenExpires')
+      .lean();
+
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Recent deposits & withdrawals (last 10 each)
-    const deposits = await Transaction.find({ user: user._id, type: 'deposit' })
-      .sort({ createdAt: -1 })
-      .limit(10);
+    const [deposits, withdrawals] = await Promise.all([
+      Transaction.find({ user: user._id, type: 'deposit' })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
 
-    const withdrawals = await Withdrawal.find({ user: user._id })
-      .sort({ createdAt: -1 })
-      .limit(10);
+      Withdrawal.find({ user: user._id })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean(),
+    ]);
 
     res.json({
       success: true,
@@ -86,58 +98,79 @@ router.get('/:id', async (req, res) => {
 
 /**
  * PATCH /api/admin/users/:id/plan
- * Update user's investment plan
+ * Update user plan (atomic + audited)
  */
 router.patch('/:id/plan', async (req, res) => {
-  const { plan } = req.body;
-
-  if (!plan) {
-    return res.status(400).json({ success: false, message: 'Plan is required' });
-  }
-
-  const validPlans = ['none', 'basic', 'premium', 'vip'];
-  if (!validPlans.includes(plan)) {
-    return res.status(400).json({
-      success: false,
-      message: `Invalid plan. Allowed: ${validPlans.join(', ')}`,
-    });
-  }
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    const user = await User.findByIdAndUpdate(
-      req.params.id,
-      { plan },
-      { new: true, runValidators: true }
-    ).select('-password');
+    const { plan } = req.body;
+    const validPlans = ['none', 'basic', 'premium', 'vip'];
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    if (!validPlans.includes(plan)) {
+      throw new Error(`Invalid plan. Allowed: ${validPlans.join(', ')}`);
     }
 
-    res.json({
-      success: true,
-      message: 'Plan updated successfully',
-      user,
-    });
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) throw new Error('User not found');
+
+    const oldPlan = user.plan;
+    user.plan = plan;
+    await user.save({ session });
+
+    await AuditLog.create(
+      [{
+        admin: req.user._id,
+        action: 'UPDATE_USER_PLAN',
+        targetId: user._id,
+        targetModel: 'User',
+        metadata: { oldPlan, newPlan: plan },
+        ip: req.ip,
+      }],
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    res.json({ success: true, message: 'Plan updated successfully', user });
   } catch (err) {
+    await session.abortTransaction();
     console.error('Update plan error:', err.message);
-    res.status(500).json({ success: false, message: 'Failed to update plan' });
+    res.status(400).json({ success: false, message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
 /**
  * PATCH /api/admin/users/:id/ban
- * Ban or unban user
+ * Toggle ban status (atomic + audited)
  */
 router.patch('/:id/ban', async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) throw new Error('User not found');
 
     user.banned = !user.banned;
-    await user.save();
+    await user.save({ session });
+
+    await AuditLog.create(
+      [{
+        admin: req.user._id,
+        action: user.banned ? 'BAN_USER' : 'UNBAN_USER',
+        targetId: user._id,
+        targetModel: 'User',
+        metadata: { banned: user.banned },
+        ip: req.ip,
+      }],
+      { session }
+    );
+
+    await session.commitTransaction();
 
     res.json({
       success: true,
@@ -145,57 +178,95 @@ router.patch('/:id/ban', async (req, res) => {
       banned: user.banned,
     });
   } catch (err) {
+    await session.abortTransaction();
     console.error('Ban/unban error:', err.message);
-    res.status(500).json({ success: false, message: 'Failed to update ban status' });
+    res.status(400).json({ success: false, message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
 /**
  * DELETE /api/admin/users/:id
- * Permanently delete user
+ * Permanent delete (atomic + audited)
  */
 router.delete('/:id', async (req, res) => {
-  try {
-    const user = await User.findByIdAndDelete(req.params.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    res.json({
-      success: true,
-      message: 'User permanently deleted',
-    });
+  try {
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) throw new Error('User not found');
+
+    await User.deleteOne({ _id: req.params.id }, { session });
+
+    await AuditLog.create(
+      [{
+        admin: req.user._id,
+        action: 'DELETE_USER',
+        targetId: user._id,
+        targetModel: 'User',
+        metadata: { email: user.email },
+        ip: req.ip,
+      }],
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    res.json({ success: true, message: 'User permanently deleted' });
   } catch (err) {
+    await session.abortTransaction();
     console.error('Delete user error:', err.message);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(400).json({ success: false, message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
 /**
  * POST /api/admin/users/:id/reset-password
- * Reset user password to a temporary value
+ * Reset password to temporary value (audited)
  */
 router.post('/:id/reset-password', async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    const tempPassword = Math.random().toString(36).slice(-10) + 'A1!'; // random + secure chars
+  try {
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) throw new Error('User not found');
+
+    const tempPassword = crypto.randomBytes(8).toString('hex') + 'A1!';
     const salt = await bcrypt.genSalt(12);
     user.password = await bcrypt.hash(tempPassword, salt);
-    await user.save();
+    await user.save({ session });
+
+    await AuditLog.create(
+      [{
+        admin: req.user._id,
+        action: 'RESET_USER_PASSWORD',
+        targetId: user._id,
+        targetModel: 'User',
+        metadata: { note: 'Admin-initiated password reset' },
+        ip: req.ip,
+      }],
+      { session }
+    );
+
+    await session.commitTransaction();
 
     res.json({
       success: true,
       message: 'Password reset successfully',
-      temporaryPassword: tempPassword, // show once only — send via secure channel in prod
+      temporaryPassword: tempPassword,
     });
   } catch (err) {
+    await session.abortTransaction();
     console.error('Reset password error:', err.message);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(400).json({ success: false, message: err.message });
+  } finally {
+    session.endSession();
   }
 });
 
-module.exports = router;
+export default router;

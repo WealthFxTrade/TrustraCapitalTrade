@@ -7,12 +7,12 @@ import Withdrawal from '../models/Withdrawal.js';
 
 const router = express.Router();
 
-// Deposit request (user)
+/* ---------------- DEPOSIT REQUEST (USER) ---------------- */
 router.post('/deposit', protect, async (req, res) => {
   const { amount, method } = req.body;
 
   if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, message: 'Amount > 0 required' });
+    return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
   }
 
   try {
@@ -27,27 +27,35 @@ router.post('/deposit', protect, async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Deposit request submitted', tx });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('[DEPOSIT ERROR]', err);
+    res.status(500).json({ success: false, message: 'Server error during deposit' });
   }
 });
 
-// Withdrawal request (user)
+/* ---------------- WITHDRAWAL REQUEST (USER) ---------------- */
 router.post('/withdraw', protect, async (req, res) => {
   const { amount, btcAddress } = req.body;
 
   if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, message: 'Amount > 0 required' });
+    return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
   }
 
   try {
     const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
     if (user.balance < amount) {
       return res.status(400).json({ success: false, message: 'Insufficient balance' });
     }
 
+    // Deduct balance
     user.balance -= amount;
     await user.save();
 
+    // Create transaction
     const tx = await Transaction.create({
       user: req.user._id,
       type: 'withdrawal',
@@ -57,6 +65,7 @@ router.post('/withdraw', protect, async (req, res) => {
       walletAddress: btcAddress,
     });
 
+    // Create withdrawal record
     await Withdrawal.create({
       user: req.user._id,
       btcAddress,
@@ -66,26 +75,37 @@ router.post('/withdraw', protect, async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Withdrawal request submitted', tx });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('[WITHDRAWAL ERROR]', err);
+    res.status(500).json({ success: false, message: 'Server error during withdrawal' });
   }
 });
 
-// User transaction history
+/* ---------------- USER TRANSACTION HISTORY ---------------- */
 router.get('/my', protect, async (req, res) => {
-  const transactions = await Transaction.find({ user: req.user._id })
-    .sort({ createdAt: -1 })
-    .limit(50);
+  try {
+    const transactions = await Transaction.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(50);
 
-  res.json({ success: true, transactions });
+    res.json({ success: true, transactions });
+  } catch (err) {
+    console.error('[TRANSACTION HISTORY ERROR]', err);
+    res.status(500).json({ success: false, message: 'Server error fetching transactions' });
+  }
 });
 
-// Admin pending withdrawals
+/* ---------------- ADMIN: PENDING WITHDRAWALS ---------------- */
 router.get('/pending-withdrawals', protect, admin, async (req, res) => {
-  const withdrawals = await Withdrawal.find({ status: 'pending' })
-    .populate('user', 'fullName email')
-    .sort({ createdAt: -1 });
+  try {
+    const withdrawals = await Withdrawal.find({ status: 'pending' })
+      .populate('user', 'fullName email')
+      .sort({ createdAt: -1 });
 
-  res.json({ success: true, withdrawals });
+    res.json({ success: true, withdrawals });
+  } catch (err) {
+    console.error('[PENDING WITHDRAWALS ERROR]', err);
+    res.status(500).json({ success: false, message: 'Server error fetching pending withdrawals' });
+  }
 });
 
 export default router;

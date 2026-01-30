@@ -42,8 +42,6 @@ router.post('/register', async (req, res) => {
       btcAddress: generateBtcAddress(nextIndex), // custodial BTC address
     });
 
-    // TODO: send verification email with token if needed
-
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
@@ -69,21 +67,13 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
+    if (!isMatch) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
-    const token = jwt.sign(
-      { id: user._id, role: user.role },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
     res.json({
       success: true,
@@ -133,11 +123,13 @@ router.post('/reset-password/:token', async (req, res) => {
       verificationToken: req.params.token,
       verificationTokenExpires: { $gt: Date.now() },
     });
+
     if (!user) return res.status(400).json({ success: false, message: 'Invalid or expired token' });
 
     user.password = await bcrypt.hash(password, 12);
     user.verificationToken = undefined;
     user.verificationTokenExpires = undefined;
+
     await user.save();
 
     res.json({ success: true, message: 'Password reset successfully' });
