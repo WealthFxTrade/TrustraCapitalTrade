@@ -1,5 +1,5 @@
 // backend/models/Transaction.js
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const transactionSchema = new mongoose.Schema(
   {
@@ -9,35 +9,57 @@ const transactionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    txid: {
+    type: {
       type: String,
-      sparse: true,
-      trim: true,
+      required: true,
+      enum: ['deposit', 'withdrawal', 'profit', 'bonus', 'referral'],
+      index: true,
     },
     amount: {
       type: Number,
       required: true,
       min: 0,
     },
+    signedAmount: {
+      type: Number,
+      required: true,
+    },
     currency: {
       type: String,
-      default: 'BTC',
-      enum: ['BTC', 'USDT', 'ETH'],
+      default: 'USD',
+      enum: ['USD', 'BTC', 'USDT', 'ETH'],
     },
     status: {
       type: String,
-      enum: ['pending', 'approved', 'rejected', 'failed'],
+      enum: ['pending', 'completed', 'rejected', 'failed'],
       default: 'pending',
       index: true,
     },
     method: {
       type: String,
-      enum: ['crypto', 'bank', 'wallet', 'manual'],
-      default: 'crypto',
+      enum: ['crypto', 'bank_transfer', 'wallet', 'manual'],
+      default: 'manual',
+    },
+    txHash: {
+      type: String,
+      trim: true,
+      sparse: true,
+    },
+    walletAddress: {
+      type: String,
+      trim: true,
+      sparse: true,
     },
     adminNote: String,
   },
   { timestamps: true }
 );
 
-module.exports = mongoose.model('Transaction', transactionSchema);
+// Auto-calculate signedAmount
+transactionSchema.pre('save', function (next) {
+  const incoming = ['deposit', 'profit', 'bonus', 'referral'].includes(this.type);
+  this.signedAmount = incoming ? Math.abs(this.amount) : -Math.abs(this.amount);
+  next();
+});
+
+export default mongoose.model('Transaction', transactionSchema);

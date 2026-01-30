@@ -17,7 +17,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// Fail fast if critical env vars are missing
+// Fail fast on missing env
 if (!MONGO_URI) {
   console.error('CRITICAL: MONGO_URI not set');
   process.exit(1);
@@ -31,11 +31,10 @@ if (!process.env.JWT_SECRET) {
 app.use(helmet());
 app.set('trust proxy', 1);
 
-const limiter = rateLimit({
+app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 150,
-});
-app.use(limiter);
+}));
 
 app.use(cors({
   origin: ['https://trustra-capital-trade.vercel.app', 'http://localhost:5173'],
@@ -63,7 +62,7 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
 });
 
-// Global error handler
+// Error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ success: false, message: 'Internal server error' });
@@ -76,15 +75,17 @@ const connectDB = async () => {
     try {
       await mongoose.connect(MONGO_URI);
       console.log('MongoDB connected');
-      return;
+      break;
     } catch (err) {
       retries++;
-      console.error(`MongoDB connection failed (attempt ${retries}/5):`, err.message);
+      console.error(`MongoDB connect failed (attempt ${retries}/5):`, err.message);
       await new Promise(r => setTimeout(r, 5000));
     }
   }
-  console.error('MongoDB connection failed after 5 attempts');
-  process.exit(1);
+  if (retries === 5) {
+    console.error('MongoDB connection failed after 5 attempts');
+    process.exit(1);
+  }
 };
 
 connectDB().then(() => {
