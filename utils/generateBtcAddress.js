@@ -1,28 +1,30 @@
 // backend/utils/generateBtcAddress.js
-import { deriveAddress } from '../config/bitcoin.js';
-import url from 'url';
+import bitcoin from "bitcoinjs-lib";
+import { root, network } from "../config/bitcoin.js";
 
-// ES module equivalents of __filename and __dirname
-const __filename = url.fileURLToPath(import.meta.url);
-const __dirname = url.fileURLToPath(new URL('.', import.meta.url));
+// Generate BTC address for a given index
+export function generateAddress(index) {
+  if (!root) throw new Error("root not defined in bitcoin config");
 
-/**
- * Generate and print multiple Bitcoin addresses of different types
- * @param {number} count - how many addresses per type
- */
-export function generateAddresses(count = 5) {
-  const types = ['legacy', 'nestedSegwit', 'nativeSegwit'];
-
-  types.forEach((type) => {
-    console.log(`\n=== ${type} addresses ===`);
-    for (let i = 0; i < count; i++) {
-      const addr = deriveAddress(i, type);
-      console.log(`${i}: ${addr.address} (path: ${addr.path})`);
-    }
+  const child = root.derivePath(`0/${index}`);
+  const { address } = bitcoin.payments.p2pkh({
+    pubkey: child.publicKey,
+    network,
   });
+  return address;
 }
 
-// If the script is run directly, generate addresses
-if (process.argv[1] === __filename) {
-  generateAddresses(5);
+// ES-module replacement for require.main
+async function main() {
+  try {
+    const address = generateAddress(0);
+    console.log("Generated BTC address:", address);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+// Run this file directly
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  main();
 }
