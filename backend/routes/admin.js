@@ -1,46 +1,79 @@
-import express from 'express';
-import User from '../models/User.js';
-import authMiddleware from '../middleware/auth.js';
-import adminMiddleware from '../middleware/admin.js';
+// backend/routes/admin.js
+// ... existing imports and code ...
 
-const router = express.Router();
-
-// Get all users
-router.get('/users', authMiddleware, adminMiddleware, async (req, res) => {
+/**
+ * GET /api/admin/deposits/pending
+ * List all pending deposits
+ */
+router.get('/deposits/pending', async (req, res) => {
   try {
-    const users = await User.find().select('-password');
-    res.json(users);
+    const deposits = await Transaction.find({
+      type: 'deposit',
+      status: 'pending'
+    })
+      .populate('user', 'fullName email')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      success: true,
+      count: deposits.length,
+      deposits,
+    });
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    console.error('Pending deposits error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// Edit a user profile
-router.put('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
+/**
+ * PATCH /api/admin/deposits/:id
+ * Admin approves/rejects a deposit
+ */
+router.patch('/deposits/:id', async (req, res) => {
+  const { status, adminNote } = req.body;
+
+  if (!['completed', 'rejected', 'failed'].includes(status)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid status. Allowed: completed, rejected, failed',
+    });
+  }
+
   try {
-    const { email, balance, plan } = req.body;
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const deposit = await Transaction.findById(req.params.id);
+    if (!deposit || deposit.type !== 'deposit') {
+      return res.status(404).json({ success: false, message: 'Deposit not found' });
+    }
 
-    if (email) user.email = email;
-    if (balance !== undefined) user.balance = balance;
-    if (plan) user.plan = plan;
+    if (deposit.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Deposit already ${deposit.status}`,
+      });
+    }
 
-    await user.save();
-    res.json({ message: 'User updated successfully' });
+    deposit.status = status;
+    if (adminNote) deposit.adminNote = adminNote.trim();
+
+    // If approved → add to user balance
+    if (status === 'completed') {
+      const user = await User.findById(deposit.user);
+      if (user) {
+        user.balance += deposit.amount;
+        await user.save();
+      }
+    }
+
+    await deposit.save();
+
+    res.json({
+      success: true,
+      message: `Deposit marked as ${status}`,
+      deposit,
+    });
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    console.error('Deposit update error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
-
-// Delete a user
-router.delete('/users/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ message: 'User deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-export default router;

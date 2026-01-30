@@ -1,58 +1,92 @@
 // backend/models/User.js
-import mongoose from 'mongoose';
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema(
   {
     fullName: {
       type: String,
-      required: true,
+      required: [true, 'Full name is required'],
       trim: true,
-      minlength: 2,
-      maxlength: 100,
+      minlength: [2, 'Full name must be at least 2 characters'],
+      maxlength: [100, 'Full name cannot exceed 100 characters'],
     },
+
     email: {
       type: String,
-      required: true,
+      required: [true, 'Email is required'],
       unique: true,
       lowercase: true,
       trim: true,
-      match: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+      match: [/^\S+@\S+\.\S+$/, 'Please use a valid email address'],
     },
+
     password: {
       type: String,
-      required: true,
-      minlength: 8,
+      required: [true, 'Password is required'],
+      minlength: [8, 'Password must be at least 8 characters'],
+      select: false,
     },
+
     role: {
       type: String,
       enum: ['user', 'admin'],
       default: 'user',
     },
+
     plan: {
       type: String,
-      enum: ['free', 'basic', 'premium'],
-      default: 'free',
+      enum: ['none', 'basic', 'premium', 'vip'],
+      default: 'none',
     },
+
+    balance: {
+      type: Number,
+      default: 0,
+      min: [0, 'Balance cannot be negative'],
+    },
+
+    btcAddress: {
+      type: String,
+      trim: true,
+      sparse: true,
+    },
+
+    banned: {
+      type: Boolean,
+      default: false,
+    },
+
     isVerified: {
       type: Boolean,
       default: false,
     },
+
+    // Email verification
     verificationToken: String,
     verificationTokenExpires: Date,
-    createdAt: {
-      type: Date,
-      default: Date.now,
-    },
-    updatedAt: Date,
+
+    // Password reset
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
+
+    // Timestamps
   },
   { timestamps: true }
 );
 
-// Optional: Update `updatedAt` automatically on save
-userSchema.pre('save', function (next) {
-  this.updatedAt = Date.now();
+// Hash password before saving
+userSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
+
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
-const User = mongoose.model('User', userSchema);
-export default User;
+// Compare password method
+userSchema.methods.comparePassword = async function (candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+module.exports = mongoose.model('User', userSchema);
