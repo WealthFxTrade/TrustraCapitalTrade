@@ -7,7 +7,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 
-// Routes (adjust import paths if needed)
+// Import your routes
 import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import transactionRoutes from './routes/transaction.js';
@@ -22,11 +22,11 @@ const PORT = process.env.PORT || 10000;
 // ──────────────────────────────────────────────
 // Security & Middleware
 // ──────────────────────────────────────────────
-app.set('trust proxy', 1); // Required for Render/Vercel (IP forwarding)
+app.set('trust proxy', 1); // Required for Render/Vercel IP handling
 
 app.use(helmet()); // Security headers
 
-// Rate limiting (protect against brute force / DoS)
+// Rate limiting
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -35,7 +35,7 @@ app.use(
   })
 );
 
-// CORS - only allow trusted origins
+// CORS - strict allowlist
 const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173',
@@ -61,8 +61,8 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request logging
-app.use(morgan('dev'));
+// Logging (more verbose in dev)
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // ──────────────────────────────────────────────
 // Routes
@@ -73,7 +73,7 @@ app.use('/api/transactions', transactionRoutes);
 // app.use('/api/admin/users', adminUsersRoutes);
 // app.use('/api/admin/kyc', adminKycRoutes);
 
-// Health check (useful for Render/Vercel)
+// Health check endpoint (Render/Vercel uses this)
 app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -83,7 +83,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Root route
+// Root endpoint
 app.get('/', (req, res) => {
   res.json({
     message: 'TrustraCapitalTrade Backend API',
@@ -133,7 +133,7 @@ const connectDB = async () => {
   }
 };
 
-// Start server after DB connection
+// Start server after successful DB connection
 connectDB().then(() => {
   const server = app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
@@ -141,7 +141,7 @@ connectDB().then(() => {
     console.log(`Allowed CORS origins: ${allowedOrigins.join(', ')}`);
   });
 
-  // Graceful shutdown
+  // Graceful shutdown (important on Render)
   const shutdown = (signal) => {
     console.log(`${signal} received — shutting down gracefully`);
     server.close(() => {
