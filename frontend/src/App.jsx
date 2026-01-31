@@ -31,17 +31,11 @@ export default function App() {
 
   // Sync auth state to localStorage
   useEffect(() => {
-    if (token) {
-      localStorage.setItem('token', token);
-    } else {
-      localStorage.removeItem('token');
-    }
+    if (token) localStorage.setItem('token', token);
+    else localStorage.removeItem('token');
 
-    if (user) {
-      localStorage.setItem('user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('user');
-    }
+    if (user) localStorage.setItem('user', JSON.stringify(user));
+    else localStorage.removeItem('user');
   }, [token, user]);
 
   const logout = () => {
@@ -83,7 +77,7 @@ function AppContent({
 }) {
   const navigate = useNavigate();
 
-  // Verify JWT & load user
+  // Verify JWT & load user on mount / token change
   useEffect(() => {
     const verifyUser = async () => {
       if (!token) {
@@ -93,9 +87,8 @@ function AppContent({
 
       try {
         const res = await fetch(`${BACKEND_URL}/api/user/me`, {
-          method: 'GET',
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
         });
@@ -125,7 +118,10 @@ function AppContent({
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white">
-        <div className="text-xl animate-pulse">Loading...</div>
+        <div className="text-xl animate-pulse flex items-center gap-3">
+          <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+          Loading...
+        </div>
       </div>
     );
   }
@@ -152,7 +148,7 @@ function AppContent({
 
   return (
     <Routes>
-      {/* Public */}
+      {/* Public routes */}
       <Route path="/" element={<Navigate to={token ? '/dashboard' : '/login'} replace />} />
 
       <Route
@@ -167,7 +163,7 @@ function AppContent({
 
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
-      {/* User protected routes */}
+      {/* Protected user routes */}
       <Route
         path="/dashboard"
         element={token ? <Dashboard user={user} logout={logout} /> : <Navigate to="/login" replace />}

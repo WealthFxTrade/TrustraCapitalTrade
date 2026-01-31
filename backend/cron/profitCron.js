@@ -1,37 +1,34 @@
 // backend/cron/profitCron.js
-import cron from 'node-cron';
-import User from '../models/User.js';
-import Transaction from '../models/Transaction.js';
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import Transaction from "../models/Transaction.js";
 
-cron.schedule('0 1 * * *', async () => { // 1:00 AM UTC
-  console.log('Running daily profit job...');
+dotenv.config();
 
+async function calculateProfits() {
   try {
-    const users = await User.find({ plan: { $ne: 'None' }, balance: { $gt: 0 } });
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("✅ Connected to MongoDB");
 
-    for (const user of users) {
-      const dailyRate = user.dailyRate || 0;
-      if (dailyRate <= 0) continue;
+    const transactions = await Transaction.find({ status: "active" });
+    transactions.forEach(tx => {
+      // Example: calculate some profit
+      tx.profit = tx.amount * 0.01;
+      console.log(`Transaction ${tx._id} profit calculated: ${tx.profit}`);
+    });
 
-      const profit = user.balance * dailyRate;
-
-      user.balance += profit;
-      user.lastProfitUpdate = new Date();
-
-      await user.save();
-
-      await Transaction.create({
-        user: user._id,
-        type: 'profit',
-        amount: profit,
-        signedAmount: profit,
-        status: 'completed',
-        description: `Daily profit (${(dailyRate * 100).toFixed(2)}%)`,
-      });
-    }
-
-    console.log(`Profit added to ${users.length} users`);
+    console.log("✅ Profits calculated successfully");
   } catch (err) {
-    console.error('Profit cron failed:', err);
+    console.error(err);
+  } finally {
+    await mongoose.connection.close();
+    console.log("✅ MongoDB connection closed");
   }
-}, { timezone: 'UTC' });
+}
+
+// Run this file directly
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  calculateProfits();
+}
+
+export default calculateProfits;
