@@ -1,44 +1,46 @@
 const BASE_URL = 'https://trustracapitaltrade-backend.onrender.com/api';
 
-export async function apiGet(endpoint) {
+// Helper: build headers with auth token
+function getHeaders(isJson = true) {
   const token = localStorage.getItem('token');
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  return res.json();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  if (isJson) headers['Content-Type'] = 'application/json';
+  return headers;
 }
 
-export async function apiPost(endpoint, data) {
-  const token = localStorage.getItem('token');
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+// Generic fetch helper
+async function request(endpoint, options = {}) {
+  const res = await fetch(`${BASE_URL}${endpoint}`, options);
+  const data = await res.json().catch(() => null); // fallback if no JSON
+  if (!res.ok) throw new Error(data?.message || res.statusText);
+  return data;
+}
+
+// ───────────── API Methods ─────────────
+
+export function apiGet(endpoint) {
+  return request(endpoint, { headers: getHeaders(false) });
+}
+
+export function apiPost(endpoint, body) {
+  return request(endpoint, {
     method: 'POST',
-    headers: { 
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify(data)
+    headers: getHeaders(),
+    body: JSON.stringify(body),
   });
-  return res.json();
 }
 
-export async function apiPut(endpoint, data) {
-  const token = localStorage.getItem('token');
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+export function apiPut(endpoint, body) {
+  return request(endpoint, {
     method: 'PUT',
-    headers: { 
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify(data)
+    headers: getHeaders(),
+    body: JSON.stringify(body),
   });
-  return res.json();
 }
 
-export async function apiDelete(endpoint) {
-  const token = localStorage.getItem('token');
-  const res = await fetch(`${BASE_URL}${endpoint}`, {
+export function apiDelete(endpoint) {
+  return request(endpoint, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` }
+    headers: getHeaders(false),
   });
-  return res.json();
-    }
+}

@@ -38,12 +38,12 @@ export default function KYCApprovalTable({ token }) {
   useEffect(() => {
     if (token) fetchPendingKYC();
 
-    const interval = setInterval(fetchPendingKYC, 30000); // refresh every 30s
+    const interval = setInterval(fetchPendingKYC, 30000);
     return () => clearInterval(interval);
   }, [token]);
 
   const handleApprove = async (id) => {
-    if (!window.confirm('Approve this KYC submission?')) return;
+    if (!window.confirm('Approve this KYC submission? This cannot be undone.')) return;
 
     try {
       const res = await fetch(`\( {BACKEND_URL}/api/admin/kyc/ \){id}/approve`, {
@@ -69,6 +69,8 @@ export default function KYCApprovalTable({ token }) {
       alert('Rejection reason is required');
       return;
     }
+
+    if (!window.confirm('Reject this KYC? User will see the reason.')) return;
 
     try {
       const res = await fetch(`\( {BACKEND_URL}/api/admin/kyc/ \){selectedSubmission._id}/reject`, {
@@ -103,38 +105,54 @@ export default function KYCApprovalTable({ token }) {
     setShowRejectModal(true);
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-12">
-      <Loader2 className="h-8 w-8 animate-spin text-indigo-500 mr-3" />
-      <span className="text-gray-300">Loading pending KYC submissions...</span>
-    </div>
-  );
+  // Close modals on Escape key
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        setShowImageViewer(false);
+        setShowRejectModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
 
-  if (error) return (
-    <div className="bg-red-900/30 border border-red-700 rounded-xl p-6 text-center">
-      <AlertCircle className="h-10 w-10 text-red-500 mx-auto mb-4" />
-      <p className="text-red-300">{error}</p>
-    </div>
-  );
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-500 mr-3" />
+        <span className="text-gray-300">Loading pending KYC submissions...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-900/40 border border-red-700 rounded-xl p-8 text-center">
+        <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+        <p className="text-red-300 text-lg">{error}</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
+    <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden shadow-xl">
       <div className="p-6 border-b border-gray-800">
-        <h3 className="text-xl font-bold">Pending KYC Approvals</h3>
-        <p className="text-sm text-gray-400 mt-1">
+        <h3 className="text-2xl font-bold">Pending KYC Approvals</h3>
+        <p className="text-gray-400 mt-1">
           {submissions.length} submission{submissions.length !== 1 ? 's' : ''} awaiting review
         </p>
       </div>
 
       {submissions.length === 0 ? (
-        <div className="p-12 text-center text-gray-400">
-          No pending KYC submissions at this time
+        <div className="p-16 text-center text-gray-400">
+          No pending KYC submissions right now
         </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-max">
             <thead>
-              <tr className="border-b border-gray-700 text-left text-sm text-gray-400">
+              <tr className="bg-gray-800/60 text-left text-sm text-gray-300">
                 <th className="p-4">User</th>
                 <th className="p-4">Document Type</th>
                 <th className="p-4">Submitted</th>
@@ -143,9 +161,9 @@ export default function KYCApprovalTable({ token }) {
             </thead>
             <tbody>
               {submissions.map((kyc) => (
-                <tr key={kyc._id} className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
+                <tr key={kyc._id} className="border-b border-gray-800 hover:bg-gray-800/40 transition">
                   <td className="p-4 font-medium">
-                    {kyc.user?.fullName || kyc.user?.email || 'Unknown'}
+                    {kyc.user?.fullName || kyc.user?.email || '—'}
                   </td>
                   <td className="p-4 capitalize">{kyc.documentType?.replace('_', ' ') || '—'}</td>
                   <td className="p-4 text-sm text-gray-400">
@@ -182,14 +200,14 @@ export default function KYCApprovalTable({ token }) {
       )}
 
       {/* Image Viewer Modal */}
-      {showImageViewer && selectedKyc && (
+      {showImageViewer && selectedSubmission && (
         <div 
           className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 cursor-pointer"
           onClick={() => setShowImageViewer(false)}
         >
           <div 
             className="relative bg-gray-900 rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setShowImageViewer(false)}
@@ -205,21 +223,21 @@ export default function KYCApprovalTable({ token }) {
                 <div className="space-y-3">
                   <p className="text-center font-semibold text-gray-300">Front / Main Document</p>
                   <img
-                    src={selectedKyc.frontImage}
+                    src={selectedSubmission.frontImage}
                     alt="Front document"
                     className="w-full rounded-xl border border-gray-700 shadow-2xl object-contain max-h-[50vh]"
-                    onError={e => e.target.src = 'https://via.placeholder.com/600x400?text=Front+Not+Found'}
+                    onError={(e) => (e.target.src = 'https://via.placeholder.com/600x400?text=Front+Not+Found')}
                   />
                 </div>
 
-                {selectedKyc.backImage && (
+                {selectedSubmission.backImage && (
                   <div className="space-y-3">
                     <p className="text-center font-semibold text-gray-300">Back Side</p>
                     <img
-                      src={selectedKyc.backImage}
+                      src={selectedSubmission.backImage}
                       alt="Back document"
                       className="w-full rounded-xl border border-gray-700 shadow-2xl object-contain max-h-[50vh]"
-                      onError={e => e.target.src = 'https://via.placeholder.com/600x400?text=Back+Not+Found'}
+                      onError={(e) => (e.target.src = 'https://via.placeholder.com/600x400?text=Back+Not+Found')}
                     />
                   </div>
                 )}
@@ -227,10 +245,10 @@ export default function KYCApprovalTable({ token }) {
                 <div className="space-y-3 md:col-span-2 lg:col-span-1">
                   <p className="text-center font-semibold text-gray-300">Selfie / Liveness Proof</p>
                   <img
-                    src={selectedKyc.selfieImage}
+                    src={selectedSubmission.selfieImage}
                     alt="Selfie"
                     className="w-full max-w-md mx-auto rounded-xl border border-gray-700 shadow-2xl object-contain max-h-[50vh]"
-                    onError={e => e.target.src = 'https://via.placeholder.com/400x400?text=Selfie+Not+Found'}
+                    onError={(e) => (e.target.src = 'https://via.placeholder.com/400x400?text=Selfie+Not+Found')}
                   />
                 </div>
               </div>
@@ -240,7 +258,7 @@ export default function KYCApprovalTable({ token }) {
       )}
 
       {/* Reject Reason Modal */}
-      {showRejectModal && selectedKyc && (
+      {showRejectModal && selectedSubmission && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <div className="bg-gray-900 rounded-2xl p-8 max-w-lg w-full border border-gray-700">
             <h3 className="text-2xl font-bold mb-6 text-red-400">Reject KYC Submission</h3>
@@ -255,7 +273,7 @@ export default function KYCApprovalTable({ token }) {
               className="w-full h-32 p-4 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-red-500 resize-none mb-6"
             />
 
-            <div className="flex justify-end gap-4">
+            <div className="flex justify-end gap-4 mt-6">
               <button
                 onClick={() => setShowRejectModal(false)}
                 className="px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition"

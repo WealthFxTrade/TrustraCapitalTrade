@@ -1,46 +1,87 @@
-import { deriveAddress } from '../config/bitcoin.js';
-import url from 'url';
-
-// ES module helpers
-const __filename = url.fileURLToPath(import.meta.url);
+// backend/utils/generateBtcAddress.js
+import * as bitcoin from 'bitcoinjs-lib';
+import { root, network } from '../config/bitcoin.js';
 
 /**
- * Generate a single BTC address
- * @param {number} index - Address index
- * @param {'legacy'|'nestedSegwit'|'nativeSegwit'} type - Address type (default: 'nativeSegwit')
- * @returns {string} BTC address
+ * Generate a native SegWit (Bech32 P2WPKH) BTC address from HD derivation index
+ * @param {number} index - Child index (non-hardened)
+ * @returns {string} BTC address (bc1q...)
+ * @throws {Error} if root not initialized or generation fails
  */
-export const generateBtcAddress = (index = 0, type = 'nativeSegwit') => {
-  const { address } = deriveAddress(index, type);
-  return address;
-};
-
-/**
- * Generate multiple BTC addresses
- * @param {number} count - Number of addresses
- * @param {number} startIndex - Starting index (default 0)
- * @param {'legacy'|'nestedSegwit'|'nativeSegwit'} type - Address type (default: 'nativeSegwit')
- * @returns {Array<{ index: number, address: string, path: string, pubKey: string }>}
- */
-export const generateBtcAddresses = (count = 1, startIndex = 0, type = 'nativeSegwit') => {
-  const addresses = [];
-  for (let i = 0; i < count; i++) {
-    const index = startIndex + i;
-    const { address, path, publicKey } = deriveAddress(index, type);
-    addresses.push({
-      index,
-      address,
-      path,
-      pubKey: publicKey.toString('hex'),
-    });
+export function generateBtcAddress(index) {
+  if (!root) {
+    throw new Error('HD root node (xpub/zpub/ypub) not initialized in bitcoin config');
   }
-  return addresses;
-};
 
-// Test block
-if (process.argv[1] === __filename) {
-  console.log('Single BTC address:', generateBtcAddress(0));
+  if (!Number.isInteger(index) || index < 0) {
+    throw new Error('Index must be a non-negative integer');
+  }
 
-  console.log('Batch of 5 BTC addresses:');
-  console.table(generateBtcAddresses(5));
+  const child = root.derivePath(`0/${index}`);
+
+  const payment = bitcoin.payments.p2wpkh({
+    pubkey: child.publicKey,
+    network,
+  });
+
+  if (!payment.address) {
+    throw new Error('Failed to generate BTC address – invalid public key or network');
+  }
+
+  return payment.address;
+}
+
+/**
+ * Generate address with debug/test information
+ * NEVER expose WIF/private key in production API responses!
+ * @param {number} index
+ * @returns {object} { address, derivationPath, publicKey, wif? }
+ */
+export function generateAddressWithDetails(index) {
+  if (!root) {
+    throw new Error('HD root node not initialized');
+  }
+
+  const path = `0/${index}`;
+  const child = root.derivePath(path);
+
+  const payment = bitcoin.payments.p2wpkh({
+    pubkey: child.publicKey,
+    network,
+  });
+
+  if (!payment.address) {
+    throw new Error('Failed to generate address – invalid public key or network');
+  }
+
+  return {
+    address: payment.address,
+    derivationPath: path,
+    publicKey: child.publicKey.toString('hex'),
+    // Only expose WIF in non-production environments (testing/debug)
+    ...(process.env.NODE_ENV !== 'production' && child.privateKey && {
+      wif: child.toWIF(),
+    }),
+  };
+}
+
+// ──────────────────────────────────────────────
+// Direct execution (run file with: node utils/generateBtcAddress.js)
+// ──────────────────────────────────────────────
+if (process.argv[1] === new URL(import.meta.url).pathname) {
+  (async () => {
+    try {
+      console.log('Generating address at index 0...');
+      const address = generateBtcAddress(0);
+      console.log('Native SegWit (bc1q...) address:', address);
+
+      if (process.env.NODE_ENV !== 'production') {
+        const details = generateAddressWithDetails(0);
+        console.log('Details:', details);
+      }
+    } catch (err) {
+      console.error('Address generation failed:', err.message);
+      process.exitCode = 1;
+    }
+  })();
 }
