@@ -1,102 +1,125 @@
 import { useEffect, useState } from 'react';
-import QRCode from 'qrcode.react';
-import { request } from '../api/api';
-import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext.jsx';
+import { getUserAccount, getBtcPrice, getUserInvestments } from '../api';
+import toast from 'react-hot-toast';
 
-export default function Dashboard({ user }) {
+export default function Dashboard() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const [account, setAccount] = useState(null);
   const [btcPrice, setBtcPrice] = useState(null);
   const [investments, setInvestments] = useState([]);
-  const [btcBalance, setBtcBalance] = useState(0);
-  const { token } = useAuth();
+  const [loading, setLoading] = useState(true);
 
-  // Fetch user investments
   useEffect(() => {
-    async function fetchInvestments() {
+    let mounted = true;
+
+    async function fetchDashboard() {
       try {
-        const data = await request('/investments', 'GET', null, token);
-        setInvestments(data.investments);
+        // Fetch user account & investments in parallel
+        const [userRes, invRes] = await Promise.all([
+          getUserAccount(),
+          getUserInvestments(),
+        ]);
+
+        if (!mounted) return;
+
+        setAccount(userRes.data);
+        setInvestments(invRes.data || []);
+
+        // BTC price is optional; do not block dashboard
+        try {
+          const btcRes = await getBtcPrice();
+          if (mounted) {
+            setBtcPrice(
+              btcRes.data?.price ?? btcRes.data?.btcPrice ?? btcRes.data?.priceUsd ?? null
+            );
+          }
+        } catch {
+          setBtcPrice(null);
+        }
       } catch (err) {
-        console.error(err.message);
+        console.error(err);
+        toast.error('Session expired. Please log in again.');
+        logout();
+        navigate('/login', { replace: true });
+      } finally {
+        if (mounted) setLoading(false);
       }
     }
-    fetchInvestments();
-  }, [token]);
 
-  // Fetch BTC price
-  useEffect(() => {
-    async function fetchBtcPrice() {
-      try {
-        const data = await request('/bitcoin/price', 'GET');
-        setBtcPrice(data.price);
-      } catch (err) {
-        console.error(err.message);
-      }
-    }
-    fetchBtcPrice();
-  }, []);
+    fetchDashboard();
+    return () => {
+      mounted = false;
+    };
+  }, [logout, navigate]);
 
-  // Fetch BTC balance
-  useEffect(() => {
-    async function fetchBtcBalance() {
-      try {
-        const data = await request(`/bitcoin/balance/${user.id}`, 'GET', null, token);
-        setBtcBalance(data.balance);
-      } catch (err) {
-        console.error(err.message);
-      }
-    }
-    fetchBtcBalance();
-    const interval = setInterval(fetchBtcBalance, 60000); // refresh every 60s
-    return () => clearInterval(interval);
-  }, [user.id, token]);
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white text-xl">
+        Loading dashboard…
+      </div>
+    );
+  }
 
   return (
-    <div className="dashboard-container">
-      <h1>Welcome, {user.fullName}</h1>
-
-      <section className="btc-address">
-        <h2>Your BTC Deposit Address</h2>
-        <p>{user.btcAddress}</p>
-        <QRCode value={user.btcAddress} size={128} />
-        <button onClick={() => navigator.clipboard.writeText(user.btcAddress)}>
-          Copy Address
+    <div className="min-h-screen bg-slate-950 p-10 text-white">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-10">
+        <h1 className="text-5xl font-bold text-cyan-400">Dashboard</h1>
+        <button
+          onClick={() => {
+            logout();
+            navigate('/login', { replace: true });
+          }}
+          className="bg-red-600 hover:bg-red-500 px-5 py-2 rounded font-semibold"
+        >
+          Logout
         </button>
+      </div>
+
+      {/* Account Info */}
+      <section className="mb-12 bg-slate-800 p-6 rounded-xl border border-slate-700">
+        <h2 className="text-3xl font-bold mb-4">Account Information</h2>
+        <p><strong>Name:</strong> {account?.fullName || account?.name}</p>
+        <p><strong>Email:</strong> {account?.email}</p>
+        <p><strong>Role:</strong> {account?.role}</p>
       </section>
 
-      <section className="btc-balance">
-        <h2>Your BTC Balance</h2>
-        <p>{btcBalance} BTC</p>
-        <p>≈ ${btcBalance && btcPrice ? (btcBalance * btcPrice).toFixed(2) : '0.00'}</p>
-      </section>
-
-      <section className="btc-price">
-        <h2>Current BTC Price</h2>
-        <p>{btcPrice ? `$${btcPrice}` : 'Loading...'}</p>
-      </section>
-
-      <section className="investments">
-        <h2>Your Investments</h2>
-        {investments.length === 0 ? (
-          <p>No active investments</p>
+      {/* BTC Price */}
+      <section className="mb-12 bg-slate-800 p-6 rounded-xl border border-slate-700">
+        <h2 className="text-3xl font-bold mb-4">Live Bitcoin Price</h2>
+        {btcPrice ? (
+          <p className="text-4xl font-bold text-yellow-400">
+            ${Number(btcPrice).toLocaleString()}
+          </p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Plan</th>
-                <th>Amount (BTC)</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {investments.map((inv) => (
-                <tr key={inv._id}>
-                  <td>{inv.planName}</td>
-                  <td>{inv.amount}</td>
-                  <td>{inv.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <p className="text-gray-400">BTC price temporarily unavailable</p>
+        )}
+      </section>
+
+      {/* Investments */}
+      <section>
+        <h2 className="text-3xl font-bold mb-6">Your Investments</h2>
+        {investments.length === 0 ? (
+          <p className="text-gray-400">You have no active investments.</p>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {investments.map((inv) => (
+              <div
+                key={inv._id}
+                className="bg-slate-800 p-6 rounded-xl border border-slate-700"
+              >
+                <p><strong>Plan:</strong> {inv.planName}</p>
+                <p><strong>Amount:</strong> ${Number(inv.amount).toLocaleString()}</p>
+                <p><strong>Daily ROI:</strong> {inv.roiDaily}%</p>
+                <p><strong>Duration:</strong> {inv.duration} days</p>
+                <p><strong>Status:</strong> {inv.status}</p>
+              </div>
+            ))}
+          </div>
         )}
       </section>
     </div>

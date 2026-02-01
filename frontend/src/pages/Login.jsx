@@ -1,61 +1,86 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import API from '../api';
+import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext.jsx';
+import { loginUser } from '../api';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
   const navigate = useNavigate();
 
-  const submit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+    setLoading(true);
 
     try {
-      const res = await API.post('/auth/login', { email, password });
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('user', JSON.stringify(res.data.user));
-      navigate(res.data.user.role === 'admin' ? '/admin' : '/dashboard');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
+      const { data } = await loginUser({ email, password });
+
+      // Assuming backend returns { user, token }
+      login(data.user, data.token);
+      toast.success('Logged in successfully!');
+      navigate('/dashboard');
+    } catch (error) {
+      console.error(error);
+      toast.error(error.response?.data?.message || 'Login failed');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen">
-      <form onSubmit={submit} className="bg-slate-900 p-8 rounded-xl w-96">
-        <h2 className="text-2xl font-bold mb-6">Sign In</h2>
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center px-4">
+      <div className="w-full max-w-md">
+        <h1 className="text-5xl font-bold text-cyan-400 text-center mb-12">
+          Trustra Capital
+        </h1>
 
-        {error && <p className="text-red-500 mb-4">{error}</p>}
+        <div className="bg-slate-800/70 rounded-2xl p-10 border border-slate-700 shadow-2xl">
+          <h2 className="text-3xl font-bold text-white mb-8 text-center">Sign In</h2>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <input
+              type="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full p-4 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+              required
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full p-4 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+              required
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full py-4 rounded-xl font-bold text-lg transition ${
+                loading ? 'bg-cyan-600/50 cursor-not-allowed' : 'bg-cyan-500 hover:bg-cyan-400 text-black'
+              }`}
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
 
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full mb-4 p-3 rounded bg-slate-800"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+          <div className="mt-8 text-center text-gray-400">
+            <p className="mt-4">
+              Don't have an account?{' '}
+              <a href="/signup" className="text-cyan-400 hover:text-cyan-300">
+                Sign up
+              </a>
+            </p>
+          </div>
+        </div>
 
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full mb-4 p-3 rounded bg-slate-800"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        <button className="w-full bg-accent text-black py-3 rounded font-semibold">
-          Sign In
-        </button>
-
-        <p className="mt-4 text-sm text-gray-400">
-          Forgot password?{' '}
-          <Link to="/forgot-password" className="text-accent">
-            Reset
-          </Link>
+        <p className="text-center text-sm text-gray-500 mt-8">
+          © {new Date().getFullYear()} Trustra Capital Trade • Operating since 2016
         </p>
-      </form>
+      </div>
     </div>
   );
 }
