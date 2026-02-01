@@ -1,127 +1,62 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
-import { getUserAccount, getBtcPrice, getUserInvestments } from '../api';
+import React, { useEffect, useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { getUserAccount, getBtcPrice } from '../api';
 import toast from 'react-hot-toast';
 
 export default function Dashboard() {
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
-  const [account, setAccount] = useState(null);
-  const [btcPrice, setBtcPrice] = useState(null);
-  const [investments, setInvestments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { user, logout } = useAuth();
+  const [stats, setStats] = useState({ balance: 0, profit: 0 });
+  const [btcPrice, setBtcPrice] = useState('0.00');
 
   useEffect(() => {
-    let mounted = true;
-
-    async function fetchDashboard() {
+    const loadDashboard = async () => {
       try {
-        // Fetch user account & investments in parallel
-        const [userRes, invRes] = await Promise.all([
-          getUserAccount(),
-          getUserInvestments(),
-        ]);
-
-        if (!mounted) return;
-
-        setAccount(userRes.data);
-        setInvestments(invRes.data || []);
-
-        // BTC price is optional; do not block dashboard
-        try {
-          const btcRes = await getBtcPrice();
-          if (mounted) {
-            setBtcPrice(
-              btcRes.data?.price ?? btcRes.data?.btcPrice ?? btcRes.data?.priceUsd ?? null
-            );
-          }
-        } catch {
-          setBtcPrice(null);
-        }
+        const [acc, btc] = await Promise.all([getUserAccount(), getBtcPrice()]);
+        setStats(acc.data);
+        setBtcPrice(btc.data.price || btc.data.bitcoin?.usd); // Handling different API structures
       } catch (err) {
-        console.error(err);
-        toast.error('Session expired. Please log in again.');
-        logout();
-        navigate('/login', { replace: true });
-      } finally {
-        if (mounted) setLoading(false);
+        toast.error("Failed to sync real-time data");
       }
-    }
-
-    fetchDashboard();
-    return () => {
-      mounted = false;
     };
-  }, [logout, navigate]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white text-xl">
-        Loading dashboard…
-      </div>
-    );
-  }
+    loadDashboard();
+  }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 p-10 text-white">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-10">
-        <h1 className="text-5xl font-bold text-cyan-400">Dashboard</h1>
-        <button
-          onClick={() => {
-            logout();
-            navigate('/login', { replace: true });
-          }}
-          className="bg-red-600 hover:bg-red-500 px-5 py-2 rounded font-semibold"
-        >
-          Logout
-        </button>
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
+      <nav className="flex justify-between items-center mb-10 border-b border-slate-800 pb-4">
+        <h1 className="text-xl font-bold text-blue-500">Trustra Dashboard</h1>
+        <button onClick={logout} className="text-sm bg-red-600/20 text-red-500 px-4 py-2 rounded hover:bg-red-600/30 transition">Logout</button>
+      </nav>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+          <p className="text-slate-400 text-sm">Main Balance</p>
+          <h2 className="text-3xl font-bold">${stats.balance?.toLocaleString()}</h2>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+          <p className="text-slate-400 text-sm">Live BTC Price</p>
+          <h2 className="text-3xl font-bold text-orange-500">${Number(btcPrice).toLocaleString()}</h2>
+        </div>
       </div>
 
-      {/* Account Info */}
-      <section className="mb-12 bg-slate-800 p-6 rounded-xl border border-slate-700">
-        <h2 className="text-3xl font-bold mb-4">Account Information</h2>
-        <p><strong>Name:</strong> {account?.fullName || account?.name}</p>
-        <p><strong>Email:</strong> {account?.email}</p>
-        <p><strong>Role:</strong> {account?.role}</p>
-      </section>
-
-      {/* BTC Price */}
-      <section className="mb-12 bg-slate-800 p-6 rounded-xl border border-slate-700">
-        <h2 className="text-3xl font-bold mb-4">Live Bitcoin Price</h2>
-        {btcPrice ? (
-          <p className="text-4xl font-bold text-yellow-400">
-            ${Number(btcPrice).toLocaleString()}
-          </p>
-        ) : (
-          <p className="text-gray-400">BTC price temporarily unavailable</p>
-        )}
-      </section>
-
-      {/* Investments */}
-      <section>
-        <h2 className="text-3xl font-bold mb-6">Your Investments</h2>
-        {investments.length === 0 ? (
-          <p className="text-gray-400">You have no active investments.</p>
-        ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {investments.map((inv) => (
-              <div
-                key={inv._id}
-                className="bg-slate-800 p-6 rounded-xl border border-slate-700"
-              >
-                <p><strong>Plan:</strong> {inv.planName}</p>
-                <p><strong>Amount:</strong> ${Number(inv.amount).toLocaleString()}</p>
-                <p><strong>Daily ROI:</strong> {inv.roiDaily}%</p>
-                <p><strong>Duration:</strong> {inv.duration} days</p>
-                <p><strong>Status:</strong> {inv.status}</p>
-              </div>
-            ))}
+      <h3 className="text-xl font-bold mb-6">Investment ROI Plans</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {[
+          { n: 'Starter', r: 5, m: 500 },
+          { n: 'Growth', r: 12, m: 5000 },
+          { n: 'Pro', r: 25, m: 20000 },
+          { n: 'Institutional', r: 35, m: 50000 },
+          { n: 'Elite', r: 50, m: 100000 }
+        ].map((plan) => (
+          <div key={plan.n} className="bg-slate-900 border border-slate-800 p-5 rounded-xl hover:border-blue-500 transition group">
+            <h4 className="font-bold text-blue-400">{plan.n}</h4>
+            <p className="text-2xl font-bold my-2">{plan.r}% ROI</p>
+            <p className="text-xs text-slate-500 mb-4">Min Deposit: ${plan.m.toLocaleString()}</p>
+            <button className="w-full bg-blue-600 group-hover:bg-blue-500 py-2 rounded text-sm font-bold">Invest Now</button>
           </div>
-        )}
-      </section>
+        ))}
+      </div>
     </div>
   );
 }
+
