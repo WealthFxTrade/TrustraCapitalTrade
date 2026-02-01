@@ -1,46 +1,49 @@
-const BASE_URL = 'https://trustracapitaltrade-backend.onrender.com/api';
+import axios from 'axios';
 
-// Helper: build headers with auth token
-function getHeaders(isJson = true) {
+const api = axios.create({
+  baseURL: 'https://trustracapitaltrade-backend.onrender.com/api',
+  headers: { 'Content-Type': 'application/json' },
+});
+
+api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
-  if (isJson) headers['Content-Type'] = 'application/json';
-  return headers;
-}
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
-// Generic fetch helper
-async function request(endpoint, options = {}) {
-  const res = await fetch(`${BASE_URL}${endpoint}`, options);
-  const data = await res.json().catch(() => null); // fallback if no JSON
-  if (!res.ok) throw new Error(data?.message || res.statusText);
-  return data;
-}
+export default api;
 
-// ───────────── API Methods ─────────────
+/* ================= AUTH ================= */
+export const loginUser = (data) => api.post('/auth/login', data);
+export const registerUser = (data) => api.post('/auth/register', data);
+export const getUserAccount = () => api.get('/user/me');
 
-export function apiGet(endpoint) {
-  return request(endpoint, { headers: getHeaders(false) });
-}
+/* ================= WALLET / PAYMENTS ================= */
+export const getWallet = () => api.get('/wallet');
+export const getDepositAddress = (currency) =>
+  api.get(`/wallet/address?currency=${currency}`);
+export const createDeposit = (data) => api.post('/deposit', data);
+export const requestWithdrawal = (data) => api.post('/withdraw', data);
 
-export function apiPost(endpoint, body) {
-  return request(endpoint, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(body),
+/* ================= INVESTMENTS ================= */
+export const getUserInvestments = () => api.get('/investments');
+
+/* ================= TRANSACTIONS ================= */
+export const getTransactions = () => api.get('/transactions');
+
+/* ================= KYC ================= */
+export const submitKyc = (formData) =>
+  api.post('/kyc', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
   });
-}
+export const getKycStatus = () => api.get('/kyc/status');
 
-export function apiPut(endpoint, body) {
-  return request(endpoint, {
-    method: 'PUT',
-    headers: getHeaders(),
-    body: JSON.stringify(body),
-  });
-}
+/* ================= REFERRALS ================= */
+export const getReferralData = () => api.get('/referrals');
 
-export function apiDelete(endpoint) {
-  return request(endpoint, {
-    method: 'DELETE',
-    headers: getHeaders(false),
-  });
-}
+/* ================= ADMIN ================= */
+export const adminStats = () => api.get('/admin/stats');
+export const adminUsers = () => api.get('/admin/users');
+export const adminKyc = () => api.get('/admin/kyc');
+export const adminApproveKyc = (id) =>
+  api.post(`/admin/kyc/${id}/approve`);
