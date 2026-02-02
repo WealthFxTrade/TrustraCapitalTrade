@@ -1,97 +1,33 @@
 import mongoose from 'mongoose';
 
-const depositSchema = new mongoose.Schema(
-  {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true,
-      index: true,
-    },
-
-    currency: {
-      type: String,
-      enum: ['BTC'],
-      default: 'BTC',
-      required: true,
-      index: true,
-    },
-
-    address: {
-      type: String,
-      required: true,
-      trim: true,
-      lowercase: true,
-      index: true,
-    },
-
-    expectedAmount: {
-      type: Number,
-      min: 0,
-    },
-
-    receivedAmount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-
-    amountSat: {
-      type: mongoose.Schema.Types.Decimal128,
-      default: '0',
-      get: v => Number(v),
-      set: v => mongoose.Types.Decimal128.fromString(v.toString()),
-    },
-
-    txHash: {
-      type: String,
-      trim: true,
-      sparse: true,
-      index: { unique: true, sparse: true },
-    },
-
-    confirmations: {
-      type: Number,
-      default: 0,
-    },
-
-    status: {
-      type: String,
-      enum: [
-        'pending',
-        'confirming',
-        'confirmed',
-        'overpaid',
-        'underpaid',
-        'expired',
-        'error',
-      ],
-      default: 'pending',
-      index: true,
-    },
-
-    firstSeenAt: Date,
-    blockHeight: Number,
-
-    adminNote: String,
-
-    processedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      sparse: true,
-    },
+const depositSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User', // Reference to the User model
+    required: true,
+    index: true
   },
-  {
-    timestamps: true,
-    toJSON: { getters: true },
-    toObject: { getters: true },
-  }
-);
+  amount: { type: Number, required: true }, // Amount in BTC or Satoshi
+  amountUSD: { type: Number },
+  currency: { type: String, default: 'BTC', uppercase: true },
+  txHash: { 
+    type: String, 
+    unique: true, 
+    sparse: true, 
+    trim: true, 
+    index: true 
+  },
+  status: {
+    type: String,
+    enum: ['pending', 'confirming', 'confirmed', 'failed', 'rejected'],
+    default: 'pending',
+    index: true
+  },
+  confirmations: { type: Number, default: 0 },
+  address: { type: String, required: true }, // The btcAddress it was sent to
+  locked: { type: Boolean, default: false }, // For the Deposit Watcher cron job
+}, { timestamps: true });
 
-depositSchema.index({ user: 1, createdAt: -1 });
+// Safe Export
+export default mongoose.models.Deposit || mongoose.model('Deposit', depositSchema);
 
-depositSchema.virtual('amountBTC').get(function () {
-  return Number(this.amountSat) / 1e8;
-});
-
-export default mongoose.model('Deposit', depositSchema);

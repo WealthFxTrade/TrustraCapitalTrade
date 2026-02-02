@@ -1,173 +1,142 @@
-// backend/routes/transaction.js
-import express from 'express';
-import mongoose from 'mongoose';
-import { protect, admin } from '../middleware/auth.js';
-import User from '../models/User.js';
-import Transaction from '../models/Transaction.js';
-import Withdrawal from '../models/Withdrawal.js';
-import AuditLog from '../models/AuditLog.js';
+import express from "express";
+import mongoose from "mongoose";
+
+import User from "../models/User.js";
+import Transaction from "../models/Transaction.js";
+
+import { protect, authorize } from "../middleware/authMiddleware.js";
+import { ApiError } from "../middleware/errorMiddleware.js";
 
 const router = express.Router();
 
-/* ---------------- DEPOSIT REQUEST (USER) ---------------- */
-router.post('/deposit', protect, async (req, res) => {
-  const { amount, method = 'crypto', currency = 'USD' } = req.body;
-
-  if (!amount || amount <= 0) {
-    return res.status(400).json({ success: false, message: 'Amount must be greater than 0' });
-  }
-
-  if (!['crypto', 'bank', 'wallet', 'manual'].includes(method)) {
-    return res.status(400).json({ success: false, message: 'Invalid payment method' });
-  }
-
-  try {
-    const tx = await Transaction.create({
-      user: req.user._id,
-      type: 'deposit',
-      amount,
-      signedAmount: amount,
-      currency,
-      method,
-      status: 'pending',
-    });
-
-    res.status(201).json({
-      success: true,
-      message: 'Deposit request submitted – awaiting admin approval',
-      transaction: tx,
-    });
-  } catch (err) {
-    console.error('[DEPOSIT ERROR]', err.message);
-    res.status(500).json({ success: false, message: 'Server error during deposit' });
-  }
-});
-
-/* ---------------- WITHDRAWAL REQUEST (USER) ---------------- */
-router.post('/withdraw', protect, async (req, res) => {
+/**
+ * ----------------------------------------
+ * POST /api/transactions/withdraw
+ * ----------------------------------------
+ * User withdrawal (atomic, safe)
+ */
+router.post("/withdraw", protect, async (req, res, next) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
 
   try {
-    const { amount, btcAddress } = req.body;
+    session.startTransaction();
 
-    if (!amount || amount <= 0) {
-      throw new Error('Amount must be greater than 0');
+    const { amount, currency, referenceId } = req.body;
+
+    if (!amount || amount <= 0 || !currency) {
+      throw new ApiError(400, "Amount and currency are required");
     }
 
-    if (!btcAddress || !btcAddress.trim()) {
-      throw new Error('BTC withdrawal address is required');
+    // Idempotency / replay protection
+    if (referenceId) {
+      const exists = await Transaction.findOne({ referenceId });
+      if (exists) {
+        throw new ApiError(409, "Duplicate withdrawal request");
+      }
     }
 
     const user = await User.findById(req.user._id).session(session);
-    if (!user) throw new Error('User not found');
+    if (!user) throw new ApiError(404, "User not found");
 
-    if (user.balance < amount) {
-      throw new Error('Insufficient balance');
+    const currentBalance = user.balances.get(currency) || 0;
+    if (currentBalance < amount) {
+      throw new ApiError(400, `Insufficient ${currency} balance`);
     }
 
     // Deduct balance
-    user.balance -= amount;
+    user.balances.set(currency, currentBalance - amount);
+
+    // Ledger entry
+    user.ledger.push({
+      amount,
+      signedAmount: -amount,
+      currency,
+      type: "withdrawal",
+      source: "user_withdrawal",
+      referenceId,
+      status: "pending",
+      description: `Withdrawal of ${amount} ${currency}`,
+    });
+
     await user.save({ session });
 
     // Create transaction record
-    const tx = await Transaction.create([{
-      user: req.user._id,
-      type: 'withdrawal',
-      amount,
-      signedAmount: -amount,
-      currency: 'BTC',
-      method: 'crypto',
-      status: 'pending',
-      walletAddress: btcAddress.trim(),
-    }], { session });
-
-    // Create withdrawal record
-    await Withdrawal.create([{
-      user: req.user._id,
-      amount,
-      btcAddress: btcAddress.trim(),
-      status: 'pending',
-      transaction: tx[0]._id,
-    }], { session });
-
-    // Audit log
-    await AuditLog.create([{
-      admin: null, // user-initiated
-      action: 'WITHDRAWAL_REQUEST',
-      targetId: tx[0]._id,
-      targetModel: 'Transaction',
-      metadata: { amount, btcAddress: btcAddress.trim(), userId: user._id },
-      ip: req.ip,
-    }], { session });
+    await Transaction.create(
+      [
+        {
+          user: user._id,
+          type: "withdrawal",
+          amount,
+          currency,
+          status: "pending",
+          referenceId,
+          initiatedBy: "user",
+          ip: req.ip,
+        },
+      ],
+      { session }
+    );
 
     await session.commitTransaction();
 
-    res.status(201).json({
+    res.json({
       success: true,
-      message: 'Withdrawal request submitted – awaiting admin approval',
-      transaction: tx[0],
+      message: "Withdrawal request submitted",
+      balances: user.balances,
     });
   } catch (err) {
     await session.abortTransaction();
-    console.error('[WITHDRAWAL ERROR]', err.message);
-    res.status(400).json({ success: false, message: err.message });
+    next(err);
   } finally {
     session.endSession();
   }
 });
 
-/* ---------------- USER TRANSACTION HISTORY ---------------- */
-router.get('/my', protect, async (req, res) => {
+/**
+ * ----------------------------------------
+ * GET /api/transactions/my
+ * ----------------------------------------
+ * User transaction history
+ */
+router.get("/my", protect, async (req, res, next) => {
   try {
-    const { type, status, limit = 20, page = 1 } = req.query;
-    const skip = (page - 1) * limit;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
 
-    const query = { user: req.user._id };
-    if (type) query.type = type;
-    if (status) query.status = status;
-
-    const transactions = await Transaction.find(query)
+    const transactions = await Transaction.find({ user: req.user._id })
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
+      .limit(limit)
       .lean();
 
-    const total = await Transaction.countDocuments(query);
-
-    res.json({
-      success: true,
-      transactions,
-      pagination: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    });
+    res.json({ success: true, transactions });
   } catch (err) {
-    console.error('[TRANSACTION HISTORY ERROR]', err.message);
-    res.status(500).json({ success: false, message: 'Failed to fetch transaction history' });
+    next(err);
   }
 });
 
-/* ---------------- ADMIN: PENDING WITHDRAWALS ---------------- */
-router.get('/pending-withdrawals', protect, admin, async (req, res) => {
-  try {
-    const withdrawals = await Withdrawal.find({ status: 'pending' })
-      .populate('user', 'fullName email')
-      .sort({ createdAt: -1 })
-      .lean();
+/**
+ * ----------------------------------------
+ * ADMIN: GET ALL TRANSACTIONS
+ * ----------------------------------------
+ */
+router.get(
+  "/admin/all",
+  protect,
+  authorize("admin", "superadmin"),
+  async (req, res, next) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
 
-    res.json({
-      success: true,
-      withdrawals,
-      count: withdrawals.length,
-    });
-  } catch (err) {
-    console.error('[PENDING WITHDRAWALS ERROR]', err.message);
-    res.status(500).json({ success: false, message: 'Failed to fetch pending withdrawals' });
+      const transactions = await Transaction.find()
+        .populate("user", "email fullName")
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean();
+
+      res.json({ success: true, transactions });
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 export default router;

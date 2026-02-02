@@ -8,16 +8,29 @@ import {
 
 const router = express.Router();
 
-router.get('/btc', protect, asyncHandler(getOrCreateBtcDepositAddressController));
+// Get or create BTC deposit address
+router.get(
+  '/btc',
+  protect,
+  asyncHandler(getOrCreateBtcDepositAddressController)
+);
+
+// Force generate a new BTC deposit address
 router.get(
   '/btc/new',
   protect,
   (req, res, next) => {
-    req.query.fresh = 'true';
+    req.query.fresh = 'true'; // indicate fresh address
     next();
   },
   asyncHandler(getOrCreateBtcDepositAddressController)
 );
-router.get('/btc/history', protect, asyncHandler(getDepositHistory));
+
+// Get BTC deposit history / ledger
+router.get(
+  '/btc/history',
+  protect,
+  asyncHandler(getDepositHistory)
+);
 
 export default router;

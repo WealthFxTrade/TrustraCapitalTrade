@@ -1,65 +1,86 @@
+// src/pages/Signup.jsx
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import API from '../api';
+import { useNavigate, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
 
 export default function Signup() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
   const navigate = useNavigate();
 
-  const submit = async (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
-    setError('');
+    if (!fullName || !email || !password) return toast.error('All fields are required');
+    if (password.length < 8) return toast.error('Password must be at least 8 characters');
 
+    setLoading(true);
     try {
-      await API.post('/auth/register', {
-        fullName,
-        email,
-        password,
+      const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullName, email, password }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Server error');
+
+      toast.success('Account created! Please login.');
       navigate('/login');
     } catch (err) {
-      setError(err.response?.data?.message || 'Signup failed');
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen">
-      <form onSubmit={submit} className="bg-slate-900 p-8 rounded-xl w-96">
-        <h2 className="text-2xl font-bold mb-6">Create Account</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gray-950 p-6">
+      <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 glass">
+        <h1 className="text-3xl font-bold text-indigo-400 mb-6 text-center">Create Account</h1>
 
-        {error && <p className="text-red-500 mb-4">{error}</p>}
+        <form onSubmit={handleSignup} className="space-y-4">
+          <input
+            type="text"
+            placeholder="Full Name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+          />
+          <input
+            type="email"
+            placeholder="Email Address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+          />
+          <input
+            type="password"
+            placeholder="Password (min 8 chars)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+          />
 
-        <input
-          type="text"
-          placeholder="Full Name"
-          className="w-full mb-4 p-3 rounded bg-slate-800"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-        />
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-bold text-lg transition disabled:opacity-50"
+          >
+            {loading ? 'Creating Account...' : 'Create Account & Continue'}
+          </button>
+        </form>
 
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full mb-4 p-3 rounded bg-slate-800"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full mb-4 p-3 rounded bg-slate-800"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        <button className="w-full bg-accent text-black py-3 rounded font-semibold">
-          Sign Up
-        </button>
-      </form>
+        <p className="text-gray-400 text-center mt-6">
+          Already have an account?{' '}
+          <Link to="/login" className="text-indigo-400 hover:underline">
+            Login here
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

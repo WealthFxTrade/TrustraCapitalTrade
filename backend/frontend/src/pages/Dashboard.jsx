@@ -1,104 +1,87 @@
-import { useEffect, useState } from 'react';
-import QRCode from 'qrcode.react';
-import { request } from '../api/api';
+// src/pages/Dashboard.jsx
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getUserAccount, getBtcPrice } from '../api';
+import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
-export default function Dashboard({ user }) {
-  const [btcPrice, setBtcPrice] = useState(null);
-  const [investments, setInvestments] = useState([]);
-  const [btcBalance, setBtcBalance] = useState(0);
-  const { token } = useAuth();
+const RIO_PLANS = [
+  { id: 'starter', name: 'Rio Starter', roi: '6–9', min: 100, max: 999 },
+  { id: 'basic', name: 'Rio Basic', roi: '9–12', min: 1000, max: 4999 },
+  { id: 'standard', name: 'Rio Standard', roi: '12–16', min: 5000, max: 14999 },
+  { id: 'advanced', name: 'Rio Advanced', roi: '16–20', min: 15000, max: 49999 },
+  { id: 'elite', name: 'Rio Elite', roi: '20–25', min: 50000, max: Infinity },
+];
 
-  // Fetch user investments
+export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const [stats, setStats] = useState({ balance: 0, profit: 0 });
+  const [btcPrice, setBtcPrice] = useState('0.00');
+  const navigate = useNavigate();
+
   useEffect(() => {
-    async function fetchInvestments() {
+    const loadDashboard = async () => {
       try {
-        const data = await request('/investments', 'GET', null, token);
-        setInvestments(data.investments);
+        const [acc, btc] = await Promise.all([getUserAccount(), getBtcPrice()]);
+        setStats(acc.data);
+        setBtcPrice(btc.data.price || btc.data.bitcoin?.usd);
       } catch (err) {
-        console.error(err.message);
+        toast.error('Failed to sync real-time data');
       }
-    }
-    fetchInvestments();
-  }, [token]);
-
-  // Fetch BTC price
-  useEffect(() => {
-    async function fetchBtcPrice() {
-      try {
-        const data = await request('/bitcoin/price', 'GET');
-        setBtcPrice(data.price);
-      } catch (err) {
-        console.error(err.message);
-      }
-    }
-    fetchBtcPrice();
+    };
+    loadDashboard();
   }, []);
 
-  // Fetch BTC balance
-  useEffect(() => {
-    async function fetchBtcBalance() {
-      try {
-        const data = await request(`/bitcoin/balance/${user.id}`, 'GET', null, token);
-        setBtcBalance(data.balance);
-      } catch (err) {
-        console.error(err.message);
-      }
-    }
-    fetchBtcBalance();
-    const interval = setInterval(fetchBtcBalance, 60000); // refresh every 60s
-    return () => clearInterval(interval);
-  }, [user.id, token]);
+  const handlePlanClick = (plan) => {
+    localStorage.setItem('selectedPlan', plan.id); // store selected plan
+    navigate('/invest'); // redirect to Invest page
+  };
 
   return (
-    <div className="dashboard-container">
-      <h1>Welcome, {user.fullName}</h1>
-
-      <section className="btc-address">
-        <h2>Your BTC Deposit Address</h2>
-        <p>{user.btcAddress}</p>
-        <QRCode value={user.btcAddress} size={128} />
-        <button onClick={() => navigator.clipboard.writeText(user.btcAddress)}>
-          Copy Address
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
+      <nav className="flex justify-between items-center mb-10 border-b border-slate-800 pb-4">
+        <h1 className="text-xl font-bold text-blue-500">Trustra Dashboard</h1>
+        <button
+          onClick={logout}
+          className="text-sm bg-red-600/20 text-red-500 px-4 py-2 rounded hover:bg-red-600/30 transition"
+        >
+          Logout
         </button>
-      </section>
+      </nav>
 
-      <section className="btc-balance">
-        <h2>Your BTC Balance</h2>
-        <p>{btcBalance} BTC</p>
-        <p>≈ ${btcBalance && btcPrice ? (btcBalance * btcPrice).toFixed(2) : '0.00'}</p>
-      </section>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+          <p className="text-slate-400 text-sm">Main Balance</p>
+          <h2 className="text-3xl font-bold">${stats.balance?.toLocaleString()}</h2>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
+          <p className="text-slate-400 text-sm">Live BTC Price</p>
+          <h2 className="text-3xl font-bold text-orange-500">
+            ${Number(btcPrice).toLocaleString()}
+          </h2>
+        </div>
+      </div>
 
-      <section className="btc-price">
-        <h2>Current BTC Price</h2>
-        <p>{btcPrice ? `$${btcPrice}` : 'Loading...'}</p>
-      </section>
-
-      <section className="investments">
-        <h2>Your Investments</h2>
-        {investments.length === 0 ? (
-          <p>No active investments</p>
-        ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Plan</th>
-                <th>Amount (BTC)</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {investments.map((inv) => (
-                <tr key={inv._id}>
-                  <td>{inv.planName}</td>
-                  <td>{inv.amount}</td>
-                  <td>{inv.status}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+      <h3 className="text-xl font-bold mb-6">Investment ROI Plans</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {RIO_PLANS.map((plan) => (
+          <div
+            key={plan.id}
+            onClick={() => handlePlanClick(plan)}
+            className="bg-slate-900 border border-slate-800 p-5 rounded-xl hover:border-blue-500 hover:bg-blue-500/10 cursor-pointer transition group"
+          >
+            <h4 className="font-bold text-blue-400">{plan.name}</h4>
+            <p className="text-2xl font-bold my-2">{plan.roi}% ROI</p>
+            <p className="text-xs text-slate-500 mb-4">
+              Min Deposit: ${plan.min.toLocaleString()}
+              {plan.max !== Infinity && ` - Max: $${plan.max.toLocaleString()}`}
+            </p>
+            <button className="w-full bg-blue-600 group-hover:bg-blue-500 py-2 rounded text-sm font-bold">
+              Invest Now
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

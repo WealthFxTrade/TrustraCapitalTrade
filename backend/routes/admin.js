@@ -1,99 +1,163 @@
-// backend/routes/admin.js
-import express from 'express';
-import mongoose from 'mongoose';
-import { protect, admin } from '../middleware/auth.js';
-import Transaction from '../models/Transaction.js';
-import User from '../models/User.js';
-import AuditLog from '../models/AuditLog.js';
+import express from "express";
+import mongoose from "mongoose";
+
+import User from "../models/User.js";
+import Transaction from "../models/Transaction.js";
+import AuditLog from "../models/AuditLog.js";
+
+import { ApiError } from "../middleware/errorMiddleware.js";
+import { protect, authorize } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// All routes below require authentication + admin role
-router.use(protect, admin);
+/**
+ * ALL ADMIN ROUTES ARE PROTECTED
+ */
+router.use(protect, authorize("admin", "superadmin"));
 
 /**
- * GET /api/admin/deposits/pending
- * List all pending deposits
+ * @route   GET /api/admin/stats
+ * @desc    Platform statistics
  */
-router.get('/deposits/pending', async (req, res) => {
+router.get("/stats", async (req, res, next) => {
   try {
-    const deposits = await Transaction.find({
-      type: 'deposit',
-      status: 'pending',
-    })
-      .populate('user', 'fullName email')
-      .sort({ createdAt: -1 })
-      .lean();
+    const totalUsers = await User.countDocuments({ role: "user" });
+
+    const pendingWithdrawals = await Transaction.countDocuments({
+      type: "withdrawal",
+      status: "pending",
+    });
+
+    const platformBalances = await User.aggregate([
+      { $project: { balances: { $objectToArray: "$balances" } } },
+      { $unwind: "$balances" },
+      {
+        $group: {
+          _id: "$balances.k",
+          total: { $sum: "$balances.v" },
+        },
+      },
+    ]);
 
     res.json({
       success: true,
-      count: deposits.length,
-      deposits,
+      stats: {
+        totalUsers,
+        pendingWithdrawals,
+        platformBalances,
+      },
     });
   } catch (err) {
-    console.error('Pending deposits error:', err.message);
-    res.status(500).json({ success: false, message: 'Server error' });
+    next(err);
   }
 });
 
 /**
- * PATCH /api/admin/deposits/:id
- * Approve, reject, or fail a deposit (atomic + audited)
+ * @route   GET /api/admin/users
+ * @desc    List users (paginated)
  */
-router.patch('/deposits/:id', async (req, res) => {
+router.get("/users", async (req, res, next) => {
+  try {
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const skip = (page - 1) * limit;
+
+    const [users, total] = await Promise.all([
+      User.find({})
+        .select("-password -ledger")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(),
+    ]);
+
+    res.json({
+      success: true,
+      page,
+      pages: Math.ceil(total / limit),
+      total,
+      users,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   GET /api/admin/audit-logs
+ * @desc    Recent admin actions
+ */
+router.get("/audit-logs", async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+
+    const logs = await AuditLog.find()
+      .populate("admin", "fullName email role")
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json({ success: true, logs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * @route   POST /api/admin/users/:id/adjust-balance
+ * @desc    Admin balance adjustment (transaction-safe)
+ */
+router.post("/users/:id/adjust-balance", async (req, res, next) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
 
   try {
-    const { status, adminNote } = req.body;
+    session.startTransaction();
 
-    // Validate status
-    if (!['approved', 'rejected', 'failed'].includes(status)) {
-      throw new Error('Invalid status. Allowed: approved, rejected, failed');
+    const { amount, currency, type, description } = req.body;
+
+    if (
+      !amount ||
+      amount <= 0 ||
+      !currency ||
+      !["credit", "debit"].includes(type)
+    ) {
+      throw new ApiError(400, "Invalid adjustment parameters");
     }
 
-    // Find deposit
-    const deposit = await Transaction.findById(req.params.id).session(session);
-    if (!deposit || deposit.type !== 'deposit') {
-      throw new Error('Deposit not found');
+    const user = await User.findById(req.params.id).session(session);
+    if (!user) throw new ApiError(404, "User not found");
+
+    const currentBal = user.balances.get(currency) || 0;
+
+    if (type === "debit" && currentBal < amount) {
+      throw new ApiError(400, "Insufficient balance for debit");
     }
 
-    if (deposit.status !== 'pending') {
-      throw new Error(`Deposit already ${deposit.status}`);
-    }
+    const signedAmount = type === "credit" ? amount : -amount;
 
-    // Approve → credit balance
-    if (status === 'approved') {
-      const user = await User.findById(deposit.user).session(session);
-      if (!user) throw new Error('User not found');
+    user.balances.set(currency, currentBal + signedAmount);
 
-      user.balance += deposit.amount;
-      await user.save({ session });
-    }
+    user.ledger.push({
+      amount: Math.abs(amount),
+      signedAmount,
+      currency,
+      type: "adjustment",
+      source: "admin_adjustment",
+      description: description || `Admin ${type} adjustment`,
+      status: "completed",
+    });
 
-    // Update deposit
-    deposit.status = status;
-    if (adminNote) deposit.adminNote = adminNote.trim();
-    await deposit.save({ session });
+    await user.save({ session });
 
-    // Audit log entry
     await AuditLog.create(
       [
         {
           admin: req.user._id,
-          action:
-            status === 'approved'
-              ? 'APPROVE_DEPOSIT'
-              : status === 'rejected'
-              ? 'REJECT_DEPOSIT'
-              : 'FAIL_DEPOSIT',
-          targetId: deposit._id,
-          targetModel: 'Transaction',
-          metadata: {
-            amount: deposit.amount,
-            userId: deposit.user,
-            note: adminNote || null,
-          },
+          action: "ADJUST_BALANCE",
+          targetId: user._id,
+          targetModel: "User",
+          metadata: { amount, currency, type, description },
           ip: req.ip,
         },
       ],
@@ -104,13 +168,12 @@ router.patch('/deposits/:id', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Deposit marked as ${status}`,
-      deposit,
+      message: "Balance adjusted successfully",
+      balances: user.balances,
     });
   } catch (err) {
     await session.abortTransaction();
-    console.error('Deposit update error:', err.message);
-    res.status(400).json({ success: false, message: err.message });
+    next(err);
   } finally {
     session.endSession();
   }

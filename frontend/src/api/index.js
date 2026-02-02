@@ -1,5 +1,5 @@
-export * from './api';            // request function
-export * from './auth';           // auth API
-export * from './transactions';   // deposit/withdrawals
-export * from './user';           // user profile
-export * from './admin';          // admin actions
+export * from './apiService';      // core API wrapper (axios instance)
+export * from './auth';            // auth-related endpoints
+export * from './transactions';    // deposit / withdrawal / ledger
+export * from './user';            // user profile, balances
+export * from './admin';           // admin actions (stats, users, audit logs)

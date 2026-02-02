@@ -1,6 +1,6 @@
-// src/pages/Signup.jsx
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { TrendingUp, User, Mail, Lock, ShieldCheck } from 'lucide-react'; // Added for brand consistency
 import toast from 'react-hot-toast';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
@@ -38,49 +38,79 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 p-6">
-      <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 glass">
-        <h1 className="text-3xl font-bold text-indigo-400 mb-6 text-center">Create Account</h1>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-6 selection:bg-indigo-500/30">
+      {/* Brand Logo Header */}
+      <Link to="/" className="flex items-center gap-2 mb-8 hover:opacity-80 transition">
+        <TrendingUp className="h-10 w-10 text-indigo-500" />
+        <span className="text-2xl font-bold text-white tracking-tight">TrustraCapital</span>
+      </Link>
 
-        <form onSubmit={handleSignup} className="space-y-4">
-          <input
-            type="text"
-            placeholder="Full Name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-          />
-          <input
-            type="email"
-            placeholder="Email Address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-          />
-          <input
-            type="password"
-            placeholder="Password (min 8 chars)"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-          />
+      <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50"></div>
+        
+        <h1 className="text-3xl font-bold text-white mb-2 text-center">Create Account</h1>
+        <p className="text-slate-400 text-center text-sm mb-8">Join the future of automated trading</p>
+
+        <form onSubmit={handleSignup} className="space-y-5">
+          {/* Full Name Input */}
+          <div className="relative">
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full pl-12 pr-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+            />
+          </div>
+
+          {/* Email Input */}
+          <div className="relative">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+            <input
+              type="email"
+              placeholder="Email Address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full pl-12 pr-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+            />
+          </div>
+
+          {/* Password Input */}
+          <div className="relative">
+            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+            <input
+              type="password"
+              placeholder="Password (min 8 chars)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full pl-12 pr-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+            />
+          </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-bold text-lg transition disabled:opacity-50"
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-white font-bold text-lg transition shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed hover:-translate-y-0.5 active:translate-y-0"
           >
-            {loading ? 'Creating Account...' : 'Create Account & Continue'}
+            {loading ? 'Creating Account...' : 'Register & Start Investing'}
           </button>
         </form>
 
-        <p className="text-gray-400 text-center mt-6">
+        <p className="text-slate-500 text-center mt-8 text-sm">
           Already have an account?{' '}
-          <Link to="/login" className="text-indigo-400 hover:underline">
+          <Link to="/login" className="text-indigo-400 font-bold hover:underline">
             Login here
           </Link>
         </p>
+
+        {/* Security Footer Badge */}
+        <div className="mt-8 pt-6 border-t border-slate-800 flex justify-center items-center gap-2 text-slate-600">
+          <ShieldCheck className="h-4 w-4" />
+          <span className="text-[10px] font-bold uppercase tracking-widest">AES-256 Secured Registration</span>
+        </div>
       </div>
     </div>
   );
 }
+

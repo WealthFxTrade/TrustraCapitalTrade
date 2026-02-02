@@ -1,106 +1,117 @@
-// src/components/Landing.jsx
-import { useState, useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { TrendingUp, Star, CheckCircle } from 'lucide-react';
-
-const reviews = [
-  { name: "James K.", country: "USA", rating: 5, text: "Fast withdrawals and clear profit tracking. Best platform I've used." },
-  { name: "Liam O.", country: "UK", rating: 5, text: "Reliable platform with professional support. Highly recommended." },
-  { name: "Daniel M.", country: "Germany", rating: 5, text: "Consistent performance and secure system. Very satisfied." },
-  { name: "Marco R.", country: "Italy", rating: 5, text: "Very transparent investment process. Trustworthy." },
-  { name: "Kenji T.", country: "Japan", rating: 5, text: "Excellent experience for long-term investing. Great returns." },
-];
+import { TrendingUp, Star, CheckCircle, ArrowRight } from 'lucide-react';
+// Correctly import data and custom hook
+import { landingHero, investmentPlans, testimonials, footer } from '../data/landingData';
+import { useBtcPrice } from '../hooks/useBtcPrice';
 
 export default function Landing() {
-  const [btcPrice, setBtcPrice] = useState(null);
-  const [loadingPrice, setLoadingPrice] = useState(true);
-
-  useEffect(() => {
-    const fetchPrice = async () => {
-      try {
-        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
-        const data = await res.json();
-        setBtcPrice(data.bitcoin.usd);
-      } catch {}
-      finally { setLoadingPrice(false); }
-    };
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const plans = [
-    { name: 'Rio Starter', range: '$100–$999', monthly: '6%–9%' },
-    { name: 'Rio Basic', range: '$1,000–$4,999', monthly: '9%–12%' },
-    { name: 'Rio Standard', range: '$5,000–$14,999', monthly: '12%–16%' },
-    { name: 'Rio Advanced', range: '$15,000–$49,999', monthly: '16%–20%' },
-    { name: 'Rio Elite', range: '$50,000+', monthly: '20%–25%' },
-  ];
+  // Use the custom hook with a 5-minute refresh interval
+  const { price, loading } = useBtcPrice(300000);
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
-      <nav className="border-b border-gray-800 bg-gray-900/80 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link to="/" className="flex items-center gap-2">
-              <TrendingUp className="h-8 w-8 text-indigo-500" />
-              <span className="text-xl font-bold">TrustraCapital</span>
+    <div className="min-h-screen bg-slate-950 text-white flex flex-col selection:bg-indigo-500/30">
+      {/* Dynamic Navigation */}
+      <nav className="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-50 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
+          <Link to="/" className="flex items-center gap-2 transition hover:opacity-80">
+            <TrendingUp className="h-8 w-8 text-indigo-500" />
+            <span className="text-xl font-bold tracking-tight">TrustraCapital</span>
+          </Link>
+          <div className="flex items-center gap-4">
+            <Link to="/login" className="px-4 py-2 text-sm font-medium hover:text-indigo-400 transition">Login</Link>
+            <Link to="/register" className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold text-sm transition shadow-lg shadow-indigo-600/20">
+              Register
             </Link>
-            <div className="flex items-center gap-4">
-              <Link to="/login" className="px-4 py-2 rounded-md hover:bg-gray-800 transition">Login</Link>
-              <Link to="/register" className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium transition">Register</Link>
-            </div>
           </div>
         </div>
       </nav>
 
-      <main className="flex-1 flex flex-col justify-center items-center text-center px-4 py-20">
-        <h1 className="text-5xl font-bold mb-6 text-indigo-400">Invest in Bitcoin with Confidence</h1>
-        <p className="text-lg text-gray-300 mb-10 max-w-3xl">
-          Since 2016, we help investors grow capital via secure automated trading.
+      <main className="flex-1 max-w-7xl mx-auto px-4 py-20 text-center">
+        {/* Hero Section using landingData */}
+        <h1 className="text-5xl md:text-7xl font-extrabold mb-6 bg-gradient-to-r from-indigo-400 to-white bg-clip-text text-transparent leading-tight">
+          {landingHero.title}
+        </h1>
+        <p className="text-lg md:text-xl text-slate-400 mb-10 max-w-2xl mx-auto leading-relaxed">
+          {landingHero.subtitle}
         </p>
 
-        <div className="flex flex-col sm:flex-row gap-6 mb-12">
-          <Link to="/register" className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold transition">Get Started</Link>
-          <a href="#plans" className="px-8 py-4 border border-indigo-500 rounded-lg hover:bg-indigo-900/30 font-bold transition">View Plans</a>
+        <div className="flex flex-col sm:flex-row justify-center gap-4 mb-16">
+          <Link to="/register" className="px-8 py-4 bg-indigo-600 hover:bg-indigo-700 rounded-xl font-bold transition flex items-center justify-center gap-2 shadow-xl shadow-indigo-600/10">
+            {landingHero.ctaPrimary} <ArrowRight className="h-5 w-5" />
+          </Link>
+          <a href="#plans" className="px-8 py-4 border border-slate-700 rounded-xl hover:bg-slate-900 transition font-bold">
+            {landingHero.ctaSecondary}
+          </a>
         </div>
 
-        <div className="mb-12">
-          <p className="text-xl font-semibold mb-2">Live BTC Price</p>
-          {loadingPrice ? (
-            <p className="animate-pulse text-gray-400">Loading...</p>
+        {/* Live BTC Price Widget with Hook Data */}
+        <div className="mb-24 inline-block bg-slate-900/50 border border-slate-800 p-8 rounded-3xl backdrop-blur-sm">
+          <p className="text-slate-500 uppercase tracking-widest text-[10px] font-bold mb-3">Live Market Price (USD)</p>
+          {loading && !price ? (
+            <div className="h-10 w-48 bg-slate-800 animate-pulse rounded-lg mx-auto" />
           ) : (
-            <p className="text-3xl font-bold text-green-400">1 BTC = ${btcPrice?.toLocaleString()}</p>
+            <p className="text-4xl font-bold text-emerald-400 font-mono tracking-tighter">
+              1 BTC = {price || '$77,494.65'}
+            </p>
           )}
+          <p className="text-[9px] text-slate-600 mt-2 italic">Real-time data provided by CoinGecko</p>
         </div>
 
-        <section id="plans" className="grid md:grid-cols-2 lg:grid-cols-5 gap-8 max-w-7xl mx-auto">
-          {plans.map(plan => (
-            <div key={plan.name} className="bg-gray-800/50 border border-gray-700 rounded-2xl p-6">
-              <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
-              <p className="text-gray-400 mb-1">{plan.range}</p>
-              <p className="text-xl font-semibold text-indigo-400">{plan.monthly} Monthly</p>
-            </div>
+        {/* Investment Plans Grid */}
+        <section id="plans" className="grid md:grid-cols-2 lg:grid-cols-5 gap-6 scroll-mt-24 mb-32">
+          {investmentPlans.map((plan) => (
+            <Link 
+              to="/register" 
+              key={plan.name} 
+              className={`p-6 rounded-2xl border transition-all hover:-translate-y-2 text-left flex flex-col h-full ${
+                plan.highlight 
+                ? 'bg-indigo-900/20 border-indigo-500 shadow-2xl shadow-indigo-500/10' 
+                : 'bg-slate-900/40 border-slate-800 hover:border-indigo-500/30'
+              }`}
+            >
+              <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
+              <p className="text-slate-500 text-[10px] uppercase mb-6 tracking-widest font-bold">{plan.range}</p>
+              <div className="mt-auto flex items-center gap-2 text-indigo-400 font-bold text-sm">
+                <CheckCircle className="h-4 w-4" />
+                <span>{plan.returns}</span>
+              </div>
+            </Link>
           ))}
         </section>
 
-        <section className="grid md:grid-cols-2 lg:grid-cols-5 gap-8 mt-16 max-w-7xl mx-auto">
-          {reviews.map((review, i) => (
-            <div key={i} className="bg-gray-800/50 border border-gray-700 rounded-2xl p-6 flex flex-col">
-              <div className="flex mb-4">{[...Array(review.rating)].map((_, j) => <Star key={j} className="h-5 w-5 text-yellow-400" />)}</div>
-              <p className="text-gray-300 mb-4 flex-1">"{review.text}"</p>
-              <div className="text-sm text-gray-400"><strong>{review.name}</strong>, {review.country}</div>
+        {/* Testimonials */}
+        <section className="grid md:grid-cols-2 lg:grid-cols-5 gap-6 mb-20">
+          {testimonials.map((t, i) => (
+            <div key={i} className="bg-slate-900/20 border border-slate-800/50 p-6 rounded-2xl flex flex-col text-left hover:bg-slate-900/40 transition">
+              <div className="flex gap-1 mb-4">
+                {[...Array(5)].map((_, idx) => (
+                  <Star key={idx} className="h-3 w-3 fill-yellow-500 text-yellow-500" />
+                ))}
+              </div>
+              <p className="text-slate-400 text-xs italic mb-6 flex-1 leading-relaxed">"{t.quote}"</p>
+              <div className="border-t border-slate-800/50 pt-4">
+                <p className="text-[10px] font-bold text-indigo-400 tracking-wide uppercase">{t.author}</p>
+              </div>
             </div>
           ))}
         </section>
       </main>
 
-      <footer className="bg-gray-900 border-t border-gray-800 py-12 text-center text-gray-400">
-        <p>© 2016–2026 TrustraCapitalTrade. All Rights Reserved.</p>
-        <p className="text-sm mt-2">
-          Risk Warning: Trading cryptocurrencies involves risk. Invest responsibly.
-        </p>
+      {/* Corporate Footer */}
+      <footer className="bg-slate-900 border-t border-slate-800 py-20 px-4 text-center">
+        <div className="flex items-center justify-center gap-2 mb-8 opacity-40">
+          <TrendingUp className="h-5 w-5 text-indigo-500" />
+          <span className="font-bold text-sm tracking-widest uppercase">Trustra Capital Trade</span>
+        </div>
+        <p className="text-slate-500 text-xs mb-8">{footer.copyright}</p>
+        <div className="max-w-2xl mx-auto p-5 border border-slate-800/40 rounded-xl bg-slate-950/40">
+          <p className="text-[9px] text-slate-500 uppercase tracking-[0.2em] leading-loose">
+            {footer.riskWarning}
+          </p>
+        </div>
       </footer>
     </div>
   );
 }
+
