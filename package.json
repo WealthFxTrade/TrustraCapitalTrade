@@ -13,7 +13,7 @@
   "dependencies": {
     "axios": "^1.13.4",
     "bcryptjs": "^2.4.3",
-    "bip32": "^5.0.0",                 // ← Changed from ^4.0.0 to ^5.0.0
+    "bip32": "^5.0.0",
     "bitcoinjs-lib": "^7.0.1",
     "compression": "^1.7.5",
     "cors": "^2.8.6",
@@ -26,9 +26,10 @@
     "mongoose": "^8.22.0",
     "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
-    "tiny-secp256k1": "^2.2.4"
+    "tiny-secp256k1": "^2.2.6"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
   }
 }
+
