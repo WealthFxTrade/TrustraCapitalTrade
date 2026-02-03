@@ -1,4 +1,5 @@
 // backend/server.js
+<<<<<<< HEAD
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -158,3 +159,36 @@ connectDB().then(() => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
+=======
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import app from './app.js';
+
+dotenv.config();
+
+const PORT = process.env.PORT || 10000;
+
+const startServer = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+    });
+    console.log('✅ MongoDB connected');
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err.message);
+    process.exit(1);
+  }
+};
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Rejection:', err);
+});
+
+startServer();
+>>>>>>> fbdba30 (Backend ready: server running, MongoDB connected, auth tested)

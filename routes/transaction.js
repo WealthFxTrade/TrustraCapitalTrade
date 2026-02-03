@@ -1,6 +1,7 @@
 // backend/routes/transaction.js
 import express from 'express';
 import mongoose from 'mongoose';
+<<<<<<< HEAD
 import { protect, admin } from '../middleware/auth.js';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
@@ -21,6 +22,18 @@ router.post('/deposit', protect, async (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid payment method' });
   }
 
+=======
+import User from '../models/User.js';
+import Transaction from '../models/Transaction.js';
+import { protect } from '../middleware/authMiddleware.js';
+import { ApiError } from '../middleware/errorMiddleware.js';
+
+const router = express.Router();
+
+/* ---------------- WITHDRAWAL ---------------- */
+router.post('/withdraw', protect, async (req, res, next) => {
+  const session = await mongoose.startSession();
+>>>>>>> fbdba30 (Backend ready: server running, MongoDB connected, auth tested)
   try {
     const tx = await Transaction.create({
       user: req.user._id,
@@ -32,6 +45,7 @@ router.post('/deposit', protect, async (req, res) => {
       status: 'pending',
     });
 
+<<<<<<< HEAD
     res.status(201).json({
       success: true,
       message: 'Deposit request submitted – awaiting admin approval',
@@ -58,8 +72,15 @@ router.post('/withdraw', protect, async (req, res) => {
     if (!btcAddress || !btcAddress.trim()) {
       throw new Error('BTC withdrawal address is required');
     }
+=======
+    const { amount, currency, description } = req.body;
+    if (!amount || amount <= 0) throw new ApiError(400, 'Invalid withdrawal amount');
+    if (!currency) throw new ApiError(400, 'Currency is required');
+>>>>>>> fbdba30 (Backend ready: server running, MongoDB connected, auth tested)
 
+    // Fetch user within session
     const user = await User.findById(req.user._id).session(session);
+<<<<<<< HEAD
     if (!user) throw new Error('User not found');
 
     if (user.balance < amount) {
@@ -108,6 +129,40 @@ router.post('/withdraw', protect, async (req, res) => {
       message: 'Withdrawal request submitted – awaiting admin approval',
       transaction: tx[0],
     });
+=======
+    const currentBalance = user.balances.get(currency.toUpperCase()) || 0;
+
+    if (currentBalance < amount) throw new ApiError(400, 'Insufficient balance');
+
+    // Deduct balance
+    user.balances.set(currency.toUpperCase(), currentBalance - amount);
+
+    // Add ledger entry
+    user.ledger.push({
+      amount,
+      signedAmount: -Math.abs(amount),
+      currency: currency.toUpperCase(),
+      type: 'withdrawal',
+      source: 'wallet',
+      status: 'pending',
+      description
+    });
+
+    await user.save({ session });
+
+    // Create transaction record
+    await Transaction.create([{
+      user: user._id,
+      type: 'withdrawal',
+      amount,
+      currency: currency.toUpperCase(),
+      status: 'pending',
+      description
+    }], { session });
+
+    await session.commitTransaction();
+    res.json({ success: true, message: 'Withdrawal pending', balances: user.balances });
+>>>>>>> fbdba30 (Backend ready: server running, MongoDB connected, auth tested)
   } catch (err) {
     await session.abortTransaction();
     console.error('[WITHDRAWAL ERROR]', err.message);
@@ -117,6 +172,7 @@ router.post('/withdraw', protect, async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 /* ---------------- USER TRANSACTION HISTORY ---------------- */
 router.get('/my', protect, async (req, res) => {
   try {
@@ -145,12 +201,21 @@ router.get('/my', protect, async (req, res) => {
         pages: Math.ceil(total / limit),
       },
     });
+=======
+/* ---------------- MY TRANSACTIONS ---------------- */
+router.get('/my', protect, async (req, res, next) => {
+  try {
+    const transactions = await Transaction.find({ user: req.user._id })
+      .sort({ createdAt: -1 });
+    res.json({ success: true, transactions });
+>>>>>>> fbdba30 (Backend ready: server running, MongoDB connected, auth tested)
   } catch (err) {
     console.error('[TRANSACTION HISTORY ERROR]', err.message);
     res.status(500).json({ success: false, message: 'Failed to fetch transaction history' });
   }
 });
 
+<<<<<<< HEAD
 /* ---------------- ADMIN: PENDING WITHDRAWALS ---------------- */
 router.get('/pending-withdrawals', protect, admin, async (req, res) => {
   try {
@@ -167,7 +232,55 @@ router.get('/pending-withdrawals', protect, admin, async (req, res) => {
   } catch (err) {
     console.error('[PENDING WITHDRAWALS ERROR]', err.message);
     res.status(500).json({ success: false, message: 'Failed to fetch pending withdrawals' });
+=======
+/* ---------------- DEPOSIT (Admin or User) ---------------- */
+router.post('/deposit', protect, async (req, res, next) => {
+  const session = await mongoose.startSession();
+  try {
+    session.startTransaction();
+
+    const { amount, currency, description } = req.body;
+    if (!amount || amount <= 0) throw new ApiError(400, 'Invalid deposit amount');
+    if (!currency) throw new ApiError(400, 'Currency is required');
+
+    const user = await User.findById(req.user._id).session(session);
+    const currentBalance = user.balances.get(currency.toUpperCase()) || 0;
+
+    // Add balance
+    user.balances.set(currency.toUpperCase(), currentBalance + amount);
+
+    // Add ledger entry
+    user.ledger.push({
+      amount,
+      signedAmount: Math.abs(amount),
+      currency: currency.toUpperCase(),
+      type: 'deposit',
+      source: 'wallet',
+      status: 'completed',
+      description
+    });
+
+    await user.save({ session });
+
+    // Create transaction record
+    await Transaction.create([{
+      user: user._id,
+      type: 'deposit',
+      amount,
+      currency: currency.toUpperCase(),
+      status: 'completed',
+      description
+    }], { session });
+
+    await session.commitTransaction();
+    res.json({ success: true, message: 'Deposit successful', balances: user.balances });
+  } catch (err) {
+    await session.abortTransaction();
+    next(err);
+  } finally {
+    session.endSession();
+>>>>>>> fbdba30 (Backend ready: server running, MongoDB connected, auth tested)
   }
 });
 
-export default router;
+export default router; // Safe default export
