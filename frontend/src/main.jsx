@@ -1,13 +1,16 @@
-// src/main.jsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
+// Ensure this path matches your actual CSS file (common: './index.css')
 import './styles/global.css';
 
-// Simple ErrorBoundary to catch render errors and show them instead of blank
+/**
+ * ErrorBoundary: Prevents the "White Screen of Death"
+ * Displays the exact error in production for debugging.
+ */
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -19,21 +22,28 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('Caught error in boundary:', error, errorInfo);
+    console.error('Critical Render Error:', error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: '2rem', background: '#111', color: '#ff6b6b', fontFamily: 'monospace' }}>
-          <h1 style={{ color: '#ff6b6b' }}>Render Error – App Crashed</h1>
-          <p>{this.state.error?.message || 'Unknown error'}</p>
-          <pre style={{ whiteSpace: 'pre-wrap', overflow: 'auto' }}>
-            {this.state.error?.stack || 'No stack trace available'}
-          </pre>
-          <p style={{ marginTop: '1rem' }}>
-            Check browser console for more details. Likely issue in AuthProvider, App, or a hook.
-          </p>
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+          <div className="bg-red-500/10 border border-red-500/20 p-8 rounded-2xl max-w-2xl shadow-2xl">
+            <h1 className="text-2xl font-bold text-red-500 mb-4">Node Render Error</h1>
+            <p className="text-slate-300 mb-4 font-mono text-xs text-left overflow-auto max-h-40 bg-black/50 p-4 rounded-lg">
+              {this.state.error?.stack || this.state.error?.message || 'Unknown Crash'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition font-bold"
+            >
+              Reboot System
+            </button>
+            <p className="text-slate-500 mt-4 text-[10px] uppercase tracking-widest">
+              Check browser console for 2026 real-time logs
+            </p>
+          </div>
         </div>
       );
     }
@@ -44,22 +54,29 @@ class ErrorBoundary extends React.Component {
 const rootElement = document.getElementById('root');
 
 if (!rootElement) {
-  console.error("Critical: 'root' element not found in index.html");
+  console.error("CRITICAL: Root element 'root' missing from index.html");
 } else {
-  console.log('Starting React render...'); // Debug log
+  console.log('Initializing Trustra Capital Trade v1.0.0...');
 
   ReactDOM.createRoot(rootElement).render(
     <React.StrictMode>
       <ErrorBoundary>
         <AuthProvider>
           <BrowserRouter>
+            <Toaster 
+              position="top-right" 
+              toastOptions={{ 
+                duration: 4000,
+                style: { background: '#0f172a', color: '#fff', border: '1px solid #1e293b' }
+              }} 
+            />
             <App />
-            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
           </BrowserRouter>
         </AuthProvider>
       </ErrorBoundary>
     </React.StrictMode>
   );
 
-  console.log('Render called – check if content flashes or error boundary shows');
+  console.log('System render called. Validating DOM...');
 }
+
