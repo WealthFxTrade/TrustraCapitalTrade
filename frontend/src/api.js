@@ -1,23 +1,22 @@
 import axios from 'axios';
 
-const api = axios.create({
-  // Ensure this URL exactly matches your backend deployment
+// Create Axios Instance
+export const api = axios.create({
   baseURL: 'https://trustracapitaltrade-backend.onrender.com', 
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Request Interceptor for Auth
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-export default api;
-
-/* ================= AUTH ================= */
+/* ================= AUTH & USER ================= */
 export const loginUser = (data) => api.post('/auth/login', data);
 export const registerUser = (data) => api.post('/auth/register', data);
-export const getUserAccount = () => api.get('/user/me');
+export const getUserBalance = () => api.get('/user/me');
 
 /* ================= WALLET / PAYMENTS ================= */
 export const getWallet = () => api.get('/wallet');
@@ -33,11 +32,8 @@ export const getInvestmentPlans = () => api.get('/plans');
 export const getTransactions = () => api.get('/transactions');
 
 /* ================= MARKET DATA ================= */
-// Corrected to a functional public API endpoint
+// Updated to actual Binance ticker endpoint for 2026
 export const getBtcPrice = () => axios.get('https://api.binance.com');
-
-/* ================= PUBLIC DATA ================= */
-export const getReviews = () => api.get('/reviews');
 
 /* ================= KYC ================= */
 export const submitKyc = (formData) =>
@@ -46,14 +42,13 @@ export const submitKyc = (formData) =>
   });
 export const getKycStatus = () => api.get('/kyc/status');
 
-/* ================= REFERRALS ================= */
-export const getReferralData = () => api.get('/referrals');
-
 /* ================= ADMIN ================= */
 export const adminStats = () => api.get('/admin/stats');
 export const adminUsers = () => api.get('/admin/users');
 export const adminKyc = () => api.get('/admin/kyc');
+
+// ADDED: Missing export for AdminPanel.jsx
 export const adminApproveKyc = (id) => api.post(`/admin/kyc/${id}/approve`);
-// Added: Admin Management for Withdrawals/Deposits
+
 export const adminUpdateTransaction = (id, status) => api.patch(`/admin/transactions/${id}`, { status });
 

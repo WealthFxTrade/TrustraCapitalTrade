@@ -12,7 +12,7 @@ const BACKEND_URL = 'https://trustracapitaltrade-backend.onrender.com';
 export default function DashboardPage({ token, user, logout }) {
   const navigate = useNavigate();
 
-  // State Management
+  // ---------- State ----------
   const [balance, setBalance] = useState(null);
   const [plan, setPlan] = useState(null);
   const [dailyRate, setDailyRate] = useState(null);
@@ -24,12 +24,12 @@ export default function DashboardPage({ token, user, logout }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Wrapped fetch logic in useCallback to safely use as a dependency
+  // ---------- Fetch Dashboard Data ----------
   const fetchDashboardData = useCallback(async (signal) => {
     try {
       if (!token) return;
 
-      // Parallel fetching for performance
+      // Fetch user, transactions, BTC, plans in parallel
       const [userRes, txRes, btcRes, plansRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/user/me`, { headers: { Authorization: `Bearer ${token}` }, signal }),
         fetch(`${BACKEND_URL}/api/user/transactions`, { headers: { Authorization: `Bearer ${token}` }, signal }),
@@ -37,27 +37,30 @@ export default function DashboardPage({ token, user, logout }) {
         fetchPlans()
       ]);
 
+      // ---------- User Info ----------
       if (userRes.ok) {
-        const userData = await userRes.json();
-        setBalance(userData.user.balance);
-        setPlan(userData.user.plan);
-        setDailyRate(userData.dailyRate);
+        const data = await userRes.json();
+        setBalance(data.user.balance);
+        setPlan(data.user.plan);
+        setDailyRate(data.dailyRate);
       }
 
+      // ---------- Transactions ----------
       if (txRes.ok) {
         const txData = await txRes.json();
         setTransactions(txData.transactions || []);
       }
 
+      // ---------- BTC Price ----------
       if (btcRes.success) {
         const price = Number(btcRes.price);
         setBtcPrice(price);
-        setBtcHistory(prev => [...prev, price].slice(-10));
+        setBtcHistory(prev => [...prev, price].slice(-10)); // Keep last 10
       }
 
+      // ---------- Plans & Portfolio ----------
       if (plansRes.success) {
         setPlans(plansRes.data);
-        // Portfolio flux simulation logic
         const simulatedTotal = plansRes.data.reduce((acc, p) => acc + (p.min * 1.5), 0);
         const flux = simulatedTotal * (Number(btcRes.price) / 77000);
         setPortfolioHistory(prev => [...prev, flux].slice(-10));
@@ -66,7 +69,7 @@ export default function DashboardPage({ token, user, logout }) {
       setError(null);
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.error('Sync Error:', err);
+        console.error('Dashboard Sync Error:', err);
         setError('Failed to sync dashboard data');
       }
     } finally {
@@ -74,6 +77,7 @@ export default function DashboardPage({ token, user, logout }) {
     }
   }, [token]);
 
+  // ---------- Lifecycle ----------
   useEffect(() => {
     if (!token) {
       navigate('/login', { replace: true });
@@ -85,18 +89,19 @@ export default function DashboardPage({ token, user, logout }) {
 
     const interval = setInterval(() => fetchDashboardData(controller.signal), 30000);
 
-    // Cleanup: Clear interval and abort pending requests on unmount
     return () => {
       clearInterval(interval);
       controller.abort();
     };
   }, [token, navigate, fetchDashboardData]);
 
+  // ---------- Logout ----------
   const handleLogout = () => {
     logout();
     navigate('/', { replace: true });
   };
 
+  // ---------- Loading ----------
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
@@ -107,6 +112,7 @@ export default function DashboardPage({ token, user, logout }) {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      {/* Header */}
       <DashboardHeader 
         user={user} 
         balance={balance} 
@@ -114,21 +120,24 @@ export default function DashboardPage({ token, user, logout }) {
         dailyRate={dailyRate} 
         logout={handleLogout} 
       />
+
+      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
         {error && (
           <div className="bg-red-500/10 border border-red-500 text-red-500 p-4 rounded-lg">
             {error}
           </div>
         )}
+
         <DashboardCharts 
           btcHistory={btcHistory} 
           portfolioHistory={portfolioHistory} 
           btcPrice={btcPrice} 
           plans={plans} 
         />
+
         <RecentTransactions transactions={transactions} />
       </main>
     </div>
   );
 }
-

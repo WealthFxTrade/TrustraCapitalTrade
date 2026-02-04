@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://trustracapitaltrade-backend.onrender.com*"
+      "destination": "https://trustracapitaltrade-backend.onrender.com/:path*"
     },
     {
       "source": "/(.*)",
