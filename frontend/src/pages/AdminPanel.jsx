@@ -1,203 +1,244 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { ShieldCheck, Users, Wallet, Clock, CheckCircle, RefreshCcw } from 'lucide-react';
+// src/pages/AdminPanel.jsx
+import React, { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { adminStats, adminUsers, adminApproveKyc } from '../api';
+import { apiGet, apiPut, apiDelete } from '../api';
 
 export default function AdminPanel() {
-  const [data, setData] = useState({ stats: {}, users: [] });
+  const [users, setUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [approvingId, setApprovingId] = useState(null);
-  const [error, setError] = useState(null);
+  const [fetchError, setFetchError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [updatingId, setUpdatingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
-  const fetchAdminData = useCallback(async (signal) => {
+  const [formData, setFormData] = useState({});
+
+  const loadUsers = useCallback(async (signal) => {
     try {
-      setError(null);
-      setRefreshing(true);
-      const [statsRes, usersRes] = await Promise.all([
-        adminStats(signal),
-        adminUsers(signal),
-      ]);
+      setLoading(true);
+      setFetchError(null);
+      const data = await apiGet('/admin/users', { signal });
 
-      setData({
-        stats: statsRes?.data || {},
-        users: usersRes?.data || [],
+      const usersArray = Array.isArray(data) ? data : data?.users || [];
+      setUsers(usersArray);
+
+      // Initialize controlled form values
+      const initialForm = {};
+      usersArray.forEach((u) => {
+        initialForm[u._id] = {
+          balance: Number(u.balance ?? 0).toFixed(2),
+          plan: u.plan || 'Basic',
+        };
       });
+      setFormData(initialForm);
+
+      setFilteredUsers(usersArray);
     } catch (err) {
       if (err.name === 'AbortError') return;
-      console.error('Admin data fetch failed:', err);
-      setError('Failed to load admin data. Please try again.');
-      toast.error('Connection error or unauthorized access');
+
+      console.error('Failed to load users:', err);
+      const msg =
+        err.status === 401 || err.status === 403
+          ? 'Unauthorized. Please log in again as admin.'
+          : 'Unable to load user list. Please try again later.';
+      setFetchError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchAdminData(controller.signal);
-
+    loadUsers(controller.signal);
     return () => controller.abort();
-  }, [fetchAdminData]);
+  }, [loadUsers]);
 
-  const pendingUsers = data.users.filter((u) => u.kycStatus !== 'approved');
+  // Filter users when search term changes
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredUsers(users);
+      return;
+    }
 
-  const handleApproveKyc = async (userId, email) => {
-    const optimisticUsers = data.users.map((u) =>
-      u._id === userId ? { ...u, kycStatus: 'approved' } : u
+    const term = searchTerm.toLowerCase();
+    const filtered = users.filter((u) =>
+      u.email?.toLowerCase().includes(term)
     );
+    setFilteredUsers(filtered);
+  }, [searchTerm, users]);
 
-    // Optimistic UI update
-    setData((prev) => ({ ...prev, users: optimisticUsers }));
+  const handleInputChange = (userId, field, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      [userId]: { ...prev[userId], [field]: value },
+    }));
+  };
 
-    setApprovingId(userId);
+  const updateUser = async (userId) => {
+    const values = formData[userId];
+    if (!values) return;
+
+    const balanceNum = Number(values.balance);
+    if (isNaN(balanceNum) || balanceNum < 0) {
+      toast.error('Balance must be a valid non-negative number');
+      return;
+    }
+
+    setUpdatingId(userId);
+
     try {
-      await adminApproveKyc(userId);
-      toast.success(`KYC approved for ${email}`);
-      // Refetch to confirm server state
-      await fetchAdminData(new AbortController().signal);
+      const payload = {
+        balance: balanceNum,
+        plan: values.plan.trim(),
+      };
+
+      const res = await apiPut(`/admin/users/${userId}`, payload);
+      toast.success(res.message || 'User updated');
+
+      // Refresh full list
+      await loadUsers(new AbortController().signal);
     } catch (err) {
-      toast.error('KYC approval failed');
-      // Rollback on error
-      setData((prev) => ({
-        ...prev,
-        users: prev.users.map((u) =>
-          u._id === userId ? { ...u, kycStatus: 'pending' } : u
-        ),
-      }));
+      toast.error(err.message || 'Failed to update user');
     } finally {
-      setApprovingId(null);
+      setUpdatingId(null);
+    }
+  };
+
+  const deleteUser = async (userId) => {
+    if (!window.confirm('Delete this user permanently? This cannot be undone.')) {
+      return;
+    }
+
+    // Optimistic delete
+    const oldUsers = [...users];
+    setUsers((prev) => prev.filter((u) => u._id !== userId));
+    setFilteredUsers((prev) => prev.filter((u) => u._id !== userId));
+
+    setDeletingId(userId);
+
+    try {
+      const res = await apiDelete(`/admin/users/${userId}`);
+      toast.success(res.message || 'User deleted successfully');
+    } catch (err) {
+      toast.error(err.message || 'Failed to delete user');
+      // Rollback on error
+      setUsers(oldUsers);
+      setFilteredUsers(oldUsers);
+    } finally {
+      setDeletingId(null);
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
-        <div className="animate-spin h-12 w-12 border-t-4 border-indigo-500 rounded-full" />
+        <div className="animate-spin h-14 w-14 border-t-4 border-indigo-500 rounded-full" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-10 selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
-          <div>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">Management Console</h2>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1 flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-indigo-500" /> Secure Admin Access
-            </p>
-          </div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+          <h1 className="text-3xl md:text-4xl font-bold">
+            Admin User Management
+            <span className="ml-3 text-slate-400 text-xl font-normal">
+              ({filteredUsers.length} users)
+            </span>
+          </h1>
 
-          <button
-            onClick={() => fetchAdminData(new AbortController().signal)}
-            disabled={refreshing}
-            className="p-3 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800 transition disabled:opacity-50"
-            aria-label="Refresh data"
-          >
-            <RefreshCcw className={`h-6 w-6 text-slate-400 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
+          <input
+            type="search"
+            placeholder="Search by email..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full sm:w-80 px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
+          />
         </div>
 
-        {error && (
-          <div className="bg-red-900/40 border border-red-700 text-red-200 px-6 py-4 rounded-2xl mb-8 text-center">
-            {error}
+        {fetchError && (
+          <div className="bg-red-900/50 border border-red-700 text-red-100 px-6 py-4 rounded-xl mb-8 text-center">
+            {fetchError}
           </div>
         )}
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-          <div className="bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
-            <div className="absolute top-4 right-4 opacity-10">
-              <Wallet className="h-16 w-16 text-emerald-500" />
-            </div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Total Deposits</p>
-            <h3 className="text-3xl md:text-4xl font-bold font-mono text-emerald-400">
-              ${(data.stats.totalDeposits || 0).toLocaleString()}
-            </h3>
+        {filteredUsers.length === 0 ? (
+          <div className="bg-slate-900 p-12 rounded-2xl text-center text-slate-400 border border-slate-800">
+            {searchTerm
+              ? `No users found matching "${searchTerm}"`
+              : 'No users registered in the system yet.'}
           </div>
+        ) : (
+          <div className="overflow-x-auto bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl">
+            <table className="w-full min-w-[900px] text-left">
+              <thead className="bg-slate-800">
+                <tr>
+                  <th className="px-6 py-4 font-medium">Email</th>
+                  <th className="px-6 py-4 font-medium">Balance (USD)</th>
+                  <th className="px-6 py-4 font-medium">Plan</th>
+                  <th className="px-6 py-4 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {filteredUsers.map((user) => (
+                  <tr
+                    key={user._id}
+                    className="hover:bg-slate-800/60 transition-colors"
+                  >
+                    <td className="px-6 py-4 font-medium text-slate-200">
+                      {user.email}
+                    </td>
+                    <td className="px-6 py-4">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData[user._id]?.balance ?? '0.00'}
+                        onChange={(e) =>
+                          handleInputChange(user._id, 'balance', e.target.value)
+                        }
+                        disabled={updatingId === user._id}
+                        className="w-32 bg-slate-800 text-white border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                      />
+                    </td>
+                    <td className="px-6 py-4">
+                      <input
+                        type="text"
+                        value={formData[user._id]?.plan ?? ''}
+                        onChange={(e) =>
+                          handleInputChange(user._id, 'plan', e.target.value)
+                        }
+                        disabled={updatingId === user._id}
+                        className="w-40 bg-slate-800 text-white border border-slate-700 rounded px-3 py-2 focus:outline-none focus:border-indigo-500 disabled:opacity-60"
+                        placeholder="Basic, Pro, VIP, ..."
+                      />
+                    </td>
+                    <td className="px-6 py-4 text-right flex justify-end gap-3">
+                      <button
+                        onClick={() => updateUser(user._id)}
+                        disabled={updatingId === user._id}
+                        className="px-5 py-2 bg-green-600 hover:bg-green-700 active:bg-green-800 rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-green-900/30"
+                      >
+                        {updatingId === user._id ? 'Updating...' : 'Update'}
+                      </button>
 
-          <div className="bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
-            <div className="absolute top-4 right-4 opacity-10">
-              <Users className="h-16 w-16 text-indigo-500" />
-            </div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Investor Count</p>
-            <h3 className="text-3xl md:text-4xl font-bold font-mono">{data.users.length}</h3>
-          </div>
-
-          <div className="bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
-            <div className="absolute top-4 right-4 opacity-10">
-              <Clock className="h-16 w-16 text-amber-500" />
-            </div>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Pending KYC</p>
-            <h3 className="text-3xl md:text-4xl font-bold font-mono text-amber-400">
-              {pendingUsers.length}
-            </h3>
-          </div>
-        </div>
-
-        {/* Pending KYC Table */}
-        <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
-          <div className="p-6 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h4 className="font-bold text-lg">Verification Requests</h4>
-            <span className="px-4 py-1 bg-amber-500/10 text-amber-500 text-xs font-bold rounded-full uppercase tracking-wide">
-              Action Required
-            </span>
-          </div>
-
-          <div className="overflow-x-auto">
-            {refreshing ? (
-              <div className="p-16 text-center text-slate-500 animate-pulse font-medium">
-                Syncing secure records...
-              </div>
-            ) : pendingUsers.length === 0 ? (
-              <div className="p-16 text-center flex flex-col items-center gap-4">
-                <CheckCircle className="h-12 w-12 text-emerald-500 opacity-30" />
-                <p className="text-slate-400 font-medium">No pending KYC requests at this time.</p>
-              </div>
-            ) : (
-              <table className="w-full text-left min-w-[600px]">
-                <thead className="bg-slate-950/60 text-slate-400 text-xs font-bold uppercase tracking-wider">
-                  <tr>
-                    <th className="px-6 py-5">Investor Email</th>
-                    <th className="px-6 py-5">Current Status</th>
-                    <th className="px-6 py-5 text-right">Action</th>
+                      <button
+                        onClick={() => deleteUser(user._id)}
+                        disabled={deletingId === user._id}
+                        className="px-5 py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-lg text-sm font-medium transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shadow-red-900/30"
+                      >
+                        {deletingId === user._id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {pendingUsers.map((user) => (
-                    <tr
-                      key={user._id}
-                      className="hover:bg-slate-800/30 transition-colors group"
-                    >
-                      <td className="px-6 py-5 font-medium text-sm">{user.email}</td>
-                      <td className="px-6 py-5">
-                        <span className="px-3 py-1 bg-amber-500/10 text-amber-400 text-xs font-bold rounded-full uppercase">
-                          {user.kycStatus || 'Pending'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-5 text-right">
-                        <button
-                          disabled={approvingId === user._id}
-                          onClick={() => handleApproveKyc(user._id, user.email)}
-                          className="bg-indigo-600 px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition shadow-lg shadow-indigo-900/30"
-                        >
-                          {approvingId === user._id ? 'Verifying...' : 'Approve KYC'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <p className="text-center mt-12 text-xs text-slate-700 font-bold uppercase tracking-widest">
-          © 2016–2026 Trustra Capital Trade Management Console
-        </p>
+        )}
       </div>
     </div>
   );
