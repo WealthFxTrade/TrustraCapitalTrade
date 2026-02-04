@@ -1,66 +1,73 @@
+/* src/styles/global.css */
+/* PRODUCTION DESIGN SYSTEM 2026 – Trustra Capital Trade */
+
+/* 1. Import Tailwind layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 
-  PRODUCTION DESIGN SYSTEM 2026 
-  Trustra Capital Trade – Global Styles
-*/
-
+/* 2. Root variables & dark mode setup */
 @layer base {
   :root {
     color-scheme: dark;
-    /* Primary brand colors */
-    --brand-dark: #020617; /* slate-950 */
-    --brand-blue: #2563eb; /* blue-600 */
-    --brand-border: #1e293b; /* slate-800 */
+    --brand-dark: #020617;         /* slate-950 */
+    --brand-blue: #2563eb;          /* blue-600 */
+    --brand-border: #1e293b;        /* slate-800 */
+    --brand-accent: #6366f1;        /* indigo-500 */
+    --brand-success: #10b981;       /* emerald-500 */
   }
 
   html {
-    /* Prevent layout shift during loading */
     scrollbar-gutter: stable;
     scroll-behavior: smooth;
     -webkit-tap-highlight-color: transparent;
   }
 
   body {
-    @apply bg-slate-950 text-slate-100 antialiased selection:bg-blue-500/30;
-    /* Essential to prevent white-flash before React mounts */
-    background-color: var(--brand-dark);
+    @apply bg-[var(--brand-dark)] text-slate-100 antialiased selection:bg-indigo-500/30;
     margin: 0;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
+/* 3. Custom component classes */
 @layer components {
-  /* Mobile-first touch targets */
+  /* Primary buttons (used everywhere) */
   .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-6 rounded-xl 
-           transition-all duration-200 active:scale-[0.98] disabled:opacity-50 
-           flex items-center justify-center shadow-lg shadow-blue-900/20;
+    @apply bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl
+           transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
+           flex items-center justify-center shadow-lg shadow-blue-900/30;
   }
 
-  /* Glassmorphism for dashboards */
+  .btn-secondary {
+    @apply bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white font-medium py-3 px-6 rounded-xl
+           transition-all duration-200;
+  }
+
+  /* Glassmorphism cards (dashboards, modals) */
   .glass-card {
-    @apply bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-2xl;
+    @apply bg-slate-900/40 backdrop-blur-md border border-slate-800 rounded-2xl shadow-xl shadow-black/30;
   }
 
-  /* Responsive Horizontal Scroll for Reviews */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  
+  /* Horizontal scroll without scrollbar */
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
-    /* Enable momentum scrolling on iOS */
-    -webkit-overflow-scrolling: touch; 
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Touch-friendly spacing */
+  .safe-area-inset {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 
-/* 
-  MODERN SCROLLBAR (Desktop Only) 
-*/
+/* 4. Custom scrollbar (desktop only) */
 @media (min-width: 1024px) {
   ::-webkit-scrollbar {
     width: 8px;
@@ -70,31 +77,39 @@
     background: var(--brand-dark);
   }
   ::-webkit-scrollbar-thumb {
-    background: #334155; /* slate-700 */
+    background: #334155;
     border-radius: 20px;
     border: 2px solid var(--brand-dark);
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #475569; /* slate-600 */
+    background: #475569;
   }
 }
 
-/* 
-  ANIMATIONS 
-*/
+/* 5. Animations */
 @keyframes pulse-subtle {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.7; }
 }
 
-.animate-price-sync {
+.animate-pulse-subtle {
   animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Fix for mobile keyboard pushing up content */
+/* 6. Mobile keyboard fix (prevents content being pushed up) */
 @media (max-height: 500px) {
   .hide-on-keyboard {
     display: none;
   }
 }
 
+/* 7. Prevent layout shift during font loading */
+html {
+  font-display: optional;
+}
+
+/* 8. High-contrast selection (accessibility) */
+::selection {
+  background: #6366f1;
+  color: white;
+}
