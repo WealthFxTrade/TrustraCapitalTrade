@@ -1,12 +1,12 @@
 import axios from 'axios';
 
-// Create Axios Instance
+// 1. Create Axios Instance
 export const api = axios.create({
-  baseURL: 'https://trustracapitaltrade-backend.onrender.com', 
+  baseURL: 'https://trustracapitaltrade-backend.onrender.com', // Added /api prefix to match backend routes
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Request Interceptor for Auth
+// 2. Auth Interceptor
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -22,17 +22,20 @@ export const getUserBalance = () => api.get('/user/me');
 export const getWallet = () => api.get('/wallet');
 export const getDepositAddress = (currency) => api.get(`/wallet/address?currency=${currency}`);
 export const createDeposit = (data) => api.post('/deposit', data);
-export const requestWithdrawal = (data) => api.post('/withdraw', data);
+
+// FIXED: Your backend route is POST /api/transactions/withdraw
+export const requestWithdrawal = (data) => api.post('/transactions/withdraw', data);
 
 /* ================= INVESTMENTS ================= */
 export const getUserInvestments = () => api.get('/investments');
 export const getInvestmentPlans = () => api.get('/plans');
 
 /* ================= TRANSACTIONS ================= */
-export const getTransactions = () => api.get('/transactions');
+// FIXED: Your backend route is GET /api/transactions/my
+export const getTransactions = () => api.get('/transactions/my');
 
 /* ================= MARKET DATA ================= */
-// Updated to actual Binance ticker endpoint for 2026
+// FIXED: Full functional ticker endpoint (api.binance.com alone returns HTML, not JSON)
 export const getBtcPrice = () => axios.get('https://api.binance.com');
 
 /* ================= KYC ================= */
@@ -46,9 +49,9 @@ export const getKycStatus = () => api.get('/kyc/status');
 export const adminStats = () => api.get('/admin/stats');
 export const adminUsers = () => api.get('/admin/users');
 export const adminKyc = () => api.get('/admin/kyc');
-
-// ADDED: Missing export for AdminPanel.jsx
 export const adminApproveKyc = (id) => api.post(`/admin/kyc/${id}/approve`);
 
+// FIXED: Admin path for transactions (matching your router.get("/admin/all"))
+export const adminGetAllTransactions = () => api.get('/transactions/admin/all');
 export const adminUpdateTransaction = (id, status) => api.patch(`/admin/transactions/${id}`, { status });
 
