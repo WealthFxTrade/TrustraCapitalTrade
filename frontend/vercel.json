@@ -1,13 +1,15 @@
 {
   "rewrites": [
+    // 1. Proxy all /api/* requests to the real backend (Render.com)
     {
       "source": "/api/:path*",
-      "destination": "https://trustracapitaltrade-backend.onrender.com*"
+      "destination": "https://trustracapitaltrade-backend.onrender.com/:path*"
     },
+
+    // 2. Serve index.html for all other paths → enables client-side routing
     {
       "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
 }
-
