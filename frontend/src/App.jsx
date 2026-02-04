@@ -9,7 +9,8 @@ import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Invest from './pages/Invest.jsx';
-import Withdraw from './pages/Withdraw.jsx';
+import Withdraw from './pages/WithdrawalPage.jsx'; // Updated to match our new filename
+import Deposit from './pages/DepositPage.jsx';     // Added new Deposit page
 import AdminPanel from './pages/AdminPanel.jsx';
 import AdminWithdrawals from './pages/AdminWithdrawals.jsx';
 
@@ -75,7 +76,7 @@ export default function App() {
           className: 'bg-slate-900 text-white border border-slate-800'
         }}
       />
-      
+
       <ErrorBoundary>
         <Routes>
           {/* Public Routes */}
@@ -89,16 +90,23 @@ export default function App() {
               <Dashboard />
             </PrivateRoute>
           } />
-          
+
           <Route path="/invest" element={
             <PrivateRoute>
               <Invest />
             </PrivateRoute>
           } />
-          
+
           <Route path="/withdraw" element={
             <PrivateRoute>
               <Withdraw />
+            </PrivateRoute>
+          } />
+
+          {/* ADDED: Deposit Route */}
+          <Route path="/deposit" element={
+            <PrivateRoute>
+              <Deposit />
             </PrivateRoute>
           } />
 
@@ -108,7 +116,7 @@ export default function App() {
               <AdminPanel />
             </PrivateRoute>
           } />
-          
+
           <Route path="/admin/withdrawals" element={
             <PrivateRoute adminOnly>
               <AdminWithdrawals />
