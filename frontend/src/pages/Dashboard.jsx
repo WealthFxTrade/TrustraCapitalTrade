@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import DashboardHeader from '../components/DashboardHeader';
 import DashboardCharts from '../components/DashboardCharts';
 import RecentTransactions from '../components/RecentTransactions';
-import { api, getUserBalance, getBtcPrice, getInvestmentPlans } from '../api';
+// Added getTransactions to the imports
+import { api, getUserBalance, getBtcPrice, getInvestmentPlans, getTransactions } from '../api';
 
 export default function DashboardPage({ user, logout }) {
   const navigate = useNavigate();
@@ -20,10 +21,12 @@ export default function DashboardPage({ user, logout }) {
 
   const fetchDashboardData = useCallback(async (signal) => {
     try {
-      const [userRes, btcRes, plansRes] = await Promise.all([
+      // Added getTransactions() to the parallel fetch
+      const [userRes, btcRes, plansRes, txRes] = await Promise.all([
         getUserBalance(),
         getBtcPrice(),
-        getInvestmentPlans()
+        getInvestmentPlans(),
+        getTransactions() 
       ]);
 
       const btcPrice = Number(btcRes.data.price);
@@ -34,11 +37,14 @@ export default function DashboardPage({ user, logout }) {
         plan: userRes.data.user.plan,
         dailyRate: userRes.data.dailyRate,
         btcPrice: btcPrice,
-        plans: plansRes.data,
+        plans: plansRes.data || [],
+        // Correctly mapping transactions from the API response
+        transactions: txRes.data.transactions || [],
         btcHistory: [...prev.btcHistory, btcPrice].slice(-10)
       }));
     } catch (err) {
-      if (err.name !== 'CanceledError') {
+      // Axios uses 'CanceledError', native fetch uses 'AbortError'
+      if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
         console.error('Dashboard sync error:', err);
       }
     } finally {
@@ -49,6 +55,8 @@ export default function DashboardPage({ user, logout }) {
   useEffect(() => {
     const controller = new AbortController();
     fetchDashboardData(controller.signal);
+    
+    // Auto-refresh every 30 seconds to keep the BTC price live
     const interval = setInterval(() => fetchDashboardData(controller.signal), 30000);
 
     return () => {
@@ -67,18 +75,19 @@ export default function DashboardPage({ user, logout }) {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <DashboardHeader 
-        user={user} 
-        balance={data.balance} 
-        plan={data.plan} 
-        logout={logout} 
+      <DashboardHeader
+        user={user}
+        balance={data.balance}
+        plan={data.plan}
+        logout={logout}
       />
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-10">
-        <DashboardCharts 
-          btcHistory={data.btcHistory} 
-          btcPrice={data.btcPrice} 
-          plans={data.plans} 
+        <DashboardCharts
+          btcHistory={data.btcHistory}
+          btcPrice={data.btcPrice}
+          plans={data.plans}
         />
+        {/* Now correctly passing the fetched transactions */}
         <RecentTransactions transactions={data.transactions} />
       </main>
     </div>
