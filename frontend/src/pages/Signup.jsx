@@ -1,37 +1,53 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { TrendingUp, User, Mail, Lock, ShieldCheck } from 'lucide-react'; // Added for brand consistency
+import { TrendingUp, User, Mail, Lock, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
+import api from '../api/api'; // Use our unified axios instance
 
 export default function Signup() {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    password: ''
+  });
   const [loading, setLoading] = useState(false);
-
   const navigate = useNavigate();
+
+  // Unified change handler
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (!fullName || !email || !password) return toast.error('All fields are required');
-    if (password.length < 8) return toast.error('Password must be at least 8 characters');
+    
+    // 1. Validation
+    if (!formData.fullName || !formData.email || !formData.password) {
+      return toast.error('All fields are required');
+    }
+    if (formData.password.length < 8) {
+      return toast.error('Password must be at least 8 characters');
+    }
 
     setLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName, email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Server error');
+      /**
+       * 2. The API Call
+       * Since our axios instance already has /api and the base URL,
+       * we only need the relative endpoint.
+       */
+      const response = await api.post('/auth/register', formData);
 
+      // 3. Success Handling
       toast.success('Account created! Please login.');
       navigate('/login');
     } catch (err) {
-      toast.error(err.message);
+      /**
+       * 4. Error Handling
+       * Our axios interceptor already normalized this, 
+       * so err.message is safe to display directly.
+       */
+      toast.error(err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -47,7 +63,7 @@ export default function Signup() {
 
       <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50"></div>
-        
+
         <h1 className="text-3xl font-bold text-white mb-2 text-center">Create Account</h1>
         <p className="text-slate-400 text-center text-sm mb-8">Join the future of automated trading</p>
 
@@ -57,10 +73,12 @@ export default function Signup() {
             <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
               type="text"
+              name="fullName"
               placeholder="Full Name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
+              value={formData.fullName}
+              onChange={handleChange}
               className="w-full pl-12 pr-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+              required
             />
           </div>
 
@@ -69,10 +87,12 @@ export default function Signup() {
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
               type="email"
+              name="email"
               placeholder="Email Address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={formData.email}
+              onChange={handleChange}
               className="w-full pl-12 pr-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+              required
             />
           </div>
 
@@ -81,10 +101,12 @@ export default function Signup() {
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
               type="password"
+              name="password"
               placeholder="Password (min 8 chars)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={formData.password}
+              onChange={handleChange}
               className="w-full pl-12 pr-4 py-4 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+              required
             />
           </div>
 

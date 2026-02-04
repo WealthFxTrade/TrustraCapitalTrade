@@ -1,43 +1,53 @@
-import { request } from './api'; 
+import api from './apiService'; // Use the unified engine we built
 
 /**
  * DEPOSIT REQUEST
  * Initializes a new investment deposit
+ * Endpoint: POST /api/transactions/deposit
  */
 export const deposit = async (amount, method = 'manual') => {
-  // Token is automatically attached by the apiService interceptor
-  return await request('/transactions/deposit', 'POST', { amount, method });
+  // api already prepends baseURL + /api and attaches JWT via interceptors
+  const response = await api.post('/transactions/deposit', { amount, method });
+  return response.data;
 };
 
 /**
  * WITHDRAWAL REQUEST
  * Submits a Satoshi payout request to the admin queue
+ * Endpoint: POST /api/transactions/withdraw
  */
 export const withdraw = async (amount, btcAddress) => {
-  return await request('/transactions/withdraw', 'POST', { amount, btcAddress });
+  const response = await api.post('/transactions/withdraw', { amount, btcAddress });
+  return response.data;
 };
 
 /**
  * TRANSACTION HISTORY
  * Fetches the ledger for the currently logged-in investor
+ * Endpoint: GET /api/transactions/my
  */
 export const getMyTransactions = async () => {
-  return await request('/transactions/my', 'GET');
+  const response = await api.get('/transactions/my');
+  return response.data;
 };
 
 /**
  * ADMIN: PENDING WITHDRAWALS
  * Fetches the global queue of payouts awaiting verification
+ * Endpoint: GET /api/transactions/pending-withdrawals
  */
 export const getPendingWithdrawals = async () => {
-  return await request('/transactions/pending-withdrawals', 'GET');
+  const response = await api.get('/transactions/pending-withdrawals');
+  return response.data;
 };
 
 /**
  * ADMIN: UPDATE STATUS
  * Approves or rejects a specific transaction
+ * Endpoint: PATCH /api/transactions/:id/status
  */
 export const updateTransactionStatus = async (id, status) => {
-  return await request(`/transactions/${id}/status`, 'PATCH', { status });
+  const response = await api.patch(`/transactions/${id}/status`, { status });
+  return response.data;
 };
 

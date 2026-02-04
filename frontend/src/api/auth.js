@@ -1,54 +1,53 @@
-import { request } from './apiService';
+import api from './apiService';
 
-/**                                                   
+/**                                                  
  * REGISTER
- * Creates user and saves session data
- */                                                  
+ * Sends data to /api/auth/register
+ */
 export const register = async ({ fullName, email, password }) => {
-  const data = await request('/auth/register', 'POST', { fullName, email, password });
-  if (data.token) {
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user)); // Store user object for Dashboard
-  }
-  return data;                                       
+  // api instance already handles baseURL and /api prefix
+  const response = await api.post('/auth/register', { fullName, email, password });
+  
+  // Note: LocalStorage is handled by Login.jsx or AuthContext.jsx 
+  // to keep the UI in sync, but we return the data here.
+  return response.data;
 };
 
-/**                                                   
+/**                                                  
  * LOGIN
- * Authenticates user and updates local session
+ * Sends data to /api/auth/login
  */
 export const login = async ({ email, password }) => {
-  const data = await request('/auth/login', 'POST', { email, password });                                   
-  if (data.token) {
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user)); // Critical for PrivateRoute role checks
-  }                                                
-  return data;
-};                                                   
+  const response = await api.post('/auth/login', { email, password });
+  return response.data;
+};
 
 /**
  * FORGOT PASSWORD
- * Initiates the email recovery process
+ * Sends data to /api/auth/forgot-password
  */
 export const forgotPassword = async (email) => {
-  return await request('/auth/forgot-password', 'POST', { email });                                       
+  const response = await api.post('/auth/forgot-password', { email });
+  return response.data;
 };
 
 /**
  * RESET PASSWORD
- * Updates password using the token sent to email
+ * Sends data to /api/auth/reset-password/:token
  */
 export const resetPassword = async (token, password) => {
-  return await request(`/auth/reset-password/${token}`, 'POST', { password });                            
+  const response = await api.post(`/auth/reset-password/${token}`, { password });
+  return response.data;
 };
 
-/**                                                   
+/**                                                  
  * LOGOUT
- * Full session cleanup
+ * Standardized cleanup for production
  */
 export const logout = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('user');
-  window.location.href = '/login';
+  // Use location.replace to prevent back-button access to protected pages
+  window.location.replace('/login');
 };
 

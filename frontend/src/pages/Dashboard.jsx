@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUserAccount, getBtcPrice } from '../api';
+// Use the unified api engine we built in src/api/index.js
+import { api, getUserBalance } from '../api'; 
 import { useNavigate } from 'react-router-dom';
-import { 
-  TrendingUp, 
-  Wallet, 
-  LogOut, 
-  CheckCircle, 
+import {
+  TrendingUp,
+  Wallet,
+  LogOut,
   ArrowRight,
-  ShieldCheck 
+  ShieldCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -23,36 +23,48 @@ const RIO_PLANS = [
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const [stats, setStats] = useState({ balance: 0, profit: 0 });
-  const [btcPrice, setBtcPrice] = useState('77494'); // 2026 Market Fallback
+  const [btcPrice, setBtcPrice] = useState('77494'); 
   const [syncing, setSyncing] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     const loadDashboard = async () => {
       try {
-        const [acc, btc] = await Promise.all([getUserAccount(), getBtcPrice()]);
-        setStats(acc.data);
-        const currentPrice = btc.data.price || btc.data.bitcoin?.usd;
+        /**
+         * 1. API CALLS
+         * Using the normalized 'api' instance ensures /api prefix and 
+         * Bearer token are correctly handled.
+         */
+        const [accResponse, btcResponse] = await Promise.all([
+          api.get('/user/balance'), 
+          api.get('/market/btc-price') // Ensure this route exists on your backend
+        ]);
+
+        setStats(accResponse.data);
+        
+        const currentPrice = btcResponse.data.price || btcResponse.data.bitcoin?.usd;
         if (currentPrice) setBtcPrice(currentPrice);
       } catch (err) {
-        console.warn('Sync failed. Using verified market price.');
+        // If it's a 401, the Axios interceptor will handle the logout automatically
+        console.warn('Market sync failed. Using fallback price.');
       } finally {
         setSyncing(false);
       }
     };
+
     loadDashboard();
-    const interval = setInterval(loadDashboard, 300000); // 5-minute sync
+    const interval = setInterval(loadDashboard, 300000); 
     return () => clearInterval(interval);
   }, []);
 
   const handlePlanClick = (plan) => {
-    localStorage.setItem('selectedPlan', plan.id);
+    // Persistent selection for the investment page
+    localStorage.setItem('selectedPlan', JSON.stringify(plan));
     navigate('/invest');
   };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-50 selection:bg-indigo-500/30">
-      {/* Top Navigation */}
       <nav className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md px-4 md:px-8 py-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -62,7 +74,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-4">
             <div className="hidden md:block text-right">
               <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">Active User</p>
-              <p className="text-sm font-medium">{user?.fullName}</p>
+              <p className="text-sm font-medium">{user?.fullName || 'Investor'}</p>
             </div>
             <button
               onClick={logout}
@@ -75,18 +87,17 @@ export default function Dashboard() {
       </nav>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8">
-        {/* Portfolio Overview */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
-          <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl relative overflow-hidden group shadow-xl">
+          <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl relative overflow-hidden shadow-xl">
             <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
             <div className="flex items-center gap-4 mb-4">
               <div className="p-3 bg-indigo-500/10 rounded-2xl text-indigo-500">
                 <Wallet className="h-6 w-6" />
               </div>
-              <p className="text-slate-500 text-sm font-bold uppercase tracking-widest">Main Account Balance</p>
+              <p className="text-slate-500 text-sm font-bold uppercase tracking-widest">Available Balance</p>
             </div>
             <h2 className="text-4xl font-bold font-mono">
-              ${stats.balance?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              ${(stats.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </h2>
           </div>
 
@@ -95,7 +106,7 @@ export default function Dashboard() {
               <div className="p-3 bg-orange-500/10 rounded-2xl text-orange-500">
                 <TrendingUp className="h-6 w-6" />
               </div>
-              <p className="text-slate-500 text-sm font-bold uppercase tracking-widest">Live BTC Market Price</p>
+              <p className="text-slate-500 text-sm font-bold uppercase tracking-widest">BTC Market Price</p>
             </div>
             <div className="flex items-baseline gap-2">
               <h2 className="text-4xl font-bold font-mono text-orange-400">
@@ -106,7 +117,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Investment Plans */}
         <div className="mb-8 flex justify-between items-end">
           <div>
             <h3 className="text-2xl font-bold mb-1 text-white">Investment ROI Plans</h3>
@@ -131,7 +141,9 @@ export default function Dashboard() {
               </div>
               <div className="space-y-1 mb-6">
                 <p className="text-[10px] text-slate-400 font-medium">MIN: ${plan.min.toLocaleString()}</p>
-                <p className="text-[10px] text-slate-400 font-medium">MAX: {plan.max === Infinity ? 'UNLIMITED' : `$${plan.max.toLocaleString()}`}</p>
+                <p className="text-[10px] text-slate-400 font-medium">
+                  MAX: {plan.max === Infinity ? 'UNLIMITED' : `$${plan.max.toLocaleString()}`}
+                </p>
               </div>
               <button className="w-full bg-indigo-600 group-hover:bg-indigo-500 py-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
                 Invest Now <ArrowRight className="h-4 w-4" />
@@ -141,10 +153,9 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* 2026 Regulatory Footer */}
       <footer className="max-w-7xl mx-auto p-8 border-t border-slate-900 mt-10">
         <p className="text-center text-[10px] text-slate-600 font-bold tracking-[0.2em] uppercase">
-          © 2016–2026 Trustra Capital Trade • Real-time Data Sync {syncing ? 'Connecting...' : 'Active'}
+          © 2016–2026 Trustra Capital Trade • System Status: {syncing ? 'Syncing...' : 'Encrypted'}
         </p>
       </footer>
     </div>

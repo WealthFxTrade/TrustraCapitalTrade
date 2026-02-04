@@ -1,19 +1,30 @@
-import { request } from './api';
+import api from './apiService'; // Use the unified engine
 
-// Get pending withdrawals
+/**
+ * Get pending withdrawals
+ * Endpoint: GET /api/transactions/pending-withdrawals
+ */
 export const getPendingWithdrawals = async () => {
-  const token = localStorage.getItem('token');
-  return await request('/transactions/pending-withdrawals', 'GET', null, token);
+  // Token is automatically attached by the apiService interceptor
+  const response = await api.get('/transactions/pending-withdrawals');
+  return response.data;
 };
 
-// Approve withdrawal
+/**
+ * Approve withdrawal
+ * Endpoint: POST /api/admin/withdrawals/:id/approve
+ */
 export const approveWithdrawal = async (withdrawalId, txHash) => {
-  const token = localStorage.getItem('token');
-  return await request(`/admin/withdrawals/${withdrawalId}/approve`, 'POST', { txHash }, token);
+  const response = await api.post(`/admin/withdrawals/${withdrawalId}/approve`, { txHash });
+  return response.data;
 };
 
-// Reject withdrawal
+/**
+ * Reject withdrawal
+ * Endpoint: POST /api/admin/withdrawals/:id/reject
+ */
 export const rejectWithdrawal = async (withdrawalId, reason) => {
-  const token = localStorage.getItem('token');
-  return await request(`/admin/withdrawals/${withdrawalId}/reject`, 'POST', { reason }, token);
+  const response = await api.post(`/admin/withdrawals/${withdrawalId}/reject`, { reason });
+  return response.data;
 };
+
