@@ -1,1 +1,7 @@
-node_modules/\n.env
+node_modules/
+.env
+dist/
+build/
+.cache/
+*.log
+
