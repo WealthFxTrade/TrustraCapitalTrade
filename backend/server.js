@@ -1,5 +1,5 @@
 // 1. MUST BE FIRST: Load environment variables before any other imports
-import 'dotenv/config'; 
+import 'dotenv/config';
 import mongoose from 'mongoose';
 import app from './app.js';
 
@@ -11,32 +11,35 @@ const MONGO_URI = process.env.MONGO_URI;
  */
 const startServer = async () => {
   try {
-    // Fail fast if the URI is missing to avoid the Mongoose "undefined" error
     if (!MONGO_URI) {
-      throw new Error("MONGO_URI is not defined. Check your Render Environment Variables.");
+      throw new Error("MONGO_URI is not defined. Check your Environment Variables.");
     }
 
     // Connect to MongoDB with optimized settings
-    await mongoose.connect(MONGO_URI, { 
+    await mongoose.connect(MONGO_URI, {
       maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000 // Timeout after 5s instead of hanging
+      serverSelectionTimeoutMS: 5000 
     });
-    
+
     console.log('✅ MongoDB Connected');
 
-    // Bind to 0.0.0.0 for Render compatibility
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Trustra Backend running on port ${PORT}`);
     });
 
-    /* --- Graceful Shutdown --- */
+    /* --- Graceful Shutdown (Fixed for Node v25/Mongoose 8+) --- */
     const shutdown = () => {
-      console.log('Shutting down server...');
-      server.close(() => {
-        mongoose.connection.close(false, () => {
-          console.log('Connections closed.');
+      console.log('🛑 Shutting down server...');
+      server.close(async () => {
+        try {
+          // FIXED: .close() no longer accepts callbacks. Use await or .then()
+          await mongoose.connection.close();
+          console.log('✅ Connections closed. Safe to exit.');
           process.exit(0);
-        });
+        } catch (err) {
+          console.error('❌ Error during database close:', err.message);
+          process.exit(1);
+        }
       });
     };
 
@@ -45,7 +48,6 @@ const startServer = async () => {
 
   } catch (err) {
     console.error('❌ Startup Error:', err.message);
-    // Exit with failure
     process.exit(1);
   }
 };
