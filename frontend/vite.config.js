@@ -14,6 +14,20 @@ export default defineConfig({
     port: 5173,
   },
   define: {
-    'process.env': {},  // Safe empty object – prevents rare "process is undefined" crashes
+    'process.env': {}, 
+  },
+  // Add this section to fix the chunk size warning
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor'; // Moves libraries to a separate file
+          }
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000, // Raises the limit so the warning disappears
   },
 });
+
