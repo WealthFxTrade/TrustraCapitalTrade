@@ -18,7 +18,6 @@ app.use(compression());
 app.use(express.json({ limit: '10kb' })); 
 app.use(morgan('dev'));
 
-// CORS: Hardened for Vercel & Preview Deploys
 app.use(cors({
   origin: (origin, callback) => {
     const allowed = [
@@ -37,7 +36,6 @@ app.use(cors({
 
 /* --- 2. API ROUTE MOUNTING --- */
 
-// Health Check
 app.get('/', (req, res) => res.json({
   success: true,
   message: "Trustra 2026 API Active",
@@ -45,15 +43,12 @@ app.get('/', (req, res) => res.json({
 }));
 
 /**
- * DOUBLE MOUNTING STRATEGY:
- * Since your frontend calls two different base paths that both 
- * exist in our 'user.js' file, we mount it twice.
+ * 🚀 THE FIX: 
+ * We mount userRoutes at '/api'.
+ * Inside user.js, your balance route is '/user/balance' 
+ * and your transaction route is '/transactions/my'.
+ * This makes them: /api/user/balance AND /api/transactions/my
  */
-
-// 1. Handles /api/user/balance, /api/user/login, /api/user/register
-app.use('/api/user', userRoutes); 
-
-// 2. Handles /api/transactions/my (Inside user.js it is router.get('/transactions/my'))
 app.use('/api', userRoutes); 
 
 app.use('/api/plans', planRoutes);
@@ -61,7 +56,6 @@ app.use('/api/market', marketRoutes);
 
 /* --- 3. ERROR HANDLING --- */
 
-// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
