@@ -10,7 +10,8 @@ import authRoutes from './routes/auth.js';
 import adminRoutes from './routes/admin.js';
 import transactionRoutes from './routes/transaction.js';
 import depositRoutes from './routes/deposit.js';
-import marketRoutes from './routes/market.js'; // NEW: Import market nodes
+import marketRoutes from './routes/market.js';
+import userRoutes from './routes/user.js'; // ADD THIS: Import user routes
 
 const app = express();
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -26,7 +27,7 @@ app.use('/api/', rateLimit({
   message: { success: false, message: 'Too many requests, try later.' },
 }));
 
-/* ---------------- CORS (Fixed for Vercel) ---------------- */
+/* ---------------- CORS ---------------- */
 const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173'
@@ -44,7 +45,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-/* ---------------- Body Parsers & Logging ---------------- */
+/* ---------------- Body Parsers ---------------- */
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(morgan(IS_PROD ? 'combined' : 'dev'));
@@ -56,9 +57,10 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/transactions', transactionRoutes);
+app.use('/api/transactions', userRoutes); // MOUNT HERE: Fixes /api/transactions/my
+app.use('/api/user', userRoutes);         // MOUNT HERE: Fixes /api/user/balance
 app.use('/api/deposits', depositRoutes);
-app.use('/api/market', marketRoutes); // NEW: Mount market nodes
+app.use('/api/market', marketRoutes);
 
 /* ---------------- Health Check ---------------- */
 app.get('/health', (req, res) => {
@@ -70,7 +72,7 @@ app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 
-/* ---------------- Global Error Handler ---------------- */
+/* ---------------- Error Handler ---------------- */
 app.use((err, req, res, next) => {
   const status = err.statusCode || 500;
   res.status(status).json({
