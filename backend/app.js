@@ -1,85 +1,79 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import compression from 'compression';
-import rateLimit from 'express-rate-limit';
+import morgan from 'morgan';
 
 // Route imports
 import authRoutes from './routes/auth.js';
-import adminRoutes from './routes/admin.js';
-import transactionRoutes from './routes/transaction.js';
-import depositRoutes from './routes/deposit.js';
+import userRoutes from './routes/user.js';
+import planRoutes from './routes/plan.js';
 import marketRoutes from './routes/market.js';
-import userRoutes from './routes/user.js'; 
-import planRoutes from './routes/plan.js'; // NEW: Import the Rio plans
 
 const app = express();
-const IS_PROD = process.env.NODE_ENV === 'production';
 
-/* ---------------- Security & Performance ---------------- */
-app.use(helmet());
-app.use(compression());
-app.disable('x-powered-by');
+/* --- 1. GLOBAL MIDDLEWARE --- */
+app.use(helmet()); // Security headers
+app.use(compression()); // Gzip for faster Termux loading
+app.use(express.json());
+app.use(morgan('dev')); // Logging for debugging
 
-app.use('/api/', rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 150,
-  message: { success: false, message: 'Too many requests, try later.' },
-}));
-
-/* ---------------- CORS ---------------- */
-const allowedOrigins = [
-  'https://trustra-capital-trade.vercel.app',
-  'http://localhost:5173'
-];
-
+// CORS: Hardened for Vercel Production & Local Development
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
-      return callback(null, true);
+    const allowed = [
+      'https://trustra-capital-trade.vercel.app', 
+      'http://localhost:5173',
+      'http://127.0.0.1:5173'
+    ];
+    // Allow requests with no origin (like mobile apps or curl) 
+    // or origins ending with .vercel.app for preview deployments
+    if (!origin || allowed.includes(origin) || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Blocked by Trustra Security (CORS)'));
     }
-    callback(new Error('Not allowed by CORS'));
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  credentials: true
 }));
 
-/* ---------------- Body Parsers ---------------- */
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: true, limit: '1mb' }));
-app.use(morgan(IS_PROD ? 'combined' : 'dev'));
+/* --- 2. API ROUTE MOUNTING --- */
 
-/* ---------------- Routes ---------------- */
-app.get('/', (req, res) => {
-  res.json({ success: true, message: "Trustra Capital API Active" });
-});
+// Health Check (Used by Render.com to verify deployment)
+app.get('/', (req, res) => res.json({ 
+  success: true, 
+  message: "Trustra 2026 API Active",
+  timestamp: new Date().toISOString()
+}));
 
+/**
+ * MOUNTING STRATEGY:
+ * We mount userRoutes at '/api' so that inside user.js:
+ * router.get('/user/me') becomes /api/user/me
+ * router.get('/transactions') becomes /api/transactions
+ */
 app.use('/api/auth', authRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/transactions', userRoutes); 
-app.use('/api/user', userRoutes);         
-app.use('/api/deposits', depositRoutes);
+app.use('/api', userRoutes); 
+app.use('/api/plans', planRoutes);
 app.use('/api/market', marketRoutes);
-app.use('/api/plans', planRoutes); // NEW: Mount the Rio plans at /api/plans
 
-/* ---------------- Health Check ---------------- */
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime() });
-});
+/* --- 3. ERROR HANDLING --- */
 
-/* ---------------- 404 Handler ---------------- */
+// 404 Handler for undefined routes
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: `Route not found: ${req.method} ${req.originalUrl}` });
+  res.status(404).json({ 
+    success: false, 
+    message: `Route not found: ${req.method} ${req.originalUrl}` 
+  });
 });
 
-/* ---------------- Error Handler ---------------- */
+// Global Error Middleware
 app.use((err, req, res, next) => {
-  const status = err.statusCode || 500;
-  res.status(status).json({
-    success: false,
-    message: IS_PROD ? 'Internal server error' : err.message
+  console.error('SERVER_CRASH:', err.stack);
+  res.status(500).json({ 
+    success: false, 
+    message: "Internal Server Error",
+    error: process.env.NODE_ENV === 'production' ? null : err.message 
   });
 });
 
