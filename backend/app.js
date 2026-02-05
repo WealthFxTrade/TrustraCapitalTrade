@@ -9,18 +9,16 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import planRoutes from './routes/plan.js';
 import marketRoutes from './routes/market.js';
-// Import your custom handler
 import { errorHandler } from './middleware/errorMiddleware.js';
 
 const app = express();
 
 /* --- 1. GLOBAL MIDDLEWARE --- */
-app.use(helmet()); 
-app.use(compression()); 
-app.use(express.json({ limit: '10kb' })); // Production security: limit body size
-app.use(morgan('dev')); 
+app.use(helmet());
+app.use(compression());
+app.use(express.json({ limit: '10kb' })); 
+app.use(morgan('dev'));
 
-// CORS Configuration
 app.use(cors({
   origin: (origin, callback) => {
     const allowed = [
@@ -39,7 +37,6 @@ app.use(cors({
 
 /* --- 2. API ROUTE MOUNTING --- */
 
-// Health Check
 app.get('/', (req, res) => res.json({
   success: true,
   message: "Trustra 2026 API Active",
@@ -47,13 +44,15 @@ app.get('/', (req, res) => res.json({
 }));
 
 app.use('/api/auth', authRoutes);
-app.use('/api', userRoutes);
+
+// FIXED: Mount at /api/user so that /balance becomes /api/user/balance
+app.use('/api/user', userRoutes); 
+
 app.use('/api/plans', planRoutes);
 app.use('/api/market', marketRoutes);
 
 /* --- 3. ERROR HANDLING --- */
 
-// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -61,7 +60,6 @@ app.use((req, res) => {
   });
 });
 
-// Use your custom errorHandler instead of the generic one
 app.use(errorHandler);
 
 export default app;
