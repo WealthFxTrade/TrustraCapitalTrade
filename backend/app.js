@@ -27,17 +27,25 @@ app.use('/api/', rateLimit({
   message: { success: false, message: 'Too many requests, try later.' },
 }));
 
-/* ---------------- CORS ---------------- */
+/* ---------------- CORS (Fixed for Vercel) ---------------- */
 const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173'
 ];
+
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    // 1. Allow if no origin (like server-to-server or Postman)
+    // 2. Allow if in explicit whitelist
+    // 3. Allow if it's any Vercel preview or production deployment
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
     callback(new Error('Not allowed by CORS'));
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 /* ---------------- Body Parsers & Logging ---------------- */
@@ -46,6 +54,11 @@ app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 app.use(morgan(IS_PROD ? 'combined' : 'dev'));
 
 /* ---------------- Routes ---------------- */
+// Root Route to verify API is live
+app.get('/', (req, res) => {
+  res.json({ success: true, message: "Trustra Capital API Active" });
+});
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/transactions', transactionRoutes);
@@ -66,9 +79,9 @@ app.use((err, req, res, next) => {
   const status = err.statusCode || 500;
   res.status(status).json({
     success: false,
-    message: IS_PROD ? 'Internal server error' : err.message,
-    stack: IS_PROD ? undefined : err.stack
+    message: IS_PROD ? 'Internal server error' : err.message
   });
 });
 
 export default app;
+
