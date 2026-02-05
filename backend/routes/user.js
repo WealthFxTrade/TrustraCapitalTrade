@@ -11,7 +11,6 @@ const router = express.Router();
 // =====================
 const auth = (req, res, next) => {
   const token = req.header('Authorization')?.replace('Bearer ', '');
-
   if (!token) {
     return res.status(401).json({ success: false, message: 'No token provided' });
   }
@@ -66,11 +65,9 @@ router.get('/me', auth, async (req, res) => {
   try {
     let user = await User.findById(req.user.id).select('-password');
 
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    // Apply pending profits before returning data
+    // Apply pending profits
     await applyDailyProfits(user);
 
     res.json({
@@ -86,21 +83,40 @@ router.get('/me', auth, async (req, res) => {
 });
 
 // =====================
+// Get current balance only (Used by Dashboard)
+// =====================
+router.get('/balance', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    // Apply profits before returning balance
+    await applyDailyProfits(user);
+
+    res.json({
+      success: true,
+      balance: user.balance || 0,
+      plan: user.plan || 'Basic',
+      dailyRate: user.dailyRate || 0,
+    });
+  } catch (err) {
+    console.error('[BALANCE ERROR]', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// =====================
 // Deposit funds
 // =====================
 router.post('/deposit', auth, async (req, res) => {
   const { amount } = req.body;
-
   if (!amount || amount <= 0) {
     return res.status(400).json({ success: false, message: 'Invalid amount' });
   }
 
   try {
     let user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     // Apply profits before deposit
     await applyDailyProfits(user);
@@ -134,17 +150,13 @@ router.post('/deposit', auth, async (req, res) => {
 // =====================
 router.post('/withdraw', auth, async (req, res) => {
   const { amount } = req.body;
-
   if (!amount || amount <= 0) {
     return res.status(400).json({ success: false, message: 'Invalid amount' });
   }
 
   try {
     let user = await User.findById(req.user.id);
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
     // Apply profits before withdrawal
     await applyDailyProfits(user);
