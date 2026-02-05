@@ -5,22 +5,20 @@ import compression from 'compression';
 import morgan from 'morgan';
 
 // Route imports
-import userRoutes from './routes/user.js'; // Consolidated Auth, Balance, & Transactions
+import userRoutes from './routes/user.js'; 
 import planRoutes from './routes/plan.js';
 import marketRoutes from './routes/market.js';
-
-// Error Handler
 import { errorHandler } from './middleware/errorMiddleware.js';
 
 const app = express();
 
 /* --- 1. GLOBAL MIDDLEWARE --- */
-app.use(helmet()); 
-app.use(compression()); 
+app.use(helmet());
+app.use(compression());
 app.use(express.json({ limit: '10kb' })); 
-app.use(morgan('dev')); 
+app.use(morgan('dev'));
 
-// CORS Configuration - Hardened for 2026 Production
+// CORS: Hardened for Vercel & Preview Deploys
 app.use(cors({
   origin: (origin, callback) => {
     const allowed = [
@@ -39,10 +37,7 @@ app.use(cors({
 
 /* --- 2. API ROUTE MOUNTING --- */
 
-/**
- * Health Check
- * Used by Render.com to verify deployment is successful.
- */
+// Health Check
 app.get('/', (req, res) => res.json({
   success: true,
   message: "Trustra 2026 API Active",
@@ -50,21 +45,23 @@ app.get('/', (req, res) => res.json({
 }));
 
 /**
- * MOUNTING STRATEGY:
- * We mount userRoutes at '/api/user' to satisfy the dashboard paths:
- * POST /api/user/register
- * POST /api/user/login
- * GET  /api/user/balance
- * GET  /api/user/transactions/my
+ * DOUBLE MOUNTING STRATEGY:
+ * Since your frontend calls two different base paths that both 
+ * exist in our 'user.js' file, we mount it twice.
  */
+
+// 1. Handles /api/user/balance, /api/user/login, /api/user/register
 app.use('/api/user', userRoutes); 
+
+// 2. Handles /api/transactions/my (Inside user.js it is router.get('/transactions/my'))
+app.use('/api', userRoutes); 
 
 app.use('/api/plans', planRoutes);
 app.use('/api/market', marketRoutes);
 
 /* --- 3. ERROR HANDLING --- */
 
-// 404 Handler for undefined routes
+// 404 Handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -72,7 +69,6 @@ app.use((req, res) => {
   });
 });
 
-// Custom Global Error Handler (MUST BE LAST)
 app.use(errorHandler);
 
 export default app;
