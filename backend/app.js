@@ -11,7 +11,8 @@ import adminRoutes from './routes/admin.js';
 import transactionRoutes from './routes/transaction.js';
 import depositRoutes from './routes/deposit.js';
 import marketRoutes from './routes/market.js';
-import userRoutes from './routes/user.js'; // ADD THIS: Import user routes
+import userRoutes from './routes/user.js'; 
+import planRoutes from './routes/plan.js'; // NEW: Import the Rio plans
 
 const app = express();
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -57,10 +58,11 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/transactions', userRoutes); // MOUNT HERE: Fixes /api/transactions/my
-app.use('/api/user', userRoutes);         // MOUNT HERE: Fixes /api/user/balance
+app.use('/api/transactions', userRoutes); 
+app.use('/api/user', userRoutes);         
 app.use('/api/deposits', depositRoutes);
 app.use('/api/market', marketRoutes);
+app.use('/api/plans', planRoutes); // NEW: Mount the Rio plans at /api/plans
 
 /* ---------------- Health Check ---------------- */
 app.get('/health', (req, res) => {
