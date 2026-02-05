@@ -2,45 +2,80 @@ import api from './apiService';
 
 /**
  * TRUSTRA CAPITAL TRADE - API LAYER ENTRY POINT
- * Finalized for 2026 Production Environment.
+ * Corrected & hardened for 2026 production.
  */
 
 const withData = (promise) => promise.then((res) => res.data);
 
 // --- AUTHENTICATION ---
-export const loginUser = (credentials) => withData(api.post('/auth/login', credentials));
-export const registerUser = (data) => withData(api.post('/auth/register', data));
+export const loginUser = (credentials) =>
+  withData(api.post('/auth/login', credentials));
+
+export const registerUser = (data) =>
+  withData(api.post('/auth/register', data));
 
 // --- USER / PROFILE / BALANCE ---
-export const getProfile = () => withData(api.get('/user/me'));
-export const updateProfile = (payload) => withData(api.put('/user/me', payload));
-export const getUserBalance = () => withData(api.get('/user/balance'));
-export const getWallet = () => withData(api.get('/wallet'));
+export const getProfile = (config = {}) =>
+  withData(api.get('/user/me', config));
+
+export const updateProfile = (payload, config = {}) =>
+  withData(api.put('/user/me', payload, config));
+
+export const getUserBalance = (config = {}) =>
+  withData(api.get('/user/balance', config));
+
+export const getWallet = (config = {}) =>
+  withData(api.get('/wallet', config));
 
 // --- DEPOSITS / WITHDRAWALS ---
-export const getDepositAddress = (currency) => withData(api.get(`/wallet/address?currency=${currency}`));
-export const createDeposit = (data) => withData(api.post('/deposit', data));
-export const requestWithdrawal = (data) => withData(api.post('/transactions/withdraw', data));
+export const getDepositAddress = (currency, config = {}) =>
+  withData(api.get(`/wallet/address?currency=${currency}`, config));
 
-// --- TRANSACTIONS (CRITICAL FIX FOR DASHBOARD) ---
-// This matches your backend route: router.get("/my", protect, ...)
-export const getTransactions = (options = {}) => withData(api.get('/transactions/my', options));
+export const createDeposit = (data, config = {}) =>
+  withData(api.post('/deposit', data, config));
+
+export const requestWithdrawal = (data, config = {}) =>
+  withData(api.post('/transactions/withdraw', data, config));
+
+// --- TRANSACTIONS ---
+export const getTransactions = (config = {}) =>
+  withData(api.get('/transactions/my', config));
 
 // --- INVESTMENTS & PLANS ---
-export const getInvestmentPlans = () => withData(api.get('/plans'));
-export const getUserInvestments = () => withData(api.get('/investments'));
-export const subscribeToPlan = (planId, amount) => withData(api.post('/investments/subscribe', { planId, amount }));
+export const getInvestmentPlans = (config = {}) =>
+  withData(api.get('/plans', config));
 
-// --- MARKET DATA (2026 NODES) ---
-export const getBtcPrice = () => withData(api.get('/market/btc-price'));
+export const getUserInvestments = (config = {}) =>
+  withData(api.get('/investments', config));
+
+export const subscribeToPlan = (planId, amount, config = {}) =>
+  withData(
+    api.post('/investments/subscribe', { planId, amount }, config)
+  );
+
+// --- MARKET DATA ---
+export const getBtcPrice = (config = {}) =>
+  withData(api.get('/market/btc-price', config));
 
 // --- ADMIN ENDPOINTS ---
-export const adminStats = () => withData(api.get('/admin/stats'));
-export const adminUsers = () => withData(api.get('/admin/users'));
-export const adminPendingKyc = () => withData(api.get('/admin/kyc/pending'));
-export const adminApproveKyc = (id) => withData(api.post(`/admin/kyc/${id}/approve`));
-export const adminRejectKyc = (id, reason) => withData(api.post(`/admin/kyc/${id}/reject`, { reason }));
-export const adminUpdateTransaction = (id, status) => withData(api.patch(`/admin/transactions/${id}`, { status }));
+export const adminStats = (config = {}) =>
+  withData(api.get('/admin/stats', config));
+
+export const adminUsers = (config = {}) =>
+  withData(api.get('/admin/users', config));
+
+export const adminPendingKyc = (config = {}) =>
+  withData(api.get('/admin/kyc/pending', config));
+
+export const adminApproveKyc = (id, config = {}) =>
+  withData(api.post(`/admin/kyc/${id}/approve`, {}, config));
+
+export const adminRejectKyc = (id, reason, config = {}) =>
+  withData(api.post(`/admin/kyc/${id}/reject`, { reason }, config));
+
+export const adminUpdateTransaction = (id, status, config = {}) =>
+  withData(
+    api.patch(`/admin/transactions/${id}`, { status }, config)
+  );
 
 export { api };
-

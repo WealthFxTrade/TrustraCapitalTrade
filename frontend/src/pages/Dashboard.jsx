@@ -8,7 +8,7 @@ import {
   getInvestmentPlans,
   getTransactions,
 } from '../api';
-import { AlertCircle } from 'lucide-react'; // FIXED: Added missing icon import
+import { AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function DashboardPage({ user, logout }) {
@@ -24,18 +24,19 @@ export default function DashboardPage({ user, logout }) {
 
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
-  // Use a ref to track the latest data for background updates without stale closures
   const latestDataRef = useRef(data);
-  useEffect(() => {
-    latestDataRef.current = data;
-  }, [data]);
+  useEffect(() => { latestDataRef.current = data; }, [data]);
 
-  const fetchDashboardData = useCallback(async (signal) => {
+  // --- Fetch Core Data ---
+  const fetchDashboardData = useCallback(async () => {
+    const controller = new AbortController();
+    const { signal } = controller;
+
     try {
       setFetchError(null);
 
-      // 2026 Strategy: Fetching all core data points in parallel
       const [userRes, btcRes, plansRes, txRes] = await Promise.all([
         getUserBalance({ signal }),
         getBtcPrice({ signal }),
@@ -47,7 +48,6 @@ export default function DashboardPage({ user, logout }) {
 
       setData((prev) => ({
         ...prev,
-        // Optional Chaining & Nullish Coalescing prevent app-wide crashes
         balance: userRes?.balance ?? prev.balance,
         plan: userRes?.plan ?? prev.plan,
         dailyRate: userRes?.dailyRate ?? prev.dailyRate,
@@ -58,38 +58,70 @@ export default function DashboardPage({ user, logout }) {
       }));
     } catch (err) {
       if (err.name === 'AbortError') return;
-      console.error('Dashboard fetch failed:', err);
-      const msg = err.response?.data?.message || 'Failed to sync with secure servers';
+      const msg = err.response?.data?.message || err.message || 'Failed to sync with secure servers';
       setFetchError(msg);
       toast.error(msg);
     } finally {
       setLoading(false);
+      setHasLoadedOnce(true);
     }
+
+    return controller;
   }, []);
 
+  // --- Initial Fetch + Polling Fallback ---
   useEffect(() => {
-    const controller = new AbortController();
-    
-    // Initial sync
-    fetchDashboardData(controller.signal);
+    let controller;
+    const run = async () => { controller = await fetchDashboardData(); };
+    run();
 
-    // Dynamic background polling (30s)
-    const refreshInterval = setInterval(() => {
-      fetchDashboardData(controller.signal);
-    }, 30000);
-
-    return () => {
-      controller.abort();
-      clearInterval(refreshInterval);
-    };
+    const refreshInterval = setInterval(run, 30000); // 30s fallback
+    return () => { controller?.abort(); clearInterval(refreshInterval); };
   }, [fetchDashboardData]);
 
-  const handleRetry = () => {
-    setLoading(true);
-    fetchDashboardData();
-  };
+  // --- Real-time WebSocket for BTC Price & Transactions ---
+  useEffect(() => {
+    const ws = new WebSocket('wss://trustracapitaltrade-backend.onrender.com/ws');
 
-  if (loading && data.balance === 0) {
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+
+        // BTC Price update
+        if (msg.type === 'btc_price') {
+          setData(prev => ({
+            ...prev,
+            btcPrice: msg.price,
+            btcHistory: [...prev.btcHistory, msg.price].slice(-60)
+          }));
+        }
+
+        // New transaction
+        if (msg.type === 'transaction') {
+          setData(prev => ({
+            ...prev,
+            transactions: [msg.transaction, ...prev.transactions].slice(0, 50) // keep 50 latest
+          }));
+        }
+
+        // Optional: balance update
+        if (msg.type === 'balance') {
+          setData(prev => ({ ...prev, balance: msg.balance }));
+        }
+      } catch (e) {
+        console.error('WS parse error', e);
+      }
+    };
+
+    ws.onclose = () => console.log('WebSocket closed');
+    ws.onerror = (e) => console.error('WebSocket error', e);
+
+    return () => ws.close();
+  }, []);
+
+  const handleRetry = () => { setLoading(true); fetchDashboardData(); };
+
+  if (loading && !hasLoadedOnce) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="relative">
@@ -118,10 +150,7 @@ export default function DashboardPage({ user, logout }) {
               <AlertCircle className="h-6 w-6 text-red-500" />
               <span className="text-sm font-medium">{fetchError}</span>
             </div>
-            <button
-              onClick={handleRetry}
-              className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-all active:scale-95 text-xs uppercase tracking-widest"
-            >
+            <button onClick={handleRetry} className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-all active:scale-95 text-xs uppercase tracking-widest">
               Retry Sync
             </button>
           </div>
@@ -129,7 +158,6 @@ export default function DashboardPage({ user, logout }) {
       )}
 
       <main className="max-w-7xl mx-auto px-4 py-8 space-y-10">
-        {/* Market Analysis Section */}
         {data.btcHistory.length < 2 ? (
           <div className="bg-slate-900/50 border border-slate-800 rounded-[2rem] p-12 text-center text-slate-500">
             <div className="animate-pulse flex flex-col items-center">
@@ -138,22 +166,13 @@ export default function DashboardPage({ user, logout }) {
             </div>
           </div>
         ) : (
-          <DashboardCharts
-            btcHistory={data.btcHistory}
-            btcPrice={data.btcPrice}
-            plans={data.plans}
-          />
+          <DashboardCharts btcHistory={data.btcHistory} btcPrice={data.btcPrice} plans={data.plans} />
         )}
 
-        {/* Transaction History Section */}
         <div className="bg-slate-900/40 border border-slate-800 rounded-[2rem] p-1 overflow-hidden">
-          <RecentTransactions
-            transactions={data.transactions}
-            isLoading={loading}
-          />
+          <RecentTransactions transactions={data.transactions} isLoading={loading} />
         </div>
       </main>
     </div>
   );
 }
-
