@@ -1,96 +1,73 @@
+// src/api/index.js
+import api from './apiService';
+
 /**
  * TRUSTRA CAPITAL TRADE - API LAYER ENTRY POINT
  * Finalized for 2026 Production Environment
  *
- * This file serves as the single public API surface for all backend communication.
- * All components/pages should ONLY import from this file — never directly from submodules.
- *
- * Usage example:
- *   import { login, getUserProfile, submitDeposit } from '@/api';
+ * Single public surface — all components MUST import only from here.
+ * Example: import { login, getUserBalance, getTransactions } from '@/api';
  */
 
 // ────────────────────────────────────────────────
-// 1. Core Engine (Axios instance + interceptors)
+// GENERIC HELPERS (normalize response to .data)
 // ────────────────────────────────────────────────
-/**
- * Pre-configured axios instance with:
- *  - Base URL from env
- *  - Bearer token injection
- *  - 401 → auto logout / refresh token logic
- *  - Request/response interceptors
- *  - Timeout & retry configuration
- */
-export { default as api } from './apiService';
+const withData = (promise) => promise.then(res => res.data);
 
 // ────────────────────────────────────────────────
-// 2. Authentication
+// AUTH
 // ────────────────────────────────────────────────
-export {
-  login,
-  register,
-  logout,
-  refreshToken,
-  forgotPassword,
-  resetPassword,
-  verifyEmail,
-  getCurrentUser,       // often used after login to hydrate auth context
-} from './auth';
+export const login = (credentials) => withData(api.post('/auth/login', credentials));
+
+export const register = (data) => withData(api.post('/auth/register', data));
 
 // ────────────────────────────────────────────────
-// 3. Financial Operations (Deposits, Withdrawals, History)
+// USER / PROFILE / BALANCE
 // ────────────────────────────────────────────────
-export {
-  createDeposit,
-  getDepositMethods,
-  getDepositHistory,
-  createWithdrawal,
-  getWithdrawalMethods,
-  getWithdrawalHistory,
-  getTransactionHistory,   // unified view (deposits + withdrawals + trades)
-  getUserBalance,
-} from './transactions';
+export const getUserBalance = () => withData(api.get('/user/me'));
+
+export const getUserInvestments = () => withData(api.get('/investments'));
+
+export const getInvestmentPlans = () => withData(api.get('/plans'));
 
 // ────────────────────────────────────────────────
-// 4. User / Investor Profile & KYC
+// TRANSACTIONS / DEPOSITS / WITHDRAWALS
 // ────────────────────────────────────────────────
-export {
-  getUserProfile,
-  updateUserProfile,
-  uploadKycDocument,
-  getKycStatus,
-  submitKycVerification,
-  getInvestmentPlans,
-  subscribeToPlan,
-  getUserSubscriptions,
-} from './user';
+export const getTransactions = () => withData(api.get('/transactions/my'));
+
+export const createDeposit = (data) => withData(api.post('/deposit', data));
+
+export const requestWithdrawal = (data) => withData(api.post('/transactions/withdraw', data));
 
 // ────────────────────────────────────────────────
-// 5. Admin / Management Endpoints
+// KYC
 // ────────────────────────────────────────────────
-export {
-  // User management
-  getAllUsers,
-  updateUserAdmin,
-  deleteUserAdmin,
+export const submitKyc = (formData) =>
+  withData(
+    api.post('/kyc', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  );
 
-  // KYC queue
-  getPendingKyc,
-  approveKyc,
-  rejectKyc,
-
-  // Platform stats & monitoring
-  getAdminStats,
-  getPlatformOverview,
-  getRecentTransactionsAdmin,
-} from './admin';
+export const getKycStatus = () => withData(api.get('/kyc/status'));
 
 // ────────────────────────────────────────────────
-// Optional: Type Exports (if using TypeScript)
+// ADMIN ENDPOINTS
 // ────────────────────────────────────────────────
-// export type {
-//   UserProfile,
-//   Transaction,
-//   DepositPayload,
-//   KycStatus,
-//   AdminStats,
-// } from './types';
+export const adminStats = () => withData(api.get('/admin/stats'));
+
+export const adminUsers = () => withData(api.get('/admin/users'));
+
+export const adminKyc = () => withData(api.get('/admin/kyc'));
+
+export const adminApproveKyc = (id) => withData(api.post(`/admin/kyc/${id}/approve`));
+
+export const adminGetAllTransactions = () => withData(api.get('/transactions/admin/all'));
+
+export const adminUpdateTransaction = (id, status) =>
+  withData(api.patch(`/admin/transactions/${id}`, { status }));
+
+// ────────────────────────────────────────────────
+// MARKET DATA (use backend proxy to avoid CORS)
+// ────────────────────────────────────────────────
+export const getBtcPrice = () => withData(api.get('/market/btc-price'));

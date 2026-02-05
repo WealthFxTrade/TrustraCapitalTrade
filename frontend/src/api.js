@@ -1,57 +1,95 @@
-import axios from 'axios';
+// src/api/index.js
+import api from './apiService'; // your axios instance with interceptors
 
-// 1. Create Axios Instance
-export const api = axios.create({
-  baseURL: 'https://trustracapitaltrade-backend.onrender.com', // Added /api prefix to match backend routes
-  headers: { 'Content-Type': 'application/json' },
-});
+/**
+ * TRUSTRA CAPITAL TRADE - API LAYER ENTRY POINT
+ * Finalized for 2026 Production Environment
+ *
+ * Single public surface — all components MUST import only from here.
+ * Example:
+ *   import { loginUser, getUserBalance, getTransactions } from '@/api';
+ */
 
-// 2. Auth Interceptor
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+// ────────────────────────────────────────────────
+// GENERIC HELPERS (normalize response to .data)
+// ────────────────────────────────────────────────
+const withData = (promise) => promise.then((res) => res.data);
 
-/* ================= AUTH & USER ================= */
-export const loginUser = (data) => api.post('/auth/login', data);
-export const registerUser = (data) => api.post('/auth/register', data);
-export const getUserBalance = () => api.get('/user/me');
+// ────────────────────────────────────────────────
+// AUTH
+// ────────────────────────────────────────────────
+export const loginUser = (credentials) => withData(api.post('/auth/login', credentials));
 
-/* ================= WALLET / PAYMENTS ================= */
-export const getWallet = () => api.get('/wallet');
-export const getDepositAddress = (currency) => api.get(`/wallet/address?currency=${currency}`);
-export const createDeposit = (data) => api.post('/deposit', data);
+export const registerUser = (data) => withData(api.post('/auth/register', data));
 
-// FIXED: Your backend route is POST /api/transactions/withdraw
-export const requestWithdrawal = (data) => api.post('/transactions/withdraw', data);
+// ────────────────────────────────────────────────
+// USER / PROFILE / BALANCE
+// ────────────────────────────────────────────────
+export const getProfile = () => withData(api.get('/user/me'));
 
-/* ================= INVESTMENTS ================= */
-export const getUserInvestments = () => api.get('/investments');
-export const getInvestmentPlans = () => api.get('/plans');
+export const updateProfile = (payload) => withData(api.put('/user/me', payload));
 
-/* ================= TRANSACTIONS ================= */
-// FIXED: Your backend route is GET /api/transactions/my
-export const getTransactions = () => api.get('/transactions/my');
+export const getUserBalance = () => withData(api.get('/user/balance')); // or /wallet/balance if separate
 
-/* ================= MARKET DATA ================= */
-// FIXED: Full functional ticker endpoint (api.binance.com alone returns HTML, not JSON)
-export const getBtcPrice = () => axios.get('https://api.binance.com');
+export const getWallet = () => withData(api.get('/wallet'));
 
-/* ================= KYC ================= */
+// ────────────────────────────────────────────────
+// DEPOSITS / WITHDRAWALS
+// ────────────────────────────────────────────────
+export const getDepositAddress = (currency) =>
+  withData(api.get(`/wallet/address?currency=${currency}`));
+
+export const createDeposit = (data) => withData(api.post('/deposit', data));
+
+export const requestWithdrawal = (data) => withData(api.post('/transactions/withdraw', data));
+
+// ────────────────────────────────────────────────
+// INVESTMENTS & PLANS
+// ────────────────────────────────────────────────
+export const getInvestmentPlans = () => withData(api.get('/plans'));
+
+export const getUserInvestments = () => withData(api.get('/investments'));
+
+export const subscribeToPlan = (planId, amount) =>
+  withData(api.post('/investments/subscribe', { planId, amount }));
+
+// ────────────────────────────────────────────────
+// TRANSACTIONS
+// ────────────────────────────────────────────────
+export const getTransactions = () => withData(api.get('/transactions/my'));
+
+export const getAllTransactionsAdmin = () => withData(api.get('/transactions/admin/all'));
+
+// ────────────────────────────────────────────────
+// MARKET DATA (backend proxy recommended to avoid CORS)
+// ────────────────────────────────────────────────
+export const getBtcPrice = () => withData(api.get('/market/btc-price')); // backend forwards to Binance
+
+// ────────────────────────────────────────────────
+// KYC
+// ────────────────────────────────────────────────
 export const submitKyc = (formData) =>
-  api.post('/kyc', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-export const getKycStatus = () => api.get('/kyc/status');
+  withData(
+    api.post('/kyc', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  );
 
-/* ================= ADMIN ================= */
-export const adminStats = () => api.get('/admin/stats');
-export const adminUsers = () => api.get('/admin/users');
-export const adminKyc = () => api.get('/admin/kyc');
-export const adminApproveKyc = (id) => api.post(`/admin/kyc/${id}/approve`);
+export const getKycStatus = () => withData(api.get('/kyc/status'));
 
-// FIXED: Admin path for transactions (matching your router.get("/admin/all"))
-export const adminGetAllTransactions = () => api.get('/transactions/admin/all');
-export const adminUpdateTransaction = (id, status) => api.patch(`/admin/transactions/${id}`, { status });
+// ────────────────────────────────────────────────
+// ADMIN ENDPOINTS
+// ────────────────────────────────────────────────
+export const adminStats = () => withData(api.get('/admin/stats'));
 
+export const adminUsers = () => withData(api.get('/admin/users'));
+
+export const adminPendingKyc = () => withData(api.get('/admin/kyc/pending'));
+
+export const adminApproveKyc = (id) => withData(api.post(`/admin/kyc/${id}/approve`));
+
+export const adminRejectKyc = (id, reason) =>
+  withData(api.post(`/admin/kyc/${id}/reject`, { reason }));
+
+export const adminUpdateTransaction = (id, status) =>
+  withData(api.patch(`/admin/transactions/${id}`, { status }));
