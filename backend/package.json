@@ -18,6 +18,7 @@
     "body-parser": "^2.2.2",
     "compression": "^1.7.5",
     "cors": "^2.8.6",
+    "crypto": "^1.0.1",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
     "express-async-handler": "^1.2.0",
@@ -26,6 +27,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.22.1",
     "morgan": "^1.10.1",
+    "node-cache": "^5.1.2",
     "node-cron": "^3.0.3",
     "tiny-secp256k1": "^2.2.4",
     "ws": "^8.19.0"

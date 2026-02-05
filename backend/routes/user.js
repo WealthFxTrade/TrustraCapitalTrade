@@ -1,125 +1,189 @@
+// /routes/user.js
 import express from 'express';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import NodeCache from 'node-cache';
 import User from '../models/User.js';
-import Transaction from '../models/Transaction.js';
+import { deriveBtcAddress } from '../utils/bitcoinUtils.js';
 import { protect } from '../middleware/auth.js';
+import { ApiError } from '../middleware/errorMiddleware.js';
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET;
+const cache = new NodeCache({ stdTTL: 60 }); // Cache balances for 60 seconds
 
-/** 
- * HELPER: Daily Profit Logic
- * Calculates ROI since last login/update for active plans.
- */
-const applyDailyProfits = async (user) => {
-  if (!user.plan || user.plan === 'None' || !user.dailyRate) return;
-
-  const now = new Date();
-  const lastUpdate = user.lastProfitUpdate ? new Date(user.lastProfitUpdate) : new Date(user.createdAt);
-  const diffMs = now - lastUpdate;
-  const daysElapsed = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (daysElapsed > 0) {
-    const profit = Number((user.balance * (user.dailyRate / 100) * daysElapsed).toFixed(2));
-
-    if (profit > 0) {
-      user.balance += profit;
-      user.lastProfitUpdate = now;
-
-      await Transaction.create({
-        user: user._id,
-        type: 'profit',
-        amount: profit,
-        status: 'completed',
-        description: `Daily yield accrual: ${user.plan}`,
-      });
-      await user.save();
-    }
-  }
+/* ---------------- UTILITY: Generate JWT ---------------- */
+const generateToken = (id, role) => {
+  return jwt.sign({ id, role }, JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  });
 };
 
-// @route   GET /api/user/me
-router.get('/me', protect, async (req, res) => {
+/* ---------------- REGISTER ---------------- */
+router.post('/register', async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    await applyDailyProfits(user);
-    res.json({
-      success: true,
-      user,
-      config: { btcWallet: process.env.BTC_WALLET_ADDRESS, minWithdraw: 10 }
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// @route   GET /api/user/balance
-router.get('/balance', protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id);
-    await applyDailyProfits(user);
-    res.json({ success: true, balance: user.balance, plan: user.plan, dailyRate: user.dailyRate });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Balance sync failed' });
-  }
-});
-
-// @route   GET /api/transactions/my
-router.get('/transactions/my', protect, async (req, res) => {
-  try {
-    const transactions = await Transaction.find({ user: req.user.id }).sort({ createdAt: -1 }).limit(50);
-    res.json({ success: true, transactions: transactions || [] });
-  } catch (err) {
-    res.status(500).json({ success: false, message: 'Could not retrieve ledger' });
-  }
-});
-
-/**
- * @route   GET /api/wallet/address
- * @desc    NEW: Generate/Retrieve deposit address for user
- */
-router.get('/wallet/address', protect, async (req, res) => {
-  try {
-    const { currency } = req.query; // BTC, ETH, USDT
-    
-    // In 2026, we pull the master wallet from .env for security
-    // Or you can implement a logic here to generate a unique sub-address
-    const masterWallet = process.env[`${currency}_WALLET_ADDRESS`] || process.env.BTC_WALLET_ADDRESS;
-
-    if (!masterWallet) {
-      return res.status(500).json({ success: false, message: `${currency} wallet not configured on server` });
+    const { fullName, email, password } = req.body;
+    if (!fullName || !email || !password) {
+      throw new ApiError(400, 'Full name, email, and password are required');
     }
 
-    res.json({
+    const emailLower = email.toLowerCase();
+    const existingUser = await User.findOne({ email: emailLower });
+    if (existingUser) throw new ApiError(409, 'Email already registered');
+
+    // Get next BTC index
+    const lastUser = await User.findOneAndUpdate(
+      {},
+      { $inc: { btcIndexCounter: 1 } },
+      { sort: { btcIndex: -1 }, upsert: true, new: true }
+    ).select('btcIndex');
+
+    const nextIndex = lastUser ? lastUser.btcIndex : 0;
+    const btcAddress = deriveBtcAddress(process.env.BITCOIN_XPUB, nextIndex);
+
+    const newUser = await User.create({
+      fullName,
+      email: emailLower,
+      password,
+      role: 'user',
+      btcIndex: nextIndex,
+      btcAddress,
+      balances: new Map([
+        ['BTC', 0],
+        ['USD', 0],
+        ['USDT', 0]
+      ]),
+      ledger: [],
+      plan: 'none',
+      isActive: true
+    });
+
+    res.status(201).json({
       success: true,
-      address: masterWallet,
-      currency: currency || 'BTC'
+      token: generateToken(newUser._id, newUser.role),
+      user: {
+        id: newUser._id,
+        fullName: newUser.fullName,
+        email: newUser.email,
+        btcAddress: newUser.btcAddress,
+        role: newUser.role,
+        balances: Object.fromEntries(newUser.balances)
+      }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Address generation failed' });
+    next(err);
   }
 });
 
-// @route   POST /api/user/withdraw
-router.post('/withdraw', protect, async (req, res) => {
-  const { amount, address } = req.body;
+/* ---------------- LOGIN ---------------- */
+router.post('/login', async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (user.balance < amount) return res.status(400).json({ success: false, message: 'Insufficient funds' });
-    user.balance -= Number(amount);
-    await user.save();
-    const tx = await Transaction.create({
-      user: user._id,
-      type: 'withdrawal',
-      amount: Number(amount),
-      status: 'pending',
-      btcAddress: address,
-      description: 'Withdrawal to external wallet',
+    const { email, password } = req.body;
+    if (!email || !password) throw new ApiError(400, 'Email and password required');
+
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    if (!user || !(await user.comparePassword(password))) {
+      throw new ApiError(401, 'Invalid credentials');
+    }
+
+    if (user.banned) throw new ApiError(403, 'Account suspended. Contact support.');
+
+    res.json({
+      success: true,
+      token: generateToken(user._id, user.role),
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        btcAddress: user.btcAddress,
+        balances: Object.fromEntries(user.balances),
+        plan: user.plan
+      }
     });
-    res.json({ success: true, message: 'Withdrawal request submitted', transaction: tx });
   } catch (err) {
-    res.status(500).json({ success: false, message: 'Withdrawal failed' });
+    next(err);
+  }
+});
+
+/* ---------------- FORGOT PASSWORD ---------------- */
+router.post('/forgot-password', async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) throw new ApiError(400, 'Email is required');
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (user) {
+      const token = crypto.randomBytes(32).toString('hex');
+      user.resetPasswordToken = token;
+      user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+      await user.save();
+
+      // TODO: Send reset link via email
+      // Example: `https://yourdomain.com/reset-password/${token}`
+    }
+
+    // Always return success to prevent email enumeration
+    res.json({
+      success: true,
+      message: 'If an account exists with this email, a reset link has been sent.'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ---------------- RESET PASSWORD ---------------- */
+router.post('/reset-password/:token', async (req, res, next) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 8) {
+      throw new ApiError(400, 'Password must be at least 8 characters long');
+    }
+
+    const user = await User.findOne({
+      resetPasswordToken: req.params.token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) throw new ApiError(400, 'Reset token is invalid or expired');
+
+    user.password = password; // hashed by pre-save hook
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ---------------- BALANCE ---------------- */
+router.get('/balance', protect, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const cachedBalances = cache.get(userId);
+    if (cachedBalances) {
+      return res.json({ success: true, data: cachedBalances, source: 'cache' });
+    }
+
+    const user = await User.findById(userId).select('balances');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    const balances = {
+      BTC: user.balances?.get('BTC') ?? 0,
+      USD: user.balances?.get('USD') ?? 0,
+      USDT: user.balances?.get('USDT') ?? 0
+    };
+
+    cache.set(userId, balances);
+    res.json({ success: true, data: balances, source: 'db' });
+  } catch (err) {
+    console.error('Balance Fetch Error:', err);
+    res.status(500).json({ success: false, message: 'Server error fetching balance' });
   }
 });
 
 export default router;
-

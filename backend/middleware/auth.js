@@ -1,4 +1,4 @@
-// backend/middleware/auth.js
+// /middleware/auth.js
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { ApiError } from './errorMiddleware.js';
@@ -22,15 +22,14 @@ export const protect = async (req, res, next) => {
     // 2. Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 3. Get user from database (exclude password and bulky ledger)
-    // We select 'isActive' and 'banned' to verify account status
+    // 3. Get user from database (exclude password and ledger)
     req.user = await User.findById(decoded.id).select('-password -ledger');
 
     if (!req.user) {
       return next(new ApiError(401, 'User associated with this token no longer exists'));
     }
 
-    // 4. Production Security: Check if user is banned or inactive
+    // 4. Production security checks
     if (req.user.banned) {
       return next(new ApiError(403, 'Account has been suspended. Please contact support.'));
     }
@@ -41,7 +40,6 @@ export const protect = async (req, res, next) => {
 
     next();
   } catch (err) {
-    // Handle specific JWT errors
     if (err.name === 'TokenExpiredError') {
       return next(new ApiError(401, 'Session expired, please login again'));
     }
@@ -59,4 +57,3 @@ export const admin = (req, res, next) => {
     next(new ApiError(403, 'Access denied. Admin privileges required.'));
   }
 };
-
