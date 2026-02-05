@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "trustra-capital-trade",
   "version": "1.0.0",
   "type": "module",
   "private": true,
@@ -31,3 +31,4 @@
     "tailwindcss": "^3.4.19"
   }
 }
+
