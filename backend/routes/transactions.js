@@ -1,9 +1,35 @@
 import express from 'express';
 import User from '../models/User.js';
-import { verifyToken } from '../middleware/auth.js';
+import { protect as verifyToken } from '../middleware/auth.js'; // Ensure this matches your middleware export
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 const router = express.Router();
+
+/**
+ * @route   GET /api/transactions/my
+ * @desc    NEW: Specific endpoint for the 2026 Dashboard Ledger Sync
+ * @access  Private
+ */
+router.get('/my', verifyToken, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('ledger');
+
+    if (!user) {
+      throw new ApiError(404, 'User not found');
+    }
+
+    // Sort transactions by date (newest first)
+    const sortedLedger = user.ledger.sort((a, b) => b.createdAt - a.createdAt);
+
+    res.status(200).json({
+      success: true,
+      count: sortedLedger.length,
+      data: sortedLedger
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * @route   GET /api/transactions
@@ -12,15 +38,9 @@ const router = express.Router();
  */
 router.get('/', verifyToken, async (req, res, next) => {
   try {
-    // 1. Fetch user and only select the ledger field
-    // We sort the ledger sub-documents in memory or use a slice if needed
     const user = await User.findById(req.user.id).select('ledger');
+    if (!user) throw new ApiError(404, 'User not found');
 
-    if (!user) {
-      throw new ApiError(404, 'User not found');
-    }
-
-    // 2. Sort transactions by date (newest first)
     const sortedLedger = user.ledger.sort((a, b) => b.createdAt - a.createdAt);
 
     res.status(200).json({
@@ -41,8 +61,6 @@ router.get('/', verifyToken, async (req, res, next) => {
 router.get('/:id', verifyToken, async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select('ledger');
-    
-    // Find the specific transaction in the user's ledger array
     const transaction = user.ledger.id(req.params.id);
 
     if (!transaction) {
