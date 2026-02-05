@@ -10,51 +10,54 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initializeAuth = async () => {
       const storedToken = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
 
-      if (storedToken) {
+      if (!storedToken) {
+        setLoading(false);
+        return;
+      }
+
+      // Pre-fill from localStorage to prevent "flash"
+      if (storedUser) {
         try {
-          // 1. RE-VALIDATE: Verify the token with the actual backend
-          // We use the full URL to ensure it reaches the Render server directly during init
-          const res = await fetch('https://trustracapitaltrade-backend.onrender.com', {
-            method: 'GET',
-            headers: { 
-              'Authorization': `Bearer ${storedToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (res.ok) {
-            const data = await res.json();
-            // Assuming your backend returns { user: { ... } }
-            setUser(data.user);
-            setToken(storedToken);
-            // Sync localStorage with fresh data from server
-            localStorage.setItem('user', JSON.stringify(data.user));
-          } else {
-            // Token is invalid or expired
-            throw new Error("Session expired");
-          }
-        } catch (error) {
-          console.error("Auth re-validation failed:", error);
+          setUser(JSON.parse(storedUser));
+          setToken(storedToken);
+        } catch (e) {
           localStorage.removeItem('user');
-          localStorage.removeItem('token');
-          setUser(null);
-          setToken(null);
         }
-      } else {
-        // No token found, just stop loading
+      }
+
+      try {
+        // CRITICAL: Point this to your actual profile or verify endpoint
+        // Fetching the base URL '/' returns HTML and crashes res.json()
+        const res = await fetch('https://trustracapitaltrade-backend.onrender.com', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${storedToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const userData = data.user || data; // Handle both nested and flat responses
+          setUser(userData);
+          setToken(storedToken);
+          localStorage.setItem('user', JSON.stringify(userData));
+        } else {
+          // If token is invalid (401/403), log out
+          logout();
+        }
+      } catch (error) {
+        console.error("Auth sync failed (server might be sleeping):", error);
+      } finally {
         setLoading(false);
       }
-      
-      // CRITICAL: Ensure loading is set to false after the try/catch
-      setLoading(false);
-    };
-
+    };                                               
     initializeAuth();
   }, []);
 
   const login = (userData, userToken) => {
-    if (!userData || !userToken) return;
     localStorage.setItem('user', JSON.stringify(userData));
     localStorage.setItem('token', userToken);
     setUser(userData);
@@ -62,11 +65,15 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
-    localStorage.clear();
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
     setUser(null);
     setToken(null);
-    window.location.href = '/login';
-  };
+    // Use a soft redirect to avoid immediate crash loops
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
+  };                                                 
 
   return (
     <AuthContext.Provider
@@ -80,19 +87,13 @@ export function AuthProvider({ children }) {
         isAdmin: user?.role === 'admin' || user?.role === 'superadmin',
       }}
     >
-      {/* 
-        This prevents Protected Routes from flashing or 
-        redirecting before we know if the user is logged in.
-      */}
       {!loading ? (
         children
       ) : (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-          <div className="relative">
-            <div className="h-16 w-16 border-t-2 border-b-2 border-indigo-500 rounded-full animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-8 w-8 bg-indigo-500/20 rounded-full animate-pulse"></div>
-            </div>
+          <div className="text-center">
+            <div className="h-12 w-12 border-t-2 border-indigo-500 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-500 animate-pulse text-xs uppercase tracking-widest">Verifying Session...</p>
           </div>
         </div>
       )}

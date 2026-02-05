@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createDeposit } from '../api';
-import { ArrowLeft, TrendingUp, ShieldCheck, Wallet, ChevronRight } from 'lucide-react';
+import { ArrowLeft, TrendingUp, ShieldCheck, Wallet, ChevronRight, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const RIO_PLANS = [
@@ -18,14 +18,13 @@ export default function Invest() {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Sync plan from Dashboard selection (if user clicked a specific plan there)
   useEffect(() => {
     const planId = localStorage.getItem('selectedPlan');
     if (planId) {
       const plan = RIO_PLANS.find(p => p.id === planId);
       if (plan) {
         setSelectedPlan(plan);
-        localStorage.removeItem('selectedPlan'); // Clear after use
+        localStorage.removeItem('selectedPlan');
       }
     }
   }, []);
@@ -43,16 +42,17 @@ export default function Invest() {
 
     setLoading(true);
     try {
-      // 1. We create the pending deposit record
-      const res = await createDeposit({ 
-        amount: numAmount, 
+      const res = await createDeposit({
+        amount: numAmount,
         planId: selectedPlan.id,
-        currency: 'BTC' // Defaulting to BTC for payment
+        currency: 'BTC'
       });
 
-      if (res.data.success) {
-        toast.success(`${selectedPlan.name} initialized! Redirecting to payment...`);
-        // 2. Redirect to Deposit page so they see the QR code
+      // Handling both direct data and nested axios data
+      const success = res.success || res.data?.success;
+      
+      if (success) {
+        toast.success(`${selectedPlan.name} initialized!`);
         navigate('/deposit', { state: { amount: numAmount, plan: selectedPlan.name } });
       }
     } catch (err) {
@@ -62,11 +62,13 @@ export default function Invest() {
     }
   };
 
-  // Helper to calculate profit based on highest ROI in range
   const calculateProfit = () => {
     if (!amount) return '0.00';
     const highRoi = parseFloat(selectedPlan.roi.split('–')[1]) || 0;
-    return (Number(amount) * (highRoi / 100)).toLocaleString(undefined, { minimumFractionDigits: 2 });
+    return (Number(amount) * (highRoi / 100)).toLocaleString(undefined, { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    });
   };
 
   return (
@@ -79,7 +81,7 @@ export default function Invest() {
             className="flex items-center gap-2 text-slate-400 hover:text-white transition group"
           >
             <ArrowLeft className="h-5 w-5 group-hover:-translate-x-1 transition" />
-            <span className="font-medium">Back to Dashboard</span>
+            <span className="font-medium text-sm">Dashboard</span>
           </button>
           <div className="flex items-center gap-2 bg-slate-900 px-4 py-2 rounded-full border border-slate-800">
             <ShieldCheck className="h-4 w-4 text-indigo-500" />
@@ -88,101 +90,90 @@ export default function Invest() {
         </div>
 
         <div className="text-center mb-12">
-          <h2 className="text-4xl font-extrabold mb-3 bg-gradient-to-r from-indigo-400 via-white to-slate-400 bg-clip-text text-transparent">
+          <h2 className="text-3xl md:text-4xl font-extrabold mb-3 bg-gradient-to-r from-indigo-400 via-white to-slate-400 bg-clip-text text-transparent">
             Capital Allocation Nodes
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">Select a node strategy to deploy your capital into the 2026 real-time trading liquidity pool.</p>
+          <p className="text-slate-500 max-w-xl mx-auto text-sm">Select a strategy to deploy liquidity into 2026 automated nodes.</p>
         </div>
 
         {/* Plan Selection Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-12">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-12">
           {RIO_PLANS.map(plan => (
             <div
               key={plan.id}
               onClick={() => setSelectedPlan(plan)}
-              className={`p-6 rounded-3xl border cursor-pointer transition-all duration-300 flex flex-col ${
+              className={`p-5 rounded-3xl border cursor-pointer transition-all duration-300 flex flex-col ${
                 selectedPlan.id === plan.id
-                  ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_20px_rgba(79,70,229,0.1)] scale-[1.02]'
+                  ? 'border-indigo-500 bg-indigo-500/10 scale-[1.02] shadow-xl shadow-indigo-900/20'
                   : 'border-slate-800 bg-slate-900/40 opacity-60 hover:opacity-100'
               }`}
             >
-              <h3 className={`font-bold text-[10px] uppercase tracking-widest mb-4 ${selectedPlan.id === plan.id ? 'text-indigo-400' : 'text-slate-500'}`}>
+              <h3 className={`font-bold text-[9px] uppercase tracking-widest mb-3 ${selectedPlan.id === plan.id ? 'text-indigo-400' : 'text-slate-500'}`}>
                 {plan.name}
               </h3>
-              <div className="flex items-baseline gap-1 mb-6">
-                <span className="text-3xl font-bold">{plan.roi}%</span>
-                <span className="text-[10px] font-bold text-slate-500">ROI</span>
+              <div className="flex items-baseline gap-1 mb-4">
+                <span className="text-2xl font-bold">{plan.roi}%</span>
+                <span className="text-[9px] font-bold text-slate-500">ROI</span>
               </div>
-              <div className="mt-auto space-y-1">
-                <p className="text-[10px] text-slate-400 font-bold">MIN: ${plan.min.toLocaleString()}</p>
-                <p className="text-[10px] text-slate-500 font-medium">MAX: {plan.max === Infinity ? 'UNLIMITED' : `$${plan.max.toLocaleString()}`}</p>
+              <div className="mt-auto">
+                <p className="text-[9px] text-slate-400 font-bold uppercase">Min: ${plan.min.toLocaleString()}</p>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Investment Execution Form */}
-        <div className="max-w-xl mx-auto bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 sm:p-12 shadow-2xl relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-indigo-600"></div>
-
-          <form onSubmit={handleInvestment} className="space-y-8">
-            <div className="flex items-center gap-4 p-5 bg-slate-950/50 rounded-2xl border border-slate-800/50">
-              <div className="p-3 bg-indigo-600/20 rounded-xl">
-                <TrendingUp className="h-6 w-6 text-indigo-500" />
+        {/* Execution Form */}
+        <div className="max-w-xl mx-auto bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 md:p-10 shadow-2xl relative">
+          <form onSubmit={handleInvestment} className="space-y-6">
+            <div className="flex items-center gap-4 p-4 bg-slate-950/50 rounded-2xl border border-slate-800">
+              <div className="p-3 bg-indigo-600/10 rounded-xl">
+                <TrendingUp className="h-5 w-5 text-indigo-500" />
               </div>
               <div>
-                <p className="text-[10px] text-slate-500 font-black uppercase tracking-tighter">Selected Node</p>
-                <p className="font-bold text-lg">{selectedPlan.name} <span className="text-indigo-500 ml-2">~{selectedPlan.roi}%</span></p>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Active Selector</p>
+                <p className="font-bold text-slate-100">{selectedPlan.name}</p>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex justify-between items-end px-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Investment Amount</label>
-                <span className="text-[10px] text-slate-600 font-mono">CURRENCY: USD</span>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center px-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">Amount (USD)</label>
+                <span className="text-[10px] text-indigo-400 font-mono">Limit: ${selectedPlan.min}+</span>
               </div>
               <div className="relative group">
-                <div className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 font-bold text-xl">$</div>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</div>
                 <input
                   type="number"
-                  required
-                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-5 pl-10 pr-4 text-white font-mono text-2xl focus:border-indigo-500 transition-all outline-none"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-8 pr-4 text-xl font-mono focus:border-indigo-500 outline-none transition-all"
+                  required
                 />
               </div>
             </div>
 
-            {/* Profit Projection */}
-            <div className="p-5 bg-slate-950/80 rounded-2xl border border-slate-800 flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                <span className="text-xs text-slate-500 font-medium">Est. Monthly Growth</span>
+            {/* Profit Calculator View */}
+            <div className="bg-emerald-500/5 border border-emerald-500/10 p-5 rounded-2xl flex justify-between items-center">
+              <div>
+                <p className="text-[10px] font-bold text-emerald-500 uppercase mb-1">Estimated Monthly ROI</p>
+                <p className="text-xl font-black text-emerald-400 font-mono">${calculateProfit()}</p>
               </div>
-              <span className="text-emerald-400 font-mono font-bold text-lg">
-                +${calculateProfit()}
-              </span>
+              <div className="text-right">
+                <p className="text-[9px] text-slate-500 uppercase">Risk Level</p>
+                <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Low-Volatility</p>
+              </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 py-5 rounded-2xl font-bold text-xl transition-all shadow-xl shadow-indigo-600/20 disabled:opacity-50 flex items-center justify-center gap-3 group"
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-2xl font-bold text-sm tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-900/30 active:scale-95"
             >
-              {loading ? (
-                <div className="h-6 w-6 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  Deploy Capital
-                  <ChevronRight className="h-5 w-5 group-hover:translate-x-1 transition" />
-                </>
+              {loading ? <Loader2 className="animate-spin" size={18} /> : (
+                <>DEPLOY CAPITAL <ChevronRight size={18} /></>
               )}
             </button>
-
-            <p className="text-center text-[10px] text-slate-600 font-medium">
-              By deploying, you agree to the node's term duration and risk management protocols.
-            </p>
           </form>
         </div>
       </div>

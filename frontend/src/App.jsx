@@ -1,16 +1,15 @@
-// src/App.jsx
 import React, { Suspense } from 'react';
-import {
-  Routes,
-  Route,
-  Navigate,
-  Outlet,
-  useLocation,
+import { 
+  Routes, 
+  Route, 
+  Navigate, 
+  Outlet, 
+  useLocation 
 } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { Toaster } from 'react-hot-toast';
 
-// Pages (consider lazy loading in production)
+// Pages
 import Landing from './components/Landing.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -34,26 +33,35 @@ function ProtectedLayout({ adminOnly = false }) {
     );
   }
 
+  // If no user is logged in, send to login
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  if (adminOnly && user.role !== 'admin') {
+  // Admin access control - supports 'admin' and 'superadmin'
+  const isAuthorized = user.role === 'admin' || user.role === 'superadmin';
+  if (adminOnly && !isAuthorized) {
     return <Navigate to="/dashboard" replace />;
   }
 
   return <Outlet />;
 }
 
-// ── Auth Guard (prevent logged-in users from seeing login/signup) ──
+// ── Auth Guard (Prevent logged-in users from seeing login/signup) ──
 function AuthGuard({ children }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) return null; // or spinner
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-500" />
+      </div>
+    );
+  }
 
   if (user) {
-    // Redirect to intended destination or dashboard
+    // If user is already logged in, send them away from Login/Signup/Landing
     const from = location.state?.from?.pathname || '/dashboard';
     return <Navigate to={from} replace />;
   }
@@ -69,7 +77,11 @@ export default function App() {
         position="top-right"
         toastOptions={{
           duration: 5000,
-          className: 'bg-slate-900 text-white border border-slate-700 shadow-xl',
+          style: {
+            background: '#0f172a',
+            color: '#fff',
+            border: '1px solid #1e293b',
+          },
         }}
       />
 
@@ -116,10 +128,11 @@ export default function App() {
             <Route path="/admin/withdrawals" element={<AdminWithdrawals />} />
           </Route>
 
-          {/* Fallback */}
+          {/* Fallback - Redirect to Landing */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </div>
   );
 }
+

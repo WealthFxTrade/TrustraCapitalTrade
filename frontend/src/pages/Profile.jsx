@@ -1,88 +1,62 @@
-// src/pages/Profile.jsx
 import { useState, useEffect } from 'react';
-import { getProfile, updateProfile } from '@/api/user';
+import { getProfile, updateProfile } from '../api'; // Adjusted to your main api file
+import { User, Mail, Phone, ShieldCheck, Loader2, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState({
-    name: '',
-    email: '',
-    phone: '',
-  });
-  const [originalProfile, setOriginalProfile] = useState(null); // for "discard changes" or dirty check
+  const [profile, setProfile] = useState({ name: '', email: '', phone: '', isVerified: false });
+  const [originalProfile, setOriginalProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Fetch profile once on mount
   useEffect(() => {
     let mounted = true;
-
     const fetchProfile = async () => {
       try {
         const data = await getProfile();
+        // Handle nested data if necessary: const userData = data.user || data;
         if (mounted) {
           setProfile(data);
           setOriginalProfile(data);
         }
       } catch (err) {
-        toast.error(err.message || 'Failed to load profile');
+        toast.error('Failed to load secure profile data');
       } finally {
         if (mounted) setLoading(false);
       }
     };
-
     fetchProfile();
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
-  // Detect form changes (for UX feedback)
   useEffect(() => {
     if (!originalProfile) return;
-
-    const changed =
-      profile.name !== originalProfile.name ||
-      profile.phone !== (originalProfile.phone || '');
-
+    const changed = profile.name !== originalProfile.name || profile.phone !== (originalProfile.phone || '');
     setHasChanges(changed);
   }, [profile, originalProfile]);
 
-  const handleChange = (field, value) => {
-    setProfile((prev) => ({ ...prev, [field]: value }));
-  };
+  const handleChange = (field, value) => setProfile((prev) => ({ ...prev, [field]: value }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Basic client-side validation
-    if (!profile.name.trim()) {
-      toast.error('Name is required');
-      return;
-    }
-
-    // Optional: phone format validation
+    if (!profile.name.trim()) return toast.error('Name is required');
     if (profile.phone && !/^\+?\d{7,15}$/.test(profile.phone)) {
-      toast.error('Please enter a valid phone number');
-      return;
+      return toast.error('Please enter a valid global phone format');
     }
 
     setUpdating(true);
-
     try {
       const updated = await updateProfile({
         name: profile.name.trim(),
         phone: profile.phone?.trim() || null,
       });
-
       setProfile(updated);
       setOriginalProfile(updated);
       setHasChanges(false);
-      toast.success('Profile updated successfully');
+      toast.success('Secure profile updated');
     } catch (err) {
-      toast.error(err.message || 'Failed to update profile');
+      toast.error(err.message || 'Update failed');
     } finally {
       setUpdating(false);
     }
@@ -92,113 +66,95 @@ export default function ProfilePage() {
     if (originalProfile) {
       setProfile(originalProfile);
       setHasChanges(false);
-      toast('Changes discarded');
+      toast('Changes reverted');
     }
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <div className="animate-spin h-12 w-12 border-t-4 border-indigo-500 rounded-full" />
+        <Loader2 className="animate-spin h-10 w-10 text-indigo-500" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-slate-950 text-white p-4 md:p-10 selection:bg-indigo-500/30">
       <div className="max-w-2xl mx-auto">
-        <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl p-6 sm:p-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <h1 className="text-2xl sm:text-3xl font-bold">Your Profile</h1>
+        <div className="bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-2xl p-6 sm:p-10 overflow-hidden relative">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-indigo-600/30" />
+          
+          <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-4">
+            <div>
+              <h1 className="text-3xl font-bold flex items-center gap-3">
+                <User className="text-indigo-500" /> Profile
+              </h1>
+              <p className="text-slate-500 text-xs mt-1">Manage your 2026 digital identity.</p>
+            </div>
             {hasChanges && (
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="text-sm text-slate-400 hover:text-slate-200 transition"
-              >
-                Discard changes
+              <button onClick={handleCancel} className="text-xs font-bold text-slate-400 hover:text-white transition uppercase tracking-widest">
+                Discard Changes
               </button>
             )}
-          </div>
+          </header>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Name */}
-            <div>
-              <label htmlFor="name" className="block text-sm text-slate-400 mb-2 font-medium">
-                Full Name
-              </label>
-              <input
-                id="name"
-                type="text"
-                value={profile.name}
-                onChange={(e) => handleChange('name', e.target.value)}
-                className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                placeholder="Enter your full name"
-                required
-                autoComplete="name"
-              />
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="space-y-6">
+              {/* Full Name */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Full Name</label>
+                <div className="relative group">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                  <input
+                    type="text"
+                    value={profile.name}
+                    onChange={(e) => handleChange('name', e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm focus:border-indigo-500 outline-none transition"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Email (read-only) */}
+              <div className="space-y-2 opacity-80">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-700" size={18} />
+                  <input
+                    type="email"
+                    value={profile.email}
+                    readOnly
+                    className="w-full bg-slate-900 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm cursor-not-allowed text-slate-500"
+                  />
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Phone Contact</label>
+                <div className="relative group">
+                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-indigo-500 transition-colors" size={18} />
+                  <input
+                    type="tel"
+                    value={profile.phone || ''}
+                    onChange={(e) => handleChange('phone', e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-sm focus:border-indigo-500 outline-none transition"
+                    placeholder="+234 ..."
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Email (read-only) */}
-            <div>
-              <label htmlFor="email" className="block text-sm text-slate-400 mb-2 font-medium">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={profile.email}
-                readOnly
-                className="w-full bg-slate-700/60 text-slate-300 border border-slate-600 rounded-lg px-4 py-3 cursor-not-allowed"
-                autoComplete="email"
-              />
-              <p className="mt-1 text-xs text-slate-500">
-                Email cannot be changed. Contact support if needed.
-              </p>
-            </div>
-
-            {/* Phone */}
-            <div>
-              <label htmlFor="phone" className="block text-sm text-slate-400 mb-2 font-medium">
-                Phone Number
-              </label>
-              <input
-                id="phone"
-                type="tel"
-                value={profile.phone || ''}
-                onChange={(e) => handleChange('phone', e.target.value)}
-                className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-                placeholder="+234 123 456 7890"
-                autoComplete="tel"
-              />
-            </div>
-
-            {/* Submit area */}
-            <div className="flex flex-col sm:flex-row gap-4 pt-4">
+            <div className="pt-4">
               <button
                 type="submit"
                 disabled={updating || !hasChanges}
-                className="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-indigo-900/30"
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:grayscale rounded-2xl font-bold text-sm tracking-widest flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-900/20 active:scale-95"
               >
-                {updating ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full" />
-                    Updating...
-                  </span>
-                ) : (
-                  'Save Changes'
+                {updating ? <Loader2 className="animate-spin" size={18} /> : (
+                  <><Save size={18} /> Save Profile Changes</>
                 )}
               </button>
-
-              {hasChanges && (
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold transition"
-                >
-                  Cancel
-                </button>
-              )}
             </div>
           </form>
         </div>
@@ -206,3 +162,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+
