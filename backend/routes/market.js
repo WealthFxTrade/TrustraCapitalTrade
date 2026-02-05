@@ -1,6 +1,7 @@
-const express = require('express');
+import express from 'express';
+import axios from 'axios';
+
 const router = express.Router();
-const axios = require('axios');
 
 // GET BTC price - Finalized for 2026 Production
 router.get('/btc-price', async (req, res) => {
@@ -18,13 +19,14 @@ router.get('/btc-price', async (req, res) => {
   } catch (err) {
     console.error('BTC price fetch error:', err.message);
     // Fallback price to prevent Dashboard "Failed to Sync" error
-    res.json({ 
-      success: true, 
-      price: "77494.00", 
-      note: "fallback node" 
+    res.json({
+      success: true,
+      price: "77494.00",
+      note: "fallback node"
     });
   }
 });
 
-module.exports = router;
+// CRITICAL: Use 'export default' instead of 'module.exports'
+export default router;
 
