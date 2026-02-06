@@ -1,8 +1,7 @@
-// backend/routes/userRoutes.js
 import express from 'express';
 const router = express.Router();
 
-// Import controllers (create userController.js with these functions)
+// Import controllers
 import {
   getUserProfile,
   updateUserProfile,
@@ -26,64 +25,49 @@ import { protect, admin } from '../middleware/authMiddleware.js';
 // Public / Authenticated User Routes
 // ────────────────────────────────────────────────
 
-// @route   GET /api/users/profile
-// @desc    Get logged-in user's profile
-// @access  Private
-router.route('/profile')
+/**
+ * @route   GET & PUT /api/user/me
+ * @desc    Get or Update logged-in user's profile
+ * FIX: Path changed from '/profile' to '/user/me' to match frontend
+ */
+router.route('/user/me')
   .get(protect, getUserProfile)
-  .put(protect, updateUserProfile);           // update own profile (name, email, etc.)
+  .put(protect, updateUserProfile);
 
-// @route   GET /api/users/balances
-// @desc    Get logged-in user's balances
-// @access  Private
-router.get('/balances', protect, getUserBalances);
+/**
+ * @route   GET /api/user/balance
+ * FIX: Path changed from '/balances' to '/user/balance' for frontend consistency
+ */
+router.get('/user/balance', protect, getUserBalances);
 
-// @route   GET /api/users/ledger
-// @desc    Get logged-in user's transaction ledger
-// @access  Private
-router.get('/ledger', protect, getUserLedger);
+/**
+ * @route   GET /api/transactions/my
+ * FIX: Path kept as '/transactions/my' to match your app.js mounting logic
+ */
+router.get('/transactions/my', protect, getUserLedger);
 
-// @route   POST /api/users/verify/resend
-// @desc    Resend email verification token
-// @access  Private (logged in but not verified)
+// Email Verification
 router.post('/verify/resend', protect, resendVerificationEmail);
-
-// @route   GET /api/users/verify/:token
-// @desc    Verify email with token
-// @access  Public (token-based)
 router.get('/verify/:token', verifyUserEmail);
 
 // ────────────────────────────────────────────────
-// Admin-only Routes
+// Admin-only Routes (Prefix remains /api/users via app.js)
 // ────────────────────────────────────────────────
 
 // @route   GET /api/users
-// @desc    Get all users (paginated, filtered)
-// @access  Admin
-router.route('/')
+router.route('/users')
   .get(protect, admin, getUsers);
 
-// @route   GET /api/users/:id
-// @desc    Get single user by ID
-// @access  Admin
-router.route('/:id')
+// @route   GET/PUT/DELETE /api/users/:id
+router.route('/users/:id')
   .get(protect, admin, getUserById)
-  .put(protect, admin, updateUser)             // update any user (role, plan, etc.)
-  .delete(protect, admin, deleteUser);         // delete user
+  .put(protect, admin, updateUser)
+  .delete(protect, admin, deleteUser);
 
-// @route   PUT /api/users/:id/balance
-// @desc    Admin manual balance adjustment
-// @access  Admin
-router.put('/:id/balance', protect, admin, updateUserBalance);
-
-// @route   PUT /api/users/:id/ban
-// @desc    Ban a user
-// @access  Admin
-router.put('/:id/ban', protect, admin, banUser);
-
-// @route   PUT /api/users/:id/unban
-// @desc    Unban a user
-// @access  Admin
-router.put('/:id/unban', protect, admin, unbanUser);
+// Admin Actions
+router.put('/users/:id/balance', protect, admin, updateUserBalance);
+router.put('/users/:id/ban', protect, admin, banUser);
+router.put('/users/:id/unban', protect, admin, unbanUser);
 
 export default router;
+

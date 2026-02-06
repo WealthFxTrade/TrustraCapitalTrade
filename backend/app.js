@@ -6,19 +6,19 @@ import morgan from 'morgan';
 
 // Route imports
 import authRoutes from './routes/auth.js';
-import userRoutes from './routes/user.js';
+import userRoutes from './routes/userRoutes.js'; // Ensure this matches your filename
 import planRoutes from './routes/plan.js';
 import marketRoutes from './routes/market.js';
 
 const app = express();
 
 /* --- 1. GLOBAL MIDDLEWARE --- */
-app.use(helmet()); 
-app.use(compression()); 
-app.use(express.json());
-app.use(morgan('dev')); // Essential: This will show you the BROKEN URL in your terminal
+app.use(helmet());
+app.use(compression());
+app.use(express.json()); // Parses incoming JSON for PUT requests
+app.use(morgan('dev'));  // Logs: PUT /api/user/me 200
 
-// CORS: Hardened for 2026 Production
+// CORS: Hardened for your Vercel frontend
 app.use(cors({
   origin: (origin, callback) => {
     const allowed = [
@@ -38,25 +38,24 @@ app.use(cors({
 /* --- 2. API ROUTE MOUNTING --- */
 
 // Health Check
-app.get('/', (req, res) => res.json({ 
-  success: true, 
-  message: "Trustra 2026 API Active" 
+app.get('/', (req, res) => res.json({
+  success: true,
+  message: "Trustra 2026 API Active"
 }));
 
 /**
  * MOUNTING STRATEGY
- * /api/auth/login
- * /api/user/me
- * /api/transactions/my
+ * Because your userRoutes.js uses paths like router.route('/user/me'),
+ * we mount the router at '/api' to produce: /api/user/me
  */
 app.use('/api/auth', authRoutes);
-app.use('/api', userRoutes); 
+app.use('/api', userRoutes);    // Handles /api/user/me AND /api/transactions/my
 app.use('/api/plans', planRoutes);
 app.use('/api/market', marketRoutes);
 
 /* --- 3. ERROR HANDLING --- */
 
-// FIXED: Using backticks (`) and ${} for dynamic string interpolation
+// Catch-all for undefined routes (the 404 error you saw)
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -66,11 +65,15 @@ app.use((req, res) => {
 
 // Global Error Middleware
 app.use((err, req, res, next) => {
-  console.error('SERVER_CRASH:', err.stack);
-  res.status(500).json({
+  // Use status code from error or default to 500
+  const statusCode = err.statusCode || 500;
+  console.error(`[SERVER_ERROR] ${statusCode}:`, err.stack);
+  
+  res.status(statusCode).json({
     success: false,
-    message: "Internal Server Error",
-    error: process.env.NODE_ENV === 'production' ? null : err.message
+    message: err.message || "Internal Server Error",
+    // Only show stack trace in development
+    stack: process.env.NODE_ENV === 'production' ? null : err.stack
   });
 });
 

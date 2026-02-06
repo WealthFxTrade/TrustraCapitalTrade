@@ -9,8 +9,6 @@ import User from '../models/User.js';
 export const protect = async (req, res, next) => {
   try {
     let token;
-
-    // 1. Extract token
     if (req.headers.authorization?.startsWith("Bearer ")) {
       token = req.headers.authorization.split(" ")[1];
     }
@@ -22,18 +20,10 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // 2. Verify token
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (err) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid or expired token",
-      });
-    }
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 3. Validate decoded payload
+    // Validate payload
     if (!decoded.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
       return res.status(401).json({
         success: false,
@@ -41,9 +31,7 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // 4. Fetch user (Check for .js extension in model import above)
     const user = await User.findById(decoded.id).select("-password");
-
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -51,7 +39,6 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // 5. Check account status (matching your User model fields)
     if (user.banned || !user.isActive) {
       return res.status(403).json({
         success: false,
@@ -59,20 +46,34 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // 6. Attach user to request
     req.user = user;
     next();
   } catch (error) {
-    console.error("AUTH MIDDLEWARE ERROR:", error);
-    return res.status(500).json({
+    console.error("AUTH MIDDLEWARE ERROR:", error.message);
+    return res.status(401).json({
       success: false,
-      message: "Authentication failed",
+      message: "Invalid or expired token",
     });
   }
 };
 
 /**
- * AUTHORIZE ROLES
+ * ADMIN ONLY MIDDLEWARE
+ * FIX: This specific export is required by your userRoutes.js
+ */
+export const admin = (req, res, next) => {
+  if (req.user && req.user.role === 'admin') {
+    next();
+  } else {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Admin permissions required.",
+    });
+  }
+};
+
+/**
+ * AUTHORIZE ROLES (Flexible version)
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
