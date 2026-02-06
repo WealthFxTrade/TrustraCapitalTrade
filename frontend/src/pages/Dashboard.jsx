@@ -1,167 +1,151 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import Chart from 'react-apexcharts';
-import { LogOut, RefreshCw, CreditCard, TrendingUp, ArrowUpRight, Wallet } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  LogOut, RefreshCw, CreditCard, TrendingUp, Wallet, 
+  LayoutDashboard, PieChart, History, ArrowRightLeft, 
+  Send, PlusCircle, Languages 
+} from 'lucide-react';
 import api from '../api/apiService';
-import { fetchBTCPrice } from '../api/market';
-import { fetchPlans } from '../api/plan';
 
 export default function Dashboard({ user, logout }) {
   const navigate = useNavigate();
-
   const [balance, setBalance] = useState(0);
-  const [totalProfit, setTotalProfit] = useState(0); // Added for 2026 Stats
+  const [totalProfit, setTotalProfit] = useState(0);
   const [plan, setPlan] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [btcPrice, setBtcPrice] = useState(77494);
-  const [plans, setPlans] = useState([]);
-  const [btcHistory, setBtcHistory] = useState([]);
-  const [portfolioHistory, setPortfolioHistory] = useState([]);
-
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      // 1. CALL THE STATS ENDPOINT (Matches your new backend logic)
-      const [statsRes, txRes, btcRes, plansRes] = await Promise.all([
+      const [statsRes, txRes] = await Promise.all([
         api.get('/user/dashboard'),
-        api.get('/transactions/my'),
-        fetchBTCPrice(),
-        fetchPlans()
+        api.get('/transactions/my')
       ]);
 
-      // 2. MAP THE 2026 STATS OBJECT
       if (statsRes.data.success) {
         const { stats } = statsRes.data;
-        setBalance(stats.mainBalance); // Fixes the $0.00 issue
-        setTotalProfit(stats.totalProfit);
+        setBalance(stats.mainBalance || 0);
+        setTotalProfit(stats.totalProfit || 0);
         setPlan(stats.activePlan);
       }
-
-      // 3. HANDLE TRANSACTIONS
       setTransactions(txRes.data.transactions || []);
-
-      // 4. HANDLE MARKET DATA
-      if (btcRes.success) {
-        const price = Number(btcRes.price);
-        setBtcPrice(price);
-        setBtcHistory(prev => [...prev, price].slice(-10));
-      }
-
-      if (plansRes.success) {
-        setPlans(plansRes.plans || []);
-        // Portfolio flux calculation based on actual balance
-        const flux = (balance || 1000) * (Number(btcRes.price) / 77000);
-        setPortfolioHistory(prev => [...prev, flux].slice(-10));
-      }
-
-      setError(null);
     } catch (err) {
-      console.error('Dashboard Sync Error:', err);
-      setError(err.message || 'Connecting to Trustra Nodes...');
+      console.error('Trustra Sync Error:', err);
     } finally {
       setLoading(false);
     }
-  }, [balance]);
+  }, []);
 
   useEffect(() => {
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 60000); // 60s Refresh
+    const interval = setInterval(fetchDashboardData, 60000); 
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
-
   if (loading && !balance) return (
-    <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+    <div className="min-h-screen bg-[#0a0d14] flex items-center justify-center">
       <RefreshCw className="h-10 w-10 text-indigo-500 animate-spin" />
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* HEADER */}
-      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 flex justify-between items-center h-16">
-          <span className="flex items-center space-x-2">
-            <TrendingUp className="h-8 w-8 text-indigo-500" />
-            <span className="text-xl font-bold tracking-tighter">TrustraCapital</span>
-          </span>
-          <div className="flex items-center gap-6">
-            <span className="hidden md:block text-sm text-gray-400">
-              {user?.fullName || 'Investor'}
-            </span>
-            <button onClick={handleLogout} className="text-gray-300 hover:text-red-400 transition flex items-center gap-2 text-sm font-bold">
-              <LogOut className="h-4 w-4" /> Logout
-            </button>
-          </div>
+    <div className="flex min-h-screen bg-[#0a0d14] text-white font-sans">
+      {/* SIDEBAR */}
+      <aside className="w-64 bg-[#0f121d] border-r border-gray-800 hidden lg:flex flex-col sticky top-0 h-screen">
+        <div className="p-6 border-b border-gray-800 flex items-center gap-2">
+          <TrendingUp className="h-6 w-6 text-indigo-500" />
+          <span className="font-bold text-lg tracking-tight">TrustraCapital</span>
         </div>
-      </header>
+        <nav className="flex-1 p-4 space-y-1 text-sm text-gray-400">
+          <Link to="/dashboard" className="flex items-center gap-3 p-3 bg-indigo-600/10 text-indigo-400 rounded-lg font-bold uppercase text-[11px] tracking-wider">
+            <LayoutDashboard size={18} /> DASHBOARD
+          </Link>
+          <Link to="/plans" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] tracking-wider">
+            <PieChart size={18} /> ALL SCHEMA
+          </Link>
+          <Link to="/logs" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] tracking-wider">
+            <History size={18} /> SCHEMA LOGS
+          </Link>
+          <div className="pt-6 pb-2 text-[10px] uppercase tracking-widest text-gray-600 px-3 font-bold">Payments</div>
+          <Link to="/deposit" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] tracking-wider">
+            <PlusCircle size={18} /> ADD MONEY
+          </Link>
+          <Link to="/wallet-exchange" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] tracking-wider">
+            <ArrowRightLeft size={18} /> WALLET EXCHANGE
+          </Link>
+        </nav>
+      </aside>
 
-      <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
-        {/* TOP STATS CARDS */}
-        <div className="grid md:grid-cols-3 gap-6">
-          <div className="md:col-span-2 bg-gradient-to-br from-indigo-600/20 to-transparent border border-indigo-500/30 rounded-3xl p-8">
-            <p className="text-indigo-400 text-xs font-bold uppercase tracking-widest mb-2">Available Balance</p>
-            <h2 className="text-5xl font-bold text-white mb-4">
-              ${balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </h2>
-            <div className="flex gap-4">
-              <button onClick={() => navigate('/deposit')} className="bg-indigo-600 hover:bg-indigo-500 px-6 py-2 rounded-xl text-sm font-bold transition flex items-center gap-2">
-                <CreditCard className="h-4 w-4" /> Deposit
-              </button>
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-16 border-b border-gray-800 bg-[#0f121d]/80 flex items-center justify-between px-8">
+          <div className="flex items-center gap-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+             <span className="bg-indigo-600 text-white h-5 w-5 flex items-center justify-center rounded-full text-[10px]">5</span>
+             <div className="flex items-center gap-1"><Languages size={14} /> English</div>
+          </div>
+          <button onClick={logout} className="text-gray-400 hover:text-red-400"><LogOut size={18} /></button>
+        </header>
+
+        <main className="p-8 space-y-8 max-w-6xl w-full mx-auto">
+          <h1 className="text-2xl font-bold">Account Balance</h1>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* MAIN WALLET */}
+            <div className="bg-[#161b29] border border-gray-800 rounded-2xl p-6 flex items-center justify-between shadow-lg">
+              <div>
+                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">Main Wallet</p>
+                <h3 className="text-3xl font-bold text-white">€{Number(balance).toLocaleString()}</h3>
+              </div>
+              <div className="h-12 w-12 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-500 border border-indigo-500/20">
+                <Wallet size={22} />
+              </div>
+            </div>
+
+            {/* PROFIT WALLET */}
+            <div className="bg-[#161b29] border border-gray-800 rounded-2xl p-6 flex items-center justify-between shadow-lg">
+              <div>
+                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-1">Profit Wallet</p>
+                <h3 className="text-3xl font-bold text-green-400">€{Number(totalProfit).toLocaleString()}</h3>
+              </div>
+              <div className="h-12 w-12 bg-green-500/10 rounded-xl flex items-center justify-center text-green-500 border border-green-500/20">
+                <TrendingUp size={22} />
+              </div>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6">
-              <p className="text-gray-500 text-xs font-bold uppercase mb-2">Active Plan</p>
-              <p className="text-2xl font-bold text-white">{plan || 'None'}</p>
-            </div>
-            <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6">
-              <p className="text-gray-500 text-xs font-bold uppercase mb-2">Total ROI Profit</p>
-              <p className="text-2xl font-bold text-green-400">+${totalProfit.toLocaleString()}</p>
-            </div>
+          <div className="flex gap-4">
+            <button onClick={() => navigate('/deposit')} className="flex-1 bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold text-xs tracking-widest uppercase transition">Deposit</button>
+            <button onClick={() => navigate('/plans')} className="flex-1 bg-[#161b29] border border-gray-800 hover:bg-gray-800 py-4 rounded-xl font-bold text-xs tracking-widest uppercase transition">Invest Now</button>
           </div>
-        </div>
 
-        {/* LEDGER TABLE */}
-        <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6">
-          <h3 className="font-bold text-lg mb-6 flex items-center gap-2">
-            <Wallet className="h-5 w-5 text-indigo-500" /> Recent Activity
-          </h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="text-xs text-gray-500 uppercase border-b border-gray-800">
+          {/* TABLE */}
+          <div className="bg-[#161b29] border border-gray-800 rounded-2xl overflow-hidden">
+            <div className="p-5 border-b border-gray-800 font-bold text-sm tracking-widest uppercase text-gray-400">Recent Activity</div>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[#0f121d] text-[10px] text-gray-500 uppercase">
                 <tr>
-                  <th className="pb-4">Type</th>
-                  <th className="pb-4">Amount</th>
-                  <th className="pb-4">Status</th>
+                  <th className="px-6 py-4">Type</th>
+                  <th className="px-6 py-4">Amount</th>
+                  <th className="px-6 py-4 text-right">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
-                {transactions.map((tx, idx) => (
-                  <tr key={idx} className="group">
-                    <td className="py-4 font-medium capitalize">{tx.type}</td>
-                    <td className={`py-4 font-bold ${tx.type === 'deposit' || tx.type === 'roi_profit' ? 'text-green-400' : 'text-red-400'}`}>
-                      {tx.type === 'deposit' || tx.type === 'roi_profit' ? '+' : '-'}${Number(tx.amount).toLocaleString()}
+                {transactions.slice(0, 5).map((tx, i) => (
+                  <tr key={i} className="hover:bg-gray-800/20 transition">
+                    <td className="px-6 py-4 capitalize font-medium">{tx.type.replace('_', ' ')}</td>
+                    <td className={`px-6 py-4 font-bold ${['deposit', 'roi_profit'].includes(tx.type) ? 'text-green-400' : 'text-red-400'}`}>
+                      {['deposit', 'roi_profit'].includes(tx.type) ? '+' : '-'}€{tx.amount}
                     </td>
-                    <td className="py-4 text-xs">
-                      <span className={`px-3 py-1 rounded-full ${tx.status === 'completed' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
-                        {tx.status}
-                      </span>
+                    <td className="px-6 py-4 text-right">
+                      <span className="text-[10px] font-bold uppercase px-2 py-1 bg-gray-800 rounded text-gray-400">{tx.status}</span>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

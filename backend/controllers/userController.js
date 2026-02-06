@@ -2,13 +2,51 @@ import User from '../models/User.js';
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * @desc    Get user profile - REQUIRED BY ROUTER
+ * @desc    Get dashboard stats for TrustraCapitalTrade
+ * Maps Main Wallet and calculates Profit Wallet from ledger
+ */
+export const getUserDashboard = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('balances plan ledger isPlanActive').lean();
+    if (!user) throw new ApiError(404, 'User not found');
+
+    // 1. Handle Balances (Convert Map to Object if necessary)
+    const balances = user.balances instanceof Map 
+      ? Object.fromEntries(user.balances) 
+      : (user.balances || {});
+
+    // 2. Calculate Profit Wallet
+    // Sums all entries where type is profit-related
+    const totalProfit = (user.ledger || [])
+      .filter(entry => 
+        entry.type === 'roi_profit' || 
+        entry.type === 'interest' || 
+        entry.type === 'referral_bonus'
+      )
+      .reduce((acc, entry) => acc + (Number(entry.amount) || 0), 0);
+
+    // 3. Response structured for the new Dashboard UI
+    res.json({
+      success: true,
+      stats: { 
+        mainBalance: balances.USD || 0,        // Appears in "Main Wallet"
+        totalProfit: totalProfit,              // Appears in "Profit Wallet"
+        activePlan: user.plan || 'No Active Schema' 
+      }
+    });
+  } catch (err) { 
+    next(err); 
+  }
+};
+
+/**
+ * @desc    Get user profile 
  */
 export const getUserProfile = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select('-password').lean();
     if (!user) throw new ApiError(404, 'User not found');
-    
+
     const balances = user.balances instanceof Map
       ? Object.fromEntries(user.balances)
       : (user.balances || { BTC: 0, USD: 0, USDT: 0 });
@@ -18,7 +56,7 @@ export const getUserProfile = async (req, res, next) => {
 };
 
 /**
- * @desc    Update user profile - REQUIRED BY ROUTER
+ * @desc    Update user profile
  */
 export const updateUserProfile = async (req, res, next) => {
   try {
@@ -33,51 +71,55 @@ export const updateUserProfile = async (req, res, next) => {
 };
 
 /**
- * @desc    Get dashboard stats
- */
-export const getUserDashboard = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id).select('balances plan ledger isPlanActive').lean();
-    const balances = user.balances instanceof Map ? Object.fromEntries(user.balances) : user.balances;
-    const totalProfit = (user.ledger || []).filter(e => e.type === 'roi_profit').reduce((a, b) => a + b.amount, 0);
-    
-    res.json({
-      success: true,
-      stats: { mainBalance: balances.USD || 0, totalProfit, activePlan: user.plan || 'None' }
-    });
-  } catch (err) { next(err); }
-};
-
-/**
- * @desc    Admin: Approve Deposit - REQUIRED BY ROUTER
+ * @desc    Admin: Approve Deposit
  */
 export const approveDeposit = async (req, res, next) => {
   try {
     const { userId, transactionId } = req.body;
     const user = await User.findById(userId);
+    if (!user) throw new ApiError(404, 'User not found');
+
     const transaction = user.ledger.id(transactionId);
-    if (!transaction || transaction.status !== 'pending') throw new ApiError(400, 'Invalid Transaction');
-    
+    if (!transaction || transaction.status !== 'pending') {
+      throw new ApiError(400, 'Invalid or already processed transaction');
+    }
+
+    // Update Transaction Status
     transaction.status = 'completed';
-    user.balances.set('USD', (user.balances.get('USD') || 0) + transaction.amount);
+
+    // Credit the Main Wallet (USD)
+    const currentBalance = user.balances.get('USD') || 0;
+    user.balances.set('USD', currentBalance + Number(transaction.amount));
+
     await user.save();
-    res.json({ success: true, message: 'Deposit Approved' });
+    res.json({ success: true, message: 'Deposit Approved & Main Wallet Credited' });
   } catch (err) { next(err); }
 };
 
-// --- REMAINING EXPORTS TO SATISFY ROUTER ---
-export const getUsers = async (req, res, next) => {
-  const users = await User.find({}).select('-password').sort('-createdAt');
-  res.json({ success: true, users });
+/**
+ * @desc    Get User Ledger / Transactions
+ */
+export const getUserLedger = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('ledger').lean();
+    // Return ledger as "transactions" for frontend compatibility
+    res.json({ success: true, transactions: user.ledger || [] });
+  } catch (err) { next(err); }
 };
-export const getUserBalances = async (req, res, next) => {
+
+// --- REMAINING EXPORTS FOR ROUTER COMPATIBILITY ---
+export const getUsers = async (req, res, next) => {
+  try {
+    const users = await User.find({}).select('-password').sort('-createdAt');
+    res.json({ success: true, users });
+  } catch (err) { next(err); }
+};
+
+export const getUserBalances = async (req, res) => {
   const user = await User.findById(req.user.id).select('balances').lean();
   res.json({ success: true, balances: user.balances });
 };
-export const getUserLedger = async (req, res, next) => {
-  const user = await User.findById(req.user.id).select('ledger').lean();
-  res.json({ success: true, transactions: user.ledger });
-};
+
 export const getUserById = async (req, res) => res.json({ success: true });
 export const updateUser = async (req, res) => res.json({ success: true });
 export const deleteUser = async (req, res) => res.json({ success: true });
