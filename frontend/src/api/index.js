@@ -2,7 +2,7 @@ import api from './apiService';
 
 /**
  * TRUSTRA CAPITAL TRADE - API LAYER ENTRY POINT
- * Corrected & hardened for 2026 production.
+ * Corrected endpoints to match backend routes (mounted at /api/user)
  */
 
 const withData = (promise) => promise.then((res) => res.data);
@@ -16,13 +16,13 @@ export const registerUser = (data) =>
 
 // --- USER / PROFILE / BALANCE ---
 export const getProfile = (config = {}) =>
-  withData(api.get('/user/me', config));
+  withData(api.get('/user/profile', config));          // ← FIXED: /user/profile (not /user/me)
 
 export const updateProfile = (payload, config = {}) =>
-  withData(api.put('/user/me', payload, config));
+  withData(api.patch('/user/profile', payload, config));  // ← FIXED: PATCH + /user/profile (not PUT /user/me)
 
 export const getUserBalance = (config = {}) =>
-  withData(api.get('/user/balance', config));
+  withData(api.get('/user/balance', config));         // already correct
 
 export const getWallet = (config = {}) =>
   withData(api.get('/wallet', config));
@@ -39,7 +39,7 @@ export const requestWithdrawal = (data, config = {}) =>
 
 // --- TRANSACTIONS ---
 export const getTransactions = (config = {}) =>
-  withData(api.get('/transactions/my', config));
+  withData(api.get('/user/transactions/my', config));  // ← FIXED: added /user/ prefix to match mount
 
 // --- INVESTMENTS & PLANS ---
 export const getInvestmentPlans = (config = {}) =>

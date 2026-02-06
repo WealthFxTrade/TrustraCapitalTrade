@@ -13,12 +13,12 @@ import { errorHandler } from './middleware/errorMiddleware.js';
 const app = express();
 
 /* --- 1. GLOBAL MIDDLEWARE --- */
-app.use(helmet()); // Protects against common web vulnerabilities
-app.use(compression()); // Makes API responses smaller and faster
+app.use(helmet());                        // Protects against common web vulnerabilities
+app.use(compression());                   // Makes API responses smaller and faster
 app.use(express.json({ limit: '10kb' })); // Security: limits JSON payload size
-app.use(morgan('dev')); // Logs requests to Render console for debugging
+app.use(morgan('dev'));                   // Logs requests to Vercel/Render console for debugging
 
-// CORS Configuration: Hardened for Vercel
+// CORS Configuration: Hardened for Vercel + local dev
 app.use(cors({
   origin: (origin, callback) => {
     const allowed = [
@@ -38,21 +38,16 @@ app.use(cors({
 
 /* --- 2. API ROUTE MOUNTING --- */
 
-// Health Check (Used by Render to monitor your app)
-app.get('/', (req, res) => res.json({ 
-  success: true, 
-  message: "Trustra 2026 API Active" 
+// Health Check (Used by hosting platforms to monitor your app)
+app.get('/', (req, res) => res.json({
+  success: true,
+  message: "Trustra 2026 API Active"
 }));
 
-/**
- * DUAL MOUNTING STRATEGY
- * Handles:
- * /api/user/profile
- * /api/user/balance
- * /api/transactions/my
- */
-app.use('/api/user', userRoutes); 
-app.use('/api', userRoutes); 
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+
+// → Single, clean mounting of user routes (no duplication)
+app.use('/api/user', userRoutes);
 
 // Additional Routes
 app.use('/api/plans', planRoutes);
@@ -64,7 +59,7 @@ app.use('/api/market', marketRoutes);
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route not found: ${req.method} ${req.originalUrl}`
+    message: `Route not found: \( {req.method} \){req.originalUrl}`
   });
 });
 
@@ -72,4 +67,3 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 export default app;
-
