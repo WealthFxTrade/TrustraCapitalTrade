@@ -1,36 +1,29 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-const ledgerSchema = new mongoose.Schema({
-  amount: { type: Number, required: true },
-  signedAmount: { type: Number, required: true },
-  currency: { type: String, required: true, uppercase: true },
-  type: {
-    type: String,
-    enum: ['deposit', 'withdrawal', 'profit', 'bonus', 'referral', 'adjustment'],
-    required: true,
-  },
-  status: { type: String, enum: ['pending', 'completed', 'failed'], default: 'completed' },
-  description: { type: String, trim: true },
-}, { timestamps: true });
-
 const userSchema = new mongoose.Schema({
   fullName: { type: String, required: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true, index: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true, select: false },
-  phone: { type: String, default: '' }, // Required for Profile Dashboard
+  phone: { type: String, default: '' }, // REQUIRED for Profile UI
   role: { type: String, default: 'user' },
   plan: { type: String, default: 'none' },
   balances: {
     type: Map,
     of: Number,
-    default: { BTC: 0, USD: 0, USDT: 0 },
+    default: { BTC: 0, USD: 0, USDT: 0 }
   },
   btcAddress: { type: String, unique: true, sparse: true },
   btcIndex: { type: Number, default: 0 },
-  ledger: [ledgerSchema],
+  ledger: [{
+    amount: Number,
+    currency: String,
+    type: String,
+    status: { type: String, default: 'completed' },
+    createdAt: { type: Date, default: Date.now }
+  }],
   isActive: { type: Boolean, default: true },
-  banned: { type: Boolean, default: false },
+  banned: { type: Boolean, default: false }
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {
