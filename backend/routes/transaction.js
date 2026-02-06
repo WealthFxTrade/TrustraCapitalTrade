@@ -1,142 +1,53 @@
-import express from "express";
-import mongoose from "mongoose";
-
-import User from "../models/User.js";
-import Transaction from "../models/Transaction.js";
-
-import { protect, authorize } from "../middleware/authMiddleware.js";
-import { ApiError } from "../middleware/errorMiddleware.js";
+import express from 'express';
+import { protect } from '../middleware/authMiddleware.js';
+import User from '../models/User.js';
+import { ApiError } from '../middleware/errorMiddleware.js';
 
 const router = express.Router();
 
-/**
- * ----------------------------------------
- * POST /api/transactions/withdraw
- * ----------------------------------------
- * User withdrawal (atomic, safe)
- */
-router.post("/withdraw", protect, async (req, res, next) => {
-  const session = await mongoose.startSession();
+// @route   POST /api/transactions/deposit
+// @desc    Get deposit instructions and log pending intent
+router.post('/deposit', protect, async (req, res) => {
+  const { amount, currency } = req.body;
+  
+  // Static admin wallet (In 2026, use a dynamic gateway API like BVNK for automation)
+  const depositAddress = "bc1qj4epwlwdzxsst0xeevulxxazcxx5fs64eapxvq";
 
-  try {
-    session.startTransaction();
+  req.user.ledger.push({
+    amount,
+    currency,
+    type: 'deposit',
+    status: 'pending', // Awaiting admin confirmation
+    description: `Awaiting payment to ${depositAddress}`
+  });
 
-    const { amount, currency, referenceId } = req.body;
-
-    if (!amount || amount <= 0 || !currency) {
-      throw new ApiError(400, "Amount and currency are required");
-    }
-
-    // Idempotency / replay protection
-    if (referenceId) {
-      const exists = await Transaction.findOne({ referenceId });
-      if (exists) {
-        throw new ApiError(409, "Duplicate withdrawal request");
-      }
-    }
-
-    const user = await User.findById(req.user._id).session(session);
-    if (!user) throw new ApiError(404, "User not found");
-
-    const currentBalance = user.balances.get(currency) || 0;
-    if (currentBalance < amount) {
-      throw new ApiError(400, `Insufficient ${currency} balance`);
-    }
-
-    // Deduct balance
-    user.balances.set(currency, currentBalance - amount);
-
-    // Ledger entry
-    user.ledger.push({
-      amount,
-      signedAmount: -amount,
-      currency,
-      type: "withdrawal",
-      source: "user_withdrawal",
-      referenceId,
-      status: "pending",
-      description: `Withdrawal of ${amount} ${currency}`,
-    });
-
-    await user.save({ session });
-
-    // Create transaction record
-    await Transaction.create(
-      [
-        {
-          user: user._id,
-          type: "withdrawal",
-          amount,
-          currency,
-          status: "pending",
-          referenceId,
-          initiatedBy: "user",
-          ip: req.ip,
-        },
-      ],
-      { session }
-    );
-
-    await session.commitTransaction();
-
-    res.json({
-      success: true,
-      message: "Withdrawal request submitted",
-      balances: user.balances,
-    });
-  } catch (err) {
-    await session.abortTransaction();
-    next(err);
-  } finally {
-    session.endSession();
-  }
+  await req.user.save();
+  res.json({ success: true, address: depositAddress, amount });
 });
 
-/**
- * ----------------------------------------
- * GET /api/transactions/my
- * ----------------------------------------
- * User transaction history
- */
-router.get("/my", protect, async (req, res, next) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+// @route   POST /api/transactions/withdraw
+// @desc    Submit a withdrawal request
+router.post('/withdraw', protect, async (req, res) => {
+  const { amount, walletAddress, currency } = req.body;
+  const user = await User.findById(req.user.id);
 
-    const transactions = await Transaction.find({ user: req.user._id })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
+  const available = user.balances.get('USD') || 0;
+  if (amount > available) throw new ApiError(400, "Insufficient balance");
 
-    res.json({ success: true, transactions });
-  } catch (err) {
-    next(err);
-  }
+  // Deduct immediately to prevent double-spending
+  user.balances.set('USD', available - amount);
+  
+  user.ledger.push({
+    amount,
+    currency,
+    type: 'withdrawal',
+    status: 'pending',
+    description: `Withdrawal to ${walletAddress}`
+  });
+
+  await user.save();
+  res.json({ success: true, message: "Withdrawal request submitted" });
 });
-
-/**
- * ----------------------------------------
- * ADMIN: GET ALL TRANSACTIONS
- * ----------------------------------------
- */
-router.get(
-  "/admin/all",
-  protect,
-  authorize("admin", "superadmin"),
-  async (req, res, next) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-
-      const transactions = await Transaction.find()
-        .populate("user", "email fullName")
-        .sort({ createdAt: -1 })
-        .limit(limit)
-        .lean();
-
-      res.json({ success: true, transactions });
-    } catch (err) {
-      next(err);
-    }
-  }
-);
 
 export default router;
+
