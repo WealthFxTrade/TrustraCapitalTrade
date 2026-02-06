@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { TrendingUp, Star, CheckCircle, ArrowRight } from 'lucide-react';
+import { TrendingUp, Star, CheckCircle, ArrowRight, Mail, Phone, MapPin } from 'lucide-react';
 
 import { landingHero, investmentPlans, testimonials, footer } from '../data/landingData';
 import { useBtcPrice } from '../hooks/useBtcPrice';
@@ -120,20 +120,44 @@ export default function Landing() {
         </section>
       </main>
 
-      {/* Footer with Risk Warning */}
-      <footer className="bg-slate-900 border-t border-slate-800 py-20 px-4 text-center">
-        <div className="flex items-center justify-center gap-2 mb-8 opacity-40">
-          <TrendingUp className="h-5 w-5 text-indigo-500" />
-          <span className="font-bold text-sm tracking-widest uppercase">Trustra Capital Trade</span>
-        </div>
-        <p className="text-slate-500 text-xs mb-8">{footer.copyright}</p>
+      {/* Corporate Footer */}
+      <footer className="bg-slate-900 border-t border-slate-800 py-16 px-4">
+        <div className="max-w-7xl mx-auto flex flex-col items-center">
+          
+          {/* Contact Info Block */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12 w-full text-left md:text-center border-b border-slate-800/50 pb-12">
+            <div className="flex flex-col items-start md:items-center gap-2">
+              <Mail className="h-5 w-5 text-indigo-500" />
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Email Support</p>
+              <a href={`mailto:${footer.email}`} className="text-sm text-slate-300 hover:text-indigo-400 transition">{footer.email}</a>
+            </div>
+            <div className="flex flex-col items-start md:items-center gap-2">
+              <Phone className="h-5 w-5 text-indigo-500" />
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Phone Line</p>
+              <a href={`tel:${footer.phone}`} className="text-sm text-slate-300 hover:text-indigo-400 transition">{footer.phone}</a>
+            </div>
+            <div className="flex flex-col items-start md:items-center gap-2">
+              <MapPin className="h-5 w-5 text-indigo-500" />
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Global HQ</p>
+              <p className="text-sm text-slate-300">{footer.location}</p>
+            </div>
+          </div>
 
-        <div className="max-w-2xl mx-auto p-5 border border-slate-800/40 rounded-xl bg-slate-950/40">
-          <p className="text-[9px] text-slate-500 uppercase tracking-[0.2em] leading-loose">
-            {footer.riskWarning}
-          </p>
+          <div className="flex items-center justify-center gap-2 mb-4 opacity-40">
+            <TrendingUp className="h-5 w-5 text-indigo-500" />
+            <span className="font-bold text-sm tracking-widest uppercase italic">Trustra Capital Trade</span>
+          </div>
+          
+          <p className="text-slate-500 text-[10px] mb-8">{footer.copyright}</p>
+
+          <div className="max-w-2xl mx-auto p-5 border border-slate-800/40 rounded-xl bg-slate-950/40">
+            <p className="text-[9px] text-slate-600 uppercase tracking-[0.2em] leading-loose text-center">
+              {footer.riskWarning}
+            </p>
+          </div>
         </div>
       </footer>
     </div>
   );
 }
+

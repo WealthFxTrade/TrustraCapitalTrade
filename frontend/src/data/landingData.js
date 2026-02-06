@@ -36,7 +36,7 @@ export const investmentPlans = [
     name: "Rio Elite",
     range: "$50,000+",
     returns: "20%–25% Monthly",
-    highlight: true, // Used to trigger special styling in the UI
+    highlight: true, 
   },
 ];
 
@@ -69,6 +69,9 @@ export const testimonials = [
 ];
 
 export const footer = {
+  email: "Managementcare2@gmail.com",
+  phone: "+1 (878) 224-1625",
+  location: "One World Trade Center, Suite 85, New York, NY",
   copyright: "© 2016–2026 TrustraCapitalTrade. All Rights Reserved.",
   riskWarning: "Risk Warning: Trading cryptocurrencies involves significant risk. Invest responsibly and only what you can afford to lose.",
 };
