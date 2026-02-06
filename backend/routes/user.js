@@ -9,7 +9,7 @@ import { ApiError } from '../middleware/errorMiddleware.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
-const cache = new NodeCache({ stdTTL: 60 }); // Cache for 60 seconds
+const cache = new NodeCache({ stdTTL: 60 });
 
 /* ---------------- UTILITY: Generate JWT ---------------- */
 const generateToken = (id, role) => {
@@ -30,7 +30,6 @@ router.post('/register', async (req, res, next) => {
     const existingUser = await User.findOne({ email: emailLower });
     if (existingUser) throw new ApiError(409, 'Email already registered');
 
-    // Ensure unique BTC index using atomic increment
     const lastUser = await User.findOneAndUpdate(
       {},
       { $inc: { btcIndexCounter: 1 } },
@@ -43,15 +42,11 @@ router.post('/register', async (req, res, next) => {
     const newUser = await User.create({
       fullName,
       email: emailLower,
-      password, // hashed via pre-save hook in User model
+      password,
       role: 'user',
       btcIndex: nextIndex,
       btcAddress,
-      balances: new Map([
-        ['BTC', 0],
-        ['USD', 0],
-        ['USDT', 0]
-      ]),
+      balances: new Map([['BTC', 0], ['USD', 0], ['USDT', 0]]),
       ledger: [],
       plan: 'none',
       isActive: true
@@ -105,21 +100,61 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
+/* ---------------- PROFILE (NEW: Fixes Digital Identity Error) ---------------- */
+router.get('/profile', protect, async (req, res, next) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    const user = await User.findById(userId).select('-password');
+    if (!user) throw new ApiError(404, 'User not found');
+
+    res.json({
+      success: true,
+      user: {
+        fullName: user.fullName,
+        email: user.email,
+        phone: user.phone || '',
+        btcAddress: user.btcAddress,
+        role: user.role,
+        balances: user.balances instanceof Map ? Object.fromEntries(user.balances) : user.balances
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* ---------------- UPDATE PROFILE (NEW: Fixes Save Changes) ---------------- */
+router.patch('/profile', protect, async (req, res, next) => {
+  try {
+    const { fullName, phone } = req.body;
+    const userId = req.user?.id || req.user?._id;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { fullName, phone },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /* ---------------- BALANCE (Hardened) ---------------- */
 router.get('/balance', protect, async (req, res, next) => {
   try {
     const userId = req.user?.id || req.user?._id;
-    if (!userId) throw new ApiError(401, 'Authentication failed: No User ID');
-
     const cachedBalances = cache.get(userId);
-    if (cachedBalances) {
-      return res.json({ success: true, data: cachedBalances, source: 'cache' });
-    }
+    if (cachedBalances) return res.json({ success: true, data: cachedBalances, source: 'cache' });
 
     const user = await User.findById(userId).select('balances').lean();
     if (!user) throw new ApiError(404, 'User not found');
 
-    // Safe Map/Object handling for Mongoose lean()
     const b = user.balances || {};
     const balances = {
       BTC: (b instanceof Map ? b.get('BTC') : b.BTC) ?? 0,
@@ -134,7 +169,7 @@ router.get('/balance', protect, async (req, res, next) => {
   }
 });
 
-/* ---------------- TRANSACTIONS (FOR LEDGER SYNC) ---------------- */
+/* ---------------- TRANSACTIONS (Ledger) ---------------- */
 router.get('/transactions/my', protect, async (req, res, next) => {
   try {
     const userId = req.user?.id || req.user?._id;
@@ -142,12 +177,7 @@ router.get('/transactions/my', protect, async (req, res, next) => {
     if (!user) throw new ApiError(404, 'User not found');
 
     const sortedLedger = user.ledger.sort((a, b) => b.createdAt - a.createdAt);
-
-    res.status(200).json({
-      success: true,
-      count: sortedLedger.length,
-      data: sortedLedger
-    });
+    res.status(200).json({ success: true, count: sortedLedger.length, data: sortedLedger });
   } catch (err) {
     next(err);
   }
@@ -164,7 +194,7 @@ router.post('/forgot-password', async (req, res, next) => {
       user.resetPasswordExpires = Date.now() + 3600000;
       await user.save();
     }
-    res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
+    res.json({ success: true, message: 'Password reset link sent if account exists' });
   } catch (err) {
     next(err);
   }
@@ -173,26 +203,20 @@ router.post('/forgot-password', async (req, res, next) => {
 router.post('/reset-password/:token', async (req, res, next) => {
   try {
     const { password } = req.body;
-    if (!password || password.length < 8) throw new ApiError(400, 'Password too short');
-
     const user = await User.findOne({
       resetPasswordToken: req.params.token,
       resetPasswordExpires: { $gt: Date.now() }
     });
-
     if (!user) throw new ApiError(400, 'Token invalid or expired');
-
     user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
-
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (err) {
     next(err);
   }
 });
 
-// CRITICAL FIX: The default export for app.js
 export default router;
 
