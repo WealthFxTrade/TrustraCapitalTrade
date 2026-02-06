@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import morgan from 'morgan';
 import userRoutes from './routes/user.js';
 import planRoutes from './routes/plan.js';
 import marketRoutes from './routes/market.js';
@@ -12,8 +11,7 @@ const app = express();
 
 app.use(helmet());
 app.use(compression());
-app.use(express.json({ limit: '10kb' }));
-app.use(morgan('dev'));
+app.use(express.json());
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -27,10 +25,9 @@ app.use(cors({
   credentials: true
 }));
 
-// Health Check
 app.get('/', (req, res) => res.json({ success: true, message: "Trustra 2026 API Active" }));
 
-// DUAL MOUNTING: Supports /api/user/profile AND /api/transactions/my
+// DUAL MOUNTING: Fixes all "Route not found" errors
 app.use('/api/user', userRoutes); 
 app.use('/api', userRoutes); 
 
