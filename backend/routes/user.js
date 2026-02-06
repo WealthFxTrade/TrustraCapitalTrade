@@ -11,18 +11,15 @@ const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET;
 const cache = new NodeCache({ stdTTL: 60 });
 
-/* ---------------- UTILITY: Generate JWT ---------------- */
 const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
-  });
+  return jwt.sign({ id, role }, JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 };
 
-/* ---------------- REGISTER & LOGIN ---------------- */
+/* --- AUTHENTICATION --- */
 router.post('/register', async (req, res, next) => {
   try {
     const { fullName, email, password } = req.body;
-    if (!fullName || !email || !password) throw new ApiError(400, 'All fields required');
+    if (!fullName || !email || !password) throw new ApiError(400, 'All fields are required');
 
     const emailLower = email.toLowerCase();
     const existingUser = await User.findOne({ email: emailLower });
@@ -34,8 +31,7 @@ router.post('/register', async (req, res, next) => {
 
     const newUser = await User.create({
       fullName, email: emailLower, password, role: 'user', btcIndex: nextIndex, btcAddress,
-      balances: new Map([['BTC', 0], ['USD', 0], ['USDT', 0]]),
-      isActive: true
+      balances: new Map([['BTC', 0], ['USD', 0], ['USDT', 0]]), isActive: true
     });
 
     res.status(201).json({ success: true, token: generateToken(newUser._id, newUser.role), user: { id: newUser._id, fullName: newUser.fullName, email: newUser.email, btcAddress: newUser.btcAddress, balances: Object.fromEntries(newUser.balances) }});
@@ -47,13 +43,11 @@ router.post('/login', async (req, res, next) => {
     const { email, password } = req.body;
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
     if (!user || !(await user.comparePassword(password))) throw new ApiError(401, 'Invalid credentials');
-    if (user.banned) throw new ApiError(403, 'Account suspended');
-
-    res.json({ success: true, token: generateToken(user._id, user.role), user: { id: user._id, fullName: user.fullName, email: user.email, balances: Object.fromEntries(user.balances), btcAddress: user.btcAddress }});
+    res.json({ success: true, token: generateToken(user._id, user.role), user: { id: user._id, fullName: user.fullName, email: user.email, btcAddress: user.btcAddress, balances: Object.fromEntries(user.balances) }});
   } catch (err) { next(err); }
 });
 
-/* ---------------- PROFILE (Fixes "Failed to load" & "Save Changes") ---------------- */
+/* --- PROFILE (Fixes Dashboard Error) --- */
 router.get('/profile', protect, async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
@@ -66,11 +60,11 @@ router.patch('/profile', protect, async (req, res, next) => {
   try {
     const { fullName, phone } = req.body;
     const user = await User.findByIdAndUpdate(req.user.id, { fullName, phone }, { new: true, runValidators: true }).select('-password');
-    res.json({ success: true, message: 'Profile updated', user });
+    res.json({ success: true, message: 'Profile updated successfully', user });
   } catch (err) { next(err); }
 });
 
-/* ---------------- BALANCE & TRANSACTIONS ---------------- */
+/* --- BALANCE & LEDGER --- */
 router.get('/balance', protect, async (req, res, next) => {
   try {
     const cached = cache.get(req.user.id);
