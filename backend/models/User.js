@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 
 const ledgerSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
-  signedAmount: { type: Number, required: true }, 
+  signedAmount: { type: Number, required: true },
   currency: { type: String, required: true, uppercase: true },
   type: {
     type: String,
@@ -24,6 +24,10 @@ const userSchema = new mongoose.Schema({
   fullName: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
   password: { type: String, required: true, select: false },
+  
+  // FIXED: Added phone field to match Profile Dashboard requirements
+  phone: { type: String, trim: true, default: '' }, 
+  
   role: { type: String, enum: ['user', 'admin'], default: 'user', index: true },
   plan: { type: String, enum: ['none', 'basic', 'premium', 'vip'], default: 'none' },
   balances: {
@@ -53,6 +57,7 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// Safe Export: Checks if model exists before compiling
-export default mongoose.models.User || mongoose.model('User', userSchema);
+// Safe Export for Render/Node environments
+const User = mongoose.models.User || mongoose.model('User', userSchema);
+export default User;
 

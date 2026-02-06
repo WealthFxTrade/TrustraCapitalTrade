@@ -18,204 +18,81 @@ const generateToken = (id, role) => {
   });
 };
 
-/* ---------------- REGISTER ---------------- */
+/* ---------------- REGISTER & LOGIN ---------------- */
 router.post('/register', async (req, res, next) => {
   try {
     const { fullName, email, password } = req.body;
-    if (!fullName || !email || !password) {
-      throw new ApiError(400, 'Full name, email, and password are required');
-    }
+    if (!fullName || !email || !password) throw new ApiError(400, 'All fields required');
 
     const emailLower = email.toLowerCase();
     const existingUser = await User.findOne({ email: emailLower });
     if (existingUser) throw new ApiError(409, 'Email already registered');
 
-    const lastUser = await User.findOneAndUpdate(
-      {},
-      { $inc: { btcIndexCounter: 1 } },
-      { sort: { btcIndex: -1 }, upsert: true, new: true }
-    ).select('btcIndex');
-
+    const lastUser = await User.findOneAndUpdate({}, { $inc: { btcIndexCounter: 1 } }, { sort: { btcIndex: -1 }, upsert: true, new: true });
     const nextIndex = lastUser ? lastUser.btcIndex : 0;
     const btcAddress = deriveBtcAddress(process.env.BITCOIN_XPUB, nextIndex);
 
     const newUser = await User.create({
-      fullName,
-      email: emailLower,
-      password,
-      role: 'user',
-      btcIndex: nextIndex,
-      btcAddress,
+      fullName, email: emailLower, password, role: 'user', btcIndex: nextIndex, btcAddress,
       balances: new Map([['BTC', 0], ['USD', 0], ['USDT', 0]]),
-      ledger: [],
-      plan: 'none',
       isActive: true
     });
 
-    res.status(201).json({
-      success: true,
-      token: generateToken(newUser._id, newUser.role),
-      user: {
-        id: newUser._id,
-        fullName: newUser.fullName,
-        email: newUser.email,
-        btcAddress: newUser.btcAddress,
-        role: newUser.role,
-        balances: Object.fromEntries(newUser.balances)
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
+    res.status(201).json({ success: true, token: generateToken(newUser._id, newUser.role), user: { id: newUser._id, fullName: newUser.fullName, email: newUser.email, btcAddress: newUser.btcAddress, balances: Object.fromEntries(newUser.balances) }});
+  } catch (err) { next(err); }
 });
 
-/* ---------------- LOGIN ---------------- */
 router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) throw new ApiError(400, 'Email and password required');
-
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-    if (!user || !(await user.comparePassword(password))) {
-      throw new ApiError(401, 'Invalid credentials');
-    }
+    if (!user || !(await user.comparePassword(password))) throw new ApiError(401, 'Invalid credentials');
+    if (user.banned) throw new ApiError(403, 'Account suspended');
 
-    if (user.banned) throw new ApiError(403, 'Account suspended. Contact support.');
-
-    res.json({
-      success: true,
-      token: generateToken(user._id, user.role),
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        btcAddress: user.btcAddress,
-        balances: Object.fromEntries(user.balances),
-        plan: user.plan
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
+    res.json({ success: true, token: generateToken(user._id, user.role), user: { id: user._id, fullName: user.fullName, email: user.email, balances: Object.fromEntries(user.balances), btcAddress: user.btcAddress }});
+  } catch (err) { next(err); }
 });
 
-/* ---------------- PROFILE (NEW: Fixes Digital Identity Error) ---------------- */
+/* ---------------- PROFILE (Fixes "Failed to load" & "Save Changes") ---------------- */
 router.get('/profile', protect, async (req, res, next) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    const user = await User.findById(userId).select('-password');
+    const user = await User.findById(req.user.id).select('-password');
     if (!user) throw new ApiError(404, 'User not found');
-
-    res.json({
-      success: true,
-      user: {
-        fullName: user.fullName,
-        email: user.email,
-        phone: user.phone || '',
-        btcAddress: user.btcAddress,
-        role: user.role,
-        balances: user.balances instanceof Map ? Object.fromEntries(user.balances) : user.balances
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
+    res.json({ success: true, user });
+  } catch (err) { next(err); }
 });
 
-/* ---------------- UPDATE PROFILE (NEW: Fixes Save Changes) ---------------- */
 router.patch('/profile', protect, async (req, res, next) => {
   try {
     const { fullName, phone } = req.body;
-    const userId = req.user?.id || req.user?._id;
-
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { fullName, phone },
-      { new: true, runValidators: true }
-    ).select('-password');
-
-    res.json({
-      success: true,
-      message: 'Profile updated successfully',
-      user
-    });
-  } catch (err) {
-    next(err);
-  }
+    const user = await User.findByIdAndUpdate(req.user.id, { fullName, phone }, { new: true, runValidators: true }).select('-password');
+    res.json({ success: true, message: 'Profile updated', user });
+  } catch (err) { next(err); }
 });
 
-/* ---------------- BALANCE (Hardened) ---------------- */
+/* ---------------- BALANCE & TRANSACTIONS ---------------- */
 router.get('/balance', protect, async (req, res, next) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    const cachedBalances = cache.get(userId);
-    if (cachedBalances) return res.json({ success: true, data: cachedBalances, source: 'cache' });
+    const cached = cache.get(req.user.id);
+    if (cached) return res.json({ success: true, data: cached, source: 'cache' });
 
-    const user = await User.findById(userId).select('balances').lean();
-    if (!user) throw new ApiError(404, 'User not found');
-
+    const user = await User.findById(req.user.id).select('balances').lean();
     const b = user.balances || {};
     const balances = {
       BTC: (b instanceof Map ? b.get('BTC') : b.BTC) ?? 0,
       USD: (b instanceof Map ? b.get('USD') : b.USD) ?? 0,
       USDT: (b instanceof Map ? b.get('USDT') : b.USDT) ?? 0
     };
-
-    cache.set(userId, balances);
+    cache.set(req.user.id, balances);
     res.json({ success: true, data: balances, source: 'db' });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 });
 
-/* ---------------- TRANSACTIONS (Ledger) ---------------- */
 router.get('/transactions/my', protect, async (req, res, next) => {
   try {
-    const userId = req.user?.id || req.user?._id;
-    const user = await User.findById(userId).select('ledger');
-    if (!user) throw new ApiError(404, 'User not found');
-
-    const sortedLedger = user.ledger.sort((a, b) => b.createdAt - a.createdAt);
-    res.status(200).json({ success: true, count: sortedLedger.length, data: sortedLedger });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/* ---------------- FORGOT/RESET PASSWORD ---------------- */
-router.post('/forgot-password', async (req, res, next) => {
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email: email?.toLowerCase() });
-    if (user) {
-      const token = crypto.randomBytes(32).toString('hex');
-      user.resetPasswordToken = token;
-      user.resetPasswordExpires = Date.now() + 3600000;
-      await user.save();
-    }
-    res.json({ success: true, message: 'Password reset link sent if account exists' });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.post('/reset-password/:token', async (req, res, next) => {
-  try {
-    const { password } = req.body;
-    const user = await User.findOne({
-      resetPasswordToken: req.params.token,
-      resetPasswordExpires: { $gt: Date.now() }
-    });
-    if (!user) throw new ApiError(400, 'Token invalid or expired');
-    user.password = password;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
-    await user.save();
-    res.json({ success: true, message: 'Password reset successfully' });
-  } catch (err) {
-    next(err);
-  }
+    const user = await User.findById(req.user.id).select('ledger');
+    res.json({ success: true, data: user.ledger.sort((a, b) => b.createdAt - a.createdAt) });
+  } catch (err) { next(err); }
 });
 
 export default router;
