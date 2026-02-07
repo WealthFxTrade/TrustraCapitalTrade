@@ -1,22 +1,20 @@
 import User from '../models/User.js';
+import bcrypt from 'bcryptjs';
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
  * @desc    Get dashboard stats for TrustraCapitalTrade
- * Maps Main Wallet and calculates Profit Wallet from ledger
  */
 export const getUserDashboard = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select('balances plan ledger isPlanActive').lean();
-    if (!user) throw new ApiError(404, 'User not found');
+    if (!user) throw new ApiError(404, 'Investor not found');
 
-    // 1. Handle Balances (Convert Map to Object if necessary)
-    const balances = user.balances instanceof Map 
-      ? Object.fromEntries(user.balances) 
+    const balances = user.balances instanceof Map
+      ? Object.fromEntries(user.balances)
       : (user.balances || {});
 
-    // 2. Calculate Profit Wallet
-    // Sums all entries where type is profit-related
+    // Calculate Profit Wallet by summing ROI and Interest entries
     const totalProfit = (user.ledger || [])
       .filter(entry => 
         entry.type === 'roi_profit' || 
@@ -25,18 +23,15 @@ export const getUserDashboard = async (req, res, next) => {
       )
       .reduce((acc, entry) => acc + (Number(entry.amount) || 0), 0);
 
-    // 3. Response structured for the new Dashboard UI
     res.json({
       success: true,
-      stats: { 
-        mainBalance: balances.USD || 0,        // Appears in "Main Wallet"
-        totalProfit: totalProfit,              // Appears in "Profit Wallet"
-        activePlan: user.plan || 'No Active Schema' 
+      stats: {
+        mainBalance: balances.USD || 0,
+        totalProfit: totalProfit,
+        activePlan: user.plan || 'No Active Schema'
       }
     });
-  } catch (err) { 
-    next(err); 
-  }
+  } catch (err) { next(err); }
 };
 
 /**
@@ -56,22 +51,38 @@ export const getUserProfile = async (req, res, next) => {
 };
 
 /**
- * @desc    Update user profile
+ * @desc    Update user profile & password
  */
 export const updateUserProfile = async (req, res, next) => {
   try {
-    const { fullName, email, phoneContact } = req.body;
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user.id,
-      { $set: { fullName, email, phone: phoneContact } },
-      { new: true, runValidators: true }
-    ).select('-password').lean();
-    res.json({ success: true, user: updatedUser });
+    const { fullName, email, phoneContact, newPassword } = req.body;
+    
+    const user = await User.findById(req.user.id);
+    if (!user) throw new ApiError(404, 'User not found');
+
+    // Update Basic Info
+    if (fullName) user.fullName = fullName;
+    if (email) user.email = email;
+    if (phoneContact) user.phone = phoneContact;
+
+    // Secure Password Update logic
+    if (newPassword && newPassword.trim() !== "") {
+      const salt = await bcrypt.genSalt(10);
+      user.password = await bcrypt.hash(newPassword, salt);
+    }
+
+    await user.save();
+    
+    res.json({ 
+      success: true, 
+      message: "Trustra Identity Updated Successfully",
+      user: { fullName: user.fullName, email: user.email } 
+    });
   } catch (err) { next(err); }
 };
 
 /**
- * @desc    Admin: Approve Deposit
+ * @desc    Admin: Approve Deposit & Credit Main Wallet
  */
 export const approveDeposit = async (req, res, next) => {
   try {
@@ -84,15 +95,14 @@ export const approveDeposit = async (req, res, next) => {
       throw new ApiError(400, 'Invalid or already processed transaction');
     }
 
-    // Update Transaction Status
     transaction.status = 'completed';
 
-    // Credit the Main Wallet (USD)
+    // Credit the Main Wallet (USD Map)
     const currentBalance = user.balances.get('USD') || 0;
     user.balances.set('USD', currentBalance + Number(transaction.amount));
 
     await user.save();
-    res.json({ success: true, message: 'Deposit Approved & Main Wallet Credited' });
+    res.json({ success: true, message: 'Deposit Approved & Funds Released' });
   } catch (err) { next(err); }
 };
 
@@ -102,16 +112,29 @@ export const approveDeposit = async (req, res, next) => {
 export const getUserLedger = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id).select('ledger').lean();
-    // Return ledger as "transactions" for frontend compatibility
     res.json({ success: true, transactions: user.ledger || [] });
   } catch (err) { next(err); }
 };
 
-// --- REMAINING EXPORTS FOR ROUTER COMPATIBILITY ---
+// --- REMAINING EXPORTS FOR ADMIN UTILITIES ---
 export const getUsers = async (req, res, next) => {
   try {
-    const users = await User.find({}).select('-password').sort('-createdAt');
+    const users = await User.find({}).select('-password').sort('-createdAt').lean();
     res.json({ success: true, users });
+  } catch (err) { next(err); }
+};
+
+export const banUser = async (req, res, next) => {
+  try {
+    await User.findByIdAndUpdate(req.params.id, { isBlocked: true });
+    res.json({ success: true, message: "User Access Restricted" });
+  } catch (err) { next(err); }
+};
+
+export const unbanUser = async (req, res, next) => {
+  try {
+    await User.findByIdAndUpdate(req.params.id, { isBlocked: false });
+    res.json({ success: true, message: "User Access Restored" });
   } catch (err) { next(err); }
 };
 
@@ -120,12 +143,11 @@ export const getUserBalances = async (req, res) => {
   res.json({ success: true, balances: user.balances });
 };
 
+// Placeholder handlers for router compatibility
 export const getUserById = async (req, res) => res.json({ success: true });
 export const updateUser = async (req, res) => res.json({ success: true });
 export const deleteUser = async (req, res) => res.json({ success: true });
 export const updateUserBalance = async (req, res) => res.json({ success: true });
-export const banUser = async (req, res) => res.json({ success: true });
-export const unbanUser = async (req, res) => res.json({ success: true });
 export const verifyUserEmail = async (req, res) => res.json({ success: true });
 export const resendVerificationEmail = async (req, res) => res.json({ success: true });
 
