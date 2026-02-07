@@ -57,13 +57,15 @@ body {
   flex-direction: column;
 }
 
-/* Glassmorphism */
+/* Glassmorphism Logic */
 .glass {
   background: rgba(30, 41, 59, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border);
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  /* Ensure children with high z-index can still be clicked */
+  transform: translateZ(0); 
 }
 
 /* Custom scrollbar */
@@ -85,7 +87,7 @@ body {
   background: var(--primary);
 }
 
-/* Replaced hover/transition classes with prefixed versions */
+/* Transitions and Hover Effects */
 .ui-transition {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -114,4 +116,62 @@ body {
 .container {
   @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
 }
+
+/* ============================================================
+   CRITICAL FUNCTIONAL FIXES (Sidebar, Logout, Buttons)
+   ============================================================ */
+
+/* 1. Force Sidebar & Interaction Layering */
+.sidebar, 
+.dashboard-sidebar,
+aside {
+  z-index: 50 !important; 
+  pointer-events: auto !important;
+}
+
+/* 2. Fix Profile Section & Logout Clickability */
+.profile-section, 
+.logout-section, 
+.user-menu-trigger,
+.profile-arrow {
+  position: relative !important;
+  z-index: 100 !important;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+/* 3. Fix "Invest Now" & All Action Buttons */
+/* This prevents the .glass blur from intercepting clicks */
+.invest-btn, 
+.invest-now-btn, 
+button, 
+a.ui-transition {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 20 !important;
+}
+
+/* 4. Dropdown Menu Visibility Fix */
+.dropdown-menu {
+  display: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease;
+}
+
+.dropdown-menu.active,
+.dropdown-menu.show {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  z-index: 999 !important;
+}
+
+/* Ensure icons inside buttons don't block clicks */
+svg, i, span {
+  pointer-events: none;
+}
+
 /* final deploy */
+

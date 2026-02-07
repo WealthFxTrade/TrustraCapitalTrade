@@ -1,19 +1,19 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-// Sub-schema for ledger to ensure each entry gets a unique _id
+// Sub-schema for ledger
 const ledgerSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   currency: { type: String, default: 'USD' },
-  type: { 
-    type: String, 
+  type: {
+    type: String,
     enum: ['deposit', 'withdrawal', 'investment', 'roi_profit', 'bonus'],
-    required: true 
+    required: true
   },
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     enum: ['pending', 'completed', 'failed', 'cancelled'],
-    default: 'pending' 
+    default: 'pending'
   },
   description: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
@@ -32,7 +32,15 @@ const userSchema = new mongoose.Schema({
     of: Number,
     default: { BTC: 0, USD: 0, USDT: 0 }
   },
-  ledger: [ledgerSchema], // Array of sub-documents
+  
+  // CRITICAL FIX: Add this field to store generated crypto addresses
+  depositAddresses: {
+    type: Map,
+    of: String,
+    default: {}
+  },
+
+  ledger: [ledgerSchema], 
   isActive: { type: Boolean, default: true },
   banned: { type: Boolean, default: false }
 }, { timestamps: true });
