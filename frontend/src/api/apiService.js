@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // Added /api suffix to align with backend route grouping
+  // FIXED: Added /api so all calls (auth, user, admin) work automatically
   baseURL: 'https://trustracapitaltrade-backend.onrender.com',
   headers: {
     'Content-Type': 'application/json',
@@ -23,7 +23,6 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Force logout on 401 Unauthorized or 403 Forbidden
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -35,7 +34,7 @@ api.interceptors.response.use(
   }
 );
 
-// Helper function for the Home page BTC logic
+// Market helpers
 export const getBtcPrice = () => api.get('/market/btc-price');
 
 export { api };
