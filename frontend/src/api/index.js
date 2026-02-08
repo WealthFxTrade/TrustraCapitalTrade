@@ -1,66 +1,92 @@
-import api from './apiService';                      
+import api from './apiService'; // Your axios instance with interceptors
 
 /**
- * TRUSTRA CAPITAL TRADE - API LAYER (FEB 2026)
- * Synchronized with backend/routes/userRoutes.js
+ * TRUSTRA CAPITAL TRADE - API LAYER 2026
+ * Finalized Production Sync
  */
 
+// Helper to extract data from Axios response
 const withData = (promise) => promise.then((res) => res.data);
 
-// --- AUTHENTICATION ---
-export const loginUser = (credentials) =>
+// ────────────────────────────────────────────────
+// AUTHENTICATION
+// ────────────────────────────────────────────────
+export const loginUser = (credentials) => 
   withData(api.post('/auth/login', credentials));
 
-export const registerUser = (data) =>
+export const registerUser = (data) => 
   withData(api.post('/auth/register', data));
 
-// --- USER / PROFILE / DASHBOARD ---
-// FIXED: Changed to /user/me to match your backend/routes/userRoutes.js
-export const getProfile = (config = {}) =>             
-  withData(api.get('/user/me', config));          
+export const logoutUser = () => {
+  localStorage.removeItem('token');
+  window.location.href = '/login';
+};
 
-// FIXED: Changed to PUT /user/me to match your backend/routes/userRoutes.js
-export const updateProfile = (payload, config = {}) =>
-  withData(api.put('/user/me', payload, config));  
+// ────────────────────────────────────────────────
+// USER & WALLET DATA
+// ────────────────────────────────────────────────
+export const getProfile = () => 
+  withData(api.get('/user/me'));
 
-export const getDashboardStats = (config = {}) =>
-  withData(api.get('/user/dashboard', config));
+export const updateProfile = (payload) => 
+  withData(api.put('/user/me', payload));
 
-export const getUserBalance = (config = {}) =>
-  withData(api.get('/user/balance', config));                                        
+// Fetches live balances for BTC, ETH, USDT
+export const getUserBalance = () => 
+  withData(api.get('/user/balances')); 
 
-// --- DEPOSITS / WITHDRAWALS ---
-// FIXED: Updated to match transaction.js logic
-export const getDepositAddress = (currency = 'BTC') =>
-  withData(api.post('/transactions/deposit', { currency }));
+// ────────────────────────────────────────────────
+// DEPOSITS (Address Generation & History)
+// ────────────────────────────────────────────────
 
-export const requestWithdrawal = (data) =>
-  withData(api.post('/transactions/withdraw', data));                                             
+/**
+ * FIXED: Generates unique address via Backend HD Derivation
+ * Matches Backend: router.post('/wallet/:asset', protect, ...)
+ */
+export const getDepositAddress = (currency) => 
+  withData(api.post(`/wallet/${currency.toUpperCase()}`));
 
-// --- TRANSACTIONS ---
-// FIXED: Updated to match /transactions/my route
-export const getTransactions = (config = {}) =>
-  withData(api.get('/transactions/my', config));
+/**
+ * Fetches user-specific deposit history
+ * Matches Backend: router.get('/deposits/my', protect, ...)
+ */
+export const getDepositHistory = () => 
+  withData(api.get('/deposits/my'));
 
-// --- INVESTMENTS & PLANS ---
-export const getInvestmentPlans = (config = {}) =>
-  withData(api.get('/plans', config));
+// ────────────────────────────────────────────────
+// WITHDRAWALS
+// ────────────────────────────────────────────────
 
-// FIXED: Updated to match the /plans/invest route we built
+/**
+ * Submits a payout request and locks user balance
+ * Matches Backend: router.post('/withdrawals/request', protect, ...)
+ */
+export const requestWithdrawal = (data) => 
+  withData(api.post('/withdrawals/request', data));
+
+// ────────────────────────────────────────────────
+// INVESTMENTS & PLANS
+// ────────────────────────────────────────────────
+export const getInvestmentPlans = () => 
+  withData(api.get('/plans'));
+
 export const subscribeToPlan = (planId, amount) =>
-  withData(api.post('/plans/invest', { planId, amount }));
+  withData(api.post('/investments/subscribe', { planId, amount }));
 
-// --- MARKET DATA ---
-export const getBtcPrice = (config = {}) =>
-  withData(api.get('/market/btc-price', config));
+// ────────────────────────────────────────────────
+// TRANSACTIONS & MARKET
+// ────────────────────────────────────────────────
+export const getTransactions = () => 
+  withData(api.get('/transactions/my'));
 
-// --- ADMIN ENDPOINTS ---
-export const adminUsers = (config = {}) =>             
-  withData(api.get('/users', config));
+export const getBtcPrice = () => 
+  withData(api.get('/market/btc-price'));
 
-// FIXED: Matches the admin deposit approval route
-export const adminApproveDeposit = (userId, transactionId) =>
-  withData(api.post('/users/approve-deposit', { userId, transactionId }));                                      
-
-export { api };
+// ────────────────────────────────────────────────
+// ADMIN ENDPOINTS
+// ────────────────────────────────────────────────
+export const adminStats = () => withData(api.get('/admin/stats'));
+export const adminUsers = () => withData(api.get('/admin/users'));
+export const adminApproveDeposit = (id) => withData(api.patch(`/admin/deposits/${id}/approve`));
+export const adminRejectDeposit = (id) => withData(api.patch(`/admin/deposits/${id}/reject`));
 

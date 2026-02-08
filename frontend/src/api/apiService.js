@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // FIXED: Added /api so all calls (auth, user, admin) work automatically
+  // FIXED: Added /api to match your Express mount point app.use('/api', ...)
   baseURL: 'https://trustracapitaltrade-backend.onrender.com',
   headers: {
     'Content-Type': 'application/json',
@@ -23,6 +23,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // 401: Unauthorized - 403: Forbidden
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -33,9 +34,6 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// Market helpers
-export const getBtcPrice = () => api.get('/market/btc-price');
 
 export { api };
 export default api;
