@@ -1,63 +1,67 @@
 import cron from 'node-cron';
-// FIXED: Added .js extension for ESM compatibility in Node v25
-import User from '../models/User.js'; 
+import Deposit from '../models/Deposit.js';
+import User from '../models/User.js';
+import { confirmDeposit } from '../services/confirmDeposit.js';
 
-// ROI Rates Table - Synchronized with Rio Series 2026
 const PLAN_RATES = {
-  'Rio Starter': 0.0025,   // ~7.5% Monthly (0.25% daily)
-  'Rio Basic': 0.0035,     // ~10.5% Monthly
-  'Rio Standard': 0.0046,  // ~14% Monthly
-  'Rio Advanced': 0.006,   // ~18% Monthly
-  'Rio Elite': 0.0075      // ~22.5% Monthly
+  'Rio Starter': 0.0025,
+  'Rio Basic': 0.0035,
+  'Rio Standard': 0.0046,
+  'Rio Advanced': 0.006,
+  'Rio Elite': 0.0075
 };
 
-// Schedule: Runs every day at 00:00 (Midnight)
-const initCronJobs = () => {
-  cron.schedule('0 0 * * *', async () => {
-    console.log(`[${new Date().toISOString()}] 🕒 Trustra Engine: Distributing Daily EUR ROI...`);
+export default function initCronJobs() {
+  console.log('🕒 Initializing Trustra Capital Cron Jobs');
 
+  // BTC Deposit Watcher (every 1 minute)
+  cron.schedule('* * * * *', async () => {
     try {
-      // Find users with an active plan and a valid Rio Series name
-      const activeUsers = await User.find({ 
-        isPlanActive: true, 
-        plan: { $in: Object.keys(PLAN_RATES) } 
+      const deposits = await Deposit.find({
+        status: { $in: ['pending', 'confirming'] },
+        txid: { $exists: true, $ne: null },
+        locked: { $ne: true }
       });
 
+      if (deposits.length === 0) return;
+
+      for (const deposit of deposits) {
+        try {
+          deposit.locked = true;
+          await deposit.save();
+
+          await confirmDeposit(deposit._id);
+
+          deposit.locked = false;
+          await deposit.save();
+        } catch (err) {
+          deposit.locked = false;
+          await deposit.save();
+        }
+      }
+    } catch (err) {
+      console.error('[Deposit Watcher CRON ERROR]', err.message);
+    }
+  }, { scheduled: true, timezone: 'Europe/Berlin' });
+
+  // Daily ROI Engine (every day at 00:00)
+  cron.schedule('0 0 * * *', async () => {
+    try {
+      const activeUsers = await User.find({ isPlanActive: true });
       for (const user of activeUsers) {
         const rate = PLAN_RATES[user.plan];
-        
-        // Use investedAmount field or calculate from the latest ledger entry
-        const capital = user.investedAmount || 0;
-
-        if (rate && capital > 0) {
-          const dailyProfit = Number((capital * rate).toFixed(2));
-
-          // 1. Add profit to the 'EUR' balance (Profit Wallet)
-          const currentBalance = user.balances.get('EUR') || 0;
-          user.balances.set('EUR', currentBalance + dailyProfit);
-
-          // 2. Record profit in ledger using EUR currency
-          user.ledger.push({
-            amount: dailyProfit,
-            currency: 'EUR',
-            type: 'roi_profit',
-            status: 'completed',
-            description: `Daily ROI: ${user.plan} (${(rate * 100).toFixed(2)}%)`,
-            createdAt: new Date()
-          });
-
-          // 3. Mark modified for Mongoose Map and save
+        if (rate && user.investedAmount > 0) {
+          const dailyProfit = Number((user.investedAmount * rate).toFixed(2));
+          const currentEUR = user.balances.get('EUR') || 0;
+          user.balances.set('EUR', currentEUR + dailyProfit);
           user.markModified('balances');
-          user.markModified('ledger');
           await user.save();
         }
       }
-      console.log(`[TRUSTRA] ROI Cycle Complete. Processed ${activeUsers.length} investors.`);
+      console.log('✅ Daily ROI distributed.');
     } catch (err) {
-      console.error('[TRUSTRA_CRON_ERROR]:', err.message);
+      console.error('ROI Engine Error:', err.message);
     }
-  });
-};
-
-export default initCronJobs;
+  }, { scheduled: true, timezone: 'Europe/Berlin' });
+}
 

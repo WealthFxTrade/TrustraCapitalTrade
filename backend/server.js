@@ -1,33 +1,38 @@
-// 1. MUST BE FIRST: Load environment variables
-import 'dotenv/config';
+// 1️⃣ Load environment variables first
+import dotenv from 'dotenv';
+dotenv.config();  // ensures process.env is populated
+
 import mongoose from 'mongoose';
 import app from './app.js';
-import initCronJobs from './utils/cronJob.js'; // <--- ADD THIS IMPORT
+import initCronJobs from './utils/cronJob.js';
 
 const PORT = process.env.PORT || 10000;
 const MONGO_URI = process.env.MONGO_URI;
 
+if (!MONGO_URI) {
+  console.error('❌ MONGO_URI is not defined in .env');
+  process.exit(1);
+}
+
 const startServer = async () => {
   try {
-    if (!MONGO_URI) {
-      throw new Error("MONGO_URI is not defined.");
-    }
-
+    // 2️⃣ Connect to MongoDB
     await mongoose.connect(MONGO_URI, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000
     });
-
     console.log('✅ MongoDB Connected');
 
-    // 2. START THE PROFIT ENGINE (After DB connection)
-    initCronJobs(); 
+    // 3️⃣ Start Cron Jobs
+    initCronJobs();
     console.log('🕒 Profit Cron Job Initialized');
 
+    // 4️⃣ Start Express server
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Trustra Backend running on port ${PORT}`);
     });
 
+    // 5️⃣ Graceful shutdown
     const shutdown = () => {
       console.log('🛑 Shutting down server...');
       server.close(async () => {
@@ -51,5 +56,5 @@ const startServer = async () => {
   }
 };
 
+// 6️⃣ Launch server
 startServer();
-

@@ -1,34 +1,57 @@
 import User from '../models/User.js';
+import { ApiError } from '../middleware/errorMiddleware.js';
 
-export const requestWithdrawal = async (req, res) => {
+/**
+ * Request a withdrawal in EUR
+ * @route POST /api/withdrawals/request
+ * @access Private
+ */
+export const requestWithdrawal = async (req, res, next) => {
   try {
     const { amount, walletAddress } = req.body;
-    const user = await User.findById(req.user.id);
 
-    // 1. Check if user has enough EUR balance
-    const currentBal = user.balances.get('EUR') || 0;
-    if (currentBal < amount) {
-      return res.status(400).json({ success: false, message: 'Insufficient Euro balance' });
+    if (!amount || amount <= 0) {
+      throw new ApiError(400, 'Invalid withdrawal amount');
     }
 
-    // 2. Lock the funds by deducting them now
+    if (!walletAddress) {
+      throw new ApiError(400, 'Destination wallet address is required');
+    }
+
+    // 1. Fetch user
+    const user = await User.findById(req.user._id);
+    if (!user) throw new ApiError(404, 'User not found');
+
+    // 2. Check EUR balance
+    const currentBal = user.balances.get('EUR') || 0;
+    if (currentBal < amount) {
+      throw new ApiError(400, 'Insufficient Euro balance');
+    }
+
+    // 3. Lock funds
     user.balances.set('EUR', currentBal - amount);
 
-    // 3. Create a pending ledger entry
+    // 4. Add ledger entry
     user.ledger.push({
       amount: Number(amount),
       currency: 'EUR',
       type: 'withdrawal',
       status: 'pending',
-      description: `Withdrawal request to: ${walletAddress}`
+      description: `Withdrawal request to: ${walletAddress}`,
+      createdAt: new Date()
     });
 
     user.markModified('balances');
+    user.markModified('ledger');
+
     await user.save();
 
-    res.json({ success: true, message: 'Withdrawal request submitted for approval' });
+    res.json({
+      success: true,
+      message: 'Withdrawal request submitted for approval'
+    });
+
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    next(err); // use global error handler
   }
 };
-

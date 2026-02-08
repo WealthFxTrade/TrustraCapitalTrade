@@ -1,67 +1,41 @@
-import mongoose from 'mongoose';
+import User from '../models/User.js';
 import Deposit from '../models/Deposit.js';
-import { creditUser } from './ledgerService.js';
 import { getBtcTxConfirmations } from '../utils/bitcoinUtils.js';
 
-const CONFIRMATIONS_REQUIRED = 3;
-
 /**
- * Confirm a deposit by ID and credit user's balance
- * @param {string} depositId
+ * Main service to verify and finalize deposits
  */
-export async function confirmDeposit(depositId) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
+export const confirmDeposit = async (depositId) => {
   try {
-    const deposit = await Deposit.findById(depositId).session(session);
-    if (!deposit) throw new Error(`Deposit not found: ${depositId}`);
+    const deposit = await Deposit.findById(depositId);
+    if (!deposit || deposit.status === 'confirmed') return { status: 'already_processed' };
 
-    // Already confirmed
-    if (deposit.status === 'confirmed') {
-      await session.commitTransaction();
-      return;
+    // Use the txid stored in the deposit document
+    const confirmations = await getBtcTxConfirmations(deposit.txid);
+    console.log(`Deposit ${depositId} has ${confirmations} confirmations.`);
+
+    if (confirmations >= 3) {
+      deposit.status = 'confirmed';
+      await deposit.save();
+
+      const user = await User.findById(deposit.user);
+      if (!user) throw new Error('User associated with deposit not found');
+
+      // Update EUR balance (Rio Series 2026 Logic)
+      const currentBalance = user.balances.get('EUR') || 0;
+      user.balances.set('EUR', currentBalance + deposit.amount);
+      
+      user.markModified('balances');
+      await user.save();
+
+      console.log(`✅ Deposit ${depositId} confirmed. EUR balance updated for ${user.email}`);
+      return { status: 'confirmed' };
     }
 
-    // Fetch blockchain confirmations
-    const confirmations = await getBtcTxConfirmations(deposit.txHash);
-    if (confirmations == null) {
-      deposit.status = 'pending';
-      await deposit.save({ session });
-      await session.commitTransaction();
-      return;
-    }
-
-    deposit.confirmations = confirmations;
-
-    if (confirmations < CONFIRMATIONS_REQUIRED) {
-      deposit.status = 'confirming';
-      await deposit.save({ session });
-      await session.commitTransaction();
-      return;
-    }
-
-    // Enough confirmations
-    deposit.status = 'confirmed';
-    await deposit.save({ session });
-
-    // Credit user
-    await creditUser({
-      userId: deposit.user,
-      amount: deposit.amountSat,
-      currency: deposit.currency || 'BTC',
-      source: 'deposit',
-      referenceId: deposit._id.toString(),
-      description: 'Deposit confirmed on-chain',
-      session,
-    });
-
-    await session.commitTransaction();
+    return { status: 'pending', confirmations };
   } catch (err) {
-    await session.abortTransaction();
-    console.error(`[confirmDeposit ERROR] Deposit ID: ${depositId}`, err);
+    console.error('confirmDeposit Service Error:', err.message);
     throw err;
-  } finally {
-    session.endSession();
   }
-}
+};
+
