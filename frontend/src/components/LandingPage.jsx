@@ -1,52 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 
-const Landing = () => {
-  const navigate = useNavigate();
-  const [btcPrice, setBtcPrice] = useState(64250.00);
+const LandingPage = () => {
+  const [btcPrice, setBtcPrice] = useState(64250.00); 
 
   useEffect(() => {
-    // 1. FETCH REAL PRICE FROM COINGECKO (EUR)
-    const fetchPrice = async () => {
-      try {
-        const response = await fetch('https://api.coingecko.com');
-        const data = await response.json();
-        if (data.bitcoin.eur) setBtcPrice(data.bitcoin.eur);
-      } catch (err) {
-        // Fallback simulation if API is rate-limited
-        setBtcPrice(prev => prev + (Math.random() * 10 - 5));
-      }
-    };
-
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 30000); // Update every 30 seconds
+    // Basic price fluctuation simulation
+    const interval = setInterval(() => {
+      setBtcPrice(prev => prev + (Math.random() * 12 - 6));
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const plans = [
-    { id: 'starter', name: "Rio Starter", range: "€100 – €999", return: "6% - 9%", color: "bg-blue-50" },
-    { id: 'basic', name: "Rio Basic", range: "€1,000 – €4,999", return: "9% - 12%", color: "bg-blue-100" },
-    { id: 'standard', name: "Rio Standard", range: "€5,000 – €14,999", return: "12% - 16%", color: "bg-blue-200" },
-    { id: 'advanced', name: "Rio Advanced", range: "€15,000 – €49,999", return: "bg-blue-600 text-white" },
-    { id: 'elite', name: "Rio Elite", range: "€50,000+", return: "20% - 25%", color: "bg-slate-900 text-white" },
+    { name: "Rio Starter", range: "€100 – €999", return: "6% - 9%", color: "bg-blue-50" },
+    { name: "Rio Basic", range: "€1,000 – €4,999", return: "9% - 12%", color: "bg-blue-100" },
+    { name: "Rio Standard", range: "€5,000 – €14,999", return: "12% - 16%", color: "bg-blue-200" },
+    { name: "Rio Advanced", range: "€15,000 – €49,999", return: "16% - 20%", color: "bg-blue-600 text-white" },
+    { name: "Rio Elite", range: "€50,000+", return: "20% - 25%", color: "bg-slate-900 text-white" },
   ];
 
   return (
     <div className="font-sans text-gray-900 bg-white min-h-screen">
       {/* Navigation */}
-      <nav className="flex justify-between items-center px-8 py-6 border-b sticky top-0 bg-white/90 backdrop-blur-sm z-50">
+      <nav className="flex justify-between items-center px-8 py-6 border-b sticky top-0 bg-white z-50">
         <div className="text-2xl font-bold tracking-tighter text-blue-700">TrustraCapital</div>
-        <div className="space-x-6 flex items-center">
-          <button 
-            onClick={() => navigate('/login')} 
-            className="text-sm font-semibold hover:text-blue-600 transition cursor-pointer"
-          >
-            Login
-          </button>
-          <button 
-            onClick={() => navigate('/register')} 
-            className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-blue-700 transition cursor-pointer"
-          >
+        <div className="space-x-4">
+          <button className="text-sm font-semibold hover:text-blue-600 transition">Login</button>
+          <button className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-blue-700 transition">
             Register
           </button>
         </div>
@@ -54,21 +34,15 @@ const Landing = () => {
 
       {/* Hero Section */}
       <header className="py-24 px-8 text-center max-w-5xl mx-auto">
-        <h1 className="text-6xl font-black mb-6 tracking-tight leading-tight">Invest in Bitcoin with Confidence</h1>
+        <h1 className="text-6xl font-black mb-6 tracking-tight">Invest in Bitcoin with Confidence</h1>
         <p className="text-xl text-gray-500 mb-10 max-w-2xl mx-auto leading-relaxed">
           Since 2016, we have helped investors scale capital through institutional-grade automated trading strategies.
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
-          <button 
-            onClick={() => navigate('/register')}
-            className="bg-blue-600 text-white px-10 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform cursor-pointer"
-          >
+          <button className="bg-blue-600 text-white px-10 py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-105 transition-transform">
             Get Started
           </button>
-          <button 
-            onClick={() => document.getElementById('plans').scrollIntoView({ behavior: 'smooth' })}
-            className="border border-gray-300 px-10 py-4 rounded-xl font-bold text-lg hover:bg-gray-50 transition cursor-pointer"
-          >
+          <button className="border border-gray-300 px-10 py-4 rounded-xl font-bold text-lg hover:bg-gray-50 transition">
             View Plans
           </button>
         </div>
@@ -80,18 +54,18 @@ const Landing = () => {
         <p className="text-4xl font-mono font-bold text-white">
           1 BTC = €{btcPrice.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
         </p>
-        <p className="text-[10px] text-gray-500 mt-2">Real-time data synced with Global Exchanges</p>
+        <p className="text-[10px] text-gray-500 mt-2">Real-time data provided by CoinGecko</p>
       </div>
 
       {/* Investment Plans */}
-      <section className="py-24 px-8 max-w-7xl mx-auto bg-white" id="plans">
+      <section className="py-24 px-8 max-w-7xl mx-auto bg-white">
         <div className="text-center mb-16">
           <h2 className="text-4xl font-extrabold mb-4">Institutional Investment Tiers</h2>
           <div className="h-1 w-20 bg-blue-600 mx-auto"></div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
           {plans.map((plan, idx) => (
-            <div key={idx} className={`${plan.color} p-8 rounded-3xl shadow-lg border border-gray-100 flex flex-col justify-between hover:shadow-2xl hover:-translate-y-1 transition-all duration-300`}>
+            <div key={idx} className={`${plan.color} p-8 rounded-3xl shadow-lg border border-gray-100 flex flex-col justify-between hover:shadow-2xl transition-shadow`}>
               <div>
                 <h3 className="font-bold text-sm uppercase tracking-widest mb-2 opacity-80">{plan.name}</h3>
                 <p className="text-2xl font-black mb-6">{plan.range}</p>
@@ -99,12 +73,6 @@ const Landing = () => {
               <div>
                 <p className="text-[10px] uppercase font-bold opacity-60 mb-1">Monthly Target</p>
                 <p className="text-2xl font-black">{plan.return}</p>
-                <button 
-                  onClick={() => navigate('/register')}
-                  className="mt-4 w-full py-2 text-xs font-bold border rounded-lg hover:bg-white hover:text-blue-600 transition"
-                >
-                  Join Plan
-                </button>
               </div>
             </div>
           ))}
@@ -122,7 +90,7 @@ const Landing = () => {
           </div>
           <div>
             <h4 className="font-bold text-gray-900 mb-6 uppercase tracking-wider text-xs">Direct Contact</h4>
-            <p className="text-sm text-gray-600 mb-2"><strong>Support:</strong> support@trustracapital.com</p>
+            <p className="text-sm text-gray-600 mb-2"><strong>Support:</strong> www.infocare@gmail.com</p>
             <p className="text-sm text-gray-600"><strong>Phone:</strong> +1 (878) 224-1625</p>
           </div>
           <div>
@@ -138,6 +106,7 @@ const Landing = () => {
           <div className="text-[11px] text-gray-400 text-center leading-relaxed max-w-4xl mx-auto">
             <p className="mb-4">
               <strong>Risk Disclosure:</strong> Cryptocurrency investments carry a high degree of risk. Past performance is not indicative of future results. 
+              TrustraCapital is not a bank and digital assets are not insured by the FDIC or any government agency.
             </p>
             <p>© 2016–2026 TrustraCapital Global Trade. All Rights Reserved.</p>
           </div>
@@ -147,5 +116,5 @@ const Landing = () => {
   );
 };
 
-export default Landing;
+export default LandingPage;
 

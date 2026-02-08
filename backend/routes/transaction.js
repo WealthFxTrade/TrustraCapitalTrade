@@ -5,48 +5,75 @@ import { ApiError } from '../middleware/errorMiddleware.js';
 
 const router = express.Router();
 
-// @route   POST /api/transactions/deposit
-// @desc    Get deposit instructions and log pending intent
-router.post('/deposit', protect, async (req, res) => {
-  const { amount, currency } = req.body;
-  
-  // Static admin wallet (In 2026, use a dynamic gateway API like BVNK for automation)
-  const depositAddress = "bc1qj4epwlwdzxsst0xeevulxxazcxx5fs64eapxvq";
+/**
+ * @route   POST /api/transactions/deposit
+ * @desc    Get deposit instructions (EUR focus)
+ */
+router.post('/deposit', protect, async (req, res, next) => {
+  try {
+    const { amount, currency = 'EUR' } = req.body;
+    
+    // In production, this address would be derived from the user's btcAddress field
+    const depositAddress = req.user.btcAddress || "bc1qj4epwlwdzxsst0xeevulxxazcxx5fs64eapxvq";
 
-  req.user.ledger.push({
-    amount,
-    currency,
-    type: 'deposit',
-    status: 'pending', // Awaiting admin confirmation
-    description: `Awaiting payment to ${depositAddress}`
-  });
+    req.user.ledger.push({
+      amount,
+      currency,
+      type: 'deposit',
+      status: 'pending', 
+      description: `Awaiting €${amount} payment to ${depositAddress}`,
+      createdAt: new Date()
+    });
 
-  await req.user.save();
-  res.json({ success: true, address: depositAddress, amount });
+    await req.user.save();
+    res.json({ 
+      success: true, 
+      address: depositAddress, 
+      amount,
+      message: "Please send the exact amount to the address provided."
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
-// @route   POST /api/transactions/withdraw
-// @desc    Submit a withdrawal request
-router.post('/withdraw', protect, async (req, res) => {
-  const { amount, walletAddress, currency } = req.body;
-  const user = await User.findById(req.user.id);
+/**
+ * @route   POST /api/transactions/withdraw
+ * @desc    Submit a withdrawal request (Deducts EUR)
+ */
+router.post('/withdraw', protect, async (req, res, next) => {
+  try {
+    const { amount, walletAddress, currency = 'EUR' } = req.body;
+    const user = await User.findById(req.user.id);
 
-  const available = user.balances.get('USD') || 0;
-  if (amount > available) throw new ApiError(400, "Insufficient balance");
+    // 1. Check EUR balance (Consistency with your plans.js)
+    const available = user.balances.get('EUR') || 0;
+    if (amount > available) {
+      throw new ApiError(400, `Insufficient EUR balance. Available: €${available}`);
+    }
 
-  // Deduct immediately to prevent double-spending
-  user.balances.set('USD', available - amount);
-  
-  user.ledger.push({
-    amount,
-    currency,
-    type: 'withdrawal',
-    status: 'pending',
-    description: `Withdrawal to ${walletAddress}`
-  });
+    // 2. Deduct immediately (Lock funds)
+    user.balances.set('EUR', available - amount);
 
-  await user.save();
-  res.json({ success: true, message: "Withdrawal request submitted" });
+    // 3. Log to ledger
+    user.ledger.push({
+      amount: -amount, // Negative to represent outflow
+      currency,
+      type: 'withdrawal',
+      status: 'pending',
+      description: `Withdrawal request to ${walletAddress}`,
+      createdAt: new Date()
+    });
+
+    await user.save();
+    res.json({ 
+      success: true, 
+      message: "Withdrawal request submitted for review",
+      remainingBalance: user.balances.get('EUR')
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 export default router;

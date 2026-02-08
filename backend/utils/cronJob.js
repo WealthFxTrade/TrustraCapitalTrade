@@ -1,60 +1,69 @@
 import cron from 'node-cron';
-import Deposit from '../models/Deposit.js';
 import User from '../models/User.js';
-import { confirmDeposit } from '../services/confirmDeposit.js';
 
-const PLAN_RATES = {
-  'Rio Starter': 0.0025,
-  'Rio Basic': 0.0035,
-  'Rio Standard': 0.0046,
+// Define the rates here to match your plan.js logic
+const RIO_RATES = {
+  'Rio Starter': 0.003,
+  'Rio Basic': 0.004,
+  'Rio Standard': 0.005,
   'Rio Advanced': 0.006,
-  'Rio Elite': 0.0075
+  'Rio Elite': 0.008
 };
 
-export default function initCronJobs() {
-  console.log('🕒 [Cron] Trustra Capital 2026 Engine Online');
-
-  // BTC Deposit Watcher: Runs every minute
-  cron.schedule('* * * * *', async () => {
-    try {
-      const deposits = await Deposit.find({
-        status: { $in: ['pending', 'confirming'] },
-        txid: { $exists: true, $ne: null },
-        locked: { $ne: true }
-      });
-
-      for (const deposit of deposits) {
-        deposit.locked = true;
-        await deposit.save();
-        
-        await confirmDeposit(deposit._id);
-        
-        deposit.locked = false;
-        await deposit.save();
-      }
-    } catch (err) {
-      console.error('[Cron Error] Deposit Watcher:', err.message);
-    }
-  });
-
-  // Daily ROI Engine: Runs at midnight
+const initCronJobs = () => {
+  /**
+   * Daily Profit Distribution
+   * Runs every day at 00:00 (Midnight)
+   */
   cron.schedule('0 0 * * *', async () => {
-    console.log('[Cron] Calculating Daily ROI...');
+    console.log('🕒 [CRON] Starting daily profit distribution...');
+    
     try {
-      const users = await User.find({ isPlanActive: true });
-      for (const user of users) {
-        const rate = PLAN_RATES[user.plan];
-        if (rate && user.investedAmount > 0) {
-          const dailyProfit = Number((user.investedAmount * rate).toFixed(2));
-          const currentEUR = user.balances.get('EUR') || 0;
-          user.balances.set('EUR', currentEUR + dailyProfit);
-          user.markModified('balances');
-          await user.save();
+      // 1. Find all users with an active plan
+      const activeUsers = await User.find({ isPlanActive: true });
+
+      if (activeUsers.length === 0) {
+        return console.log('🕒 [CRON] No active investments found.');
+      }
+
+      for (let user of activeUsers) {
+        // 2. Identify the daily rate based on the user's plan name
+        const rate = RIO_RATES[user.plan] || 0;
+        
+        if (rate > 0) {
+          // 3. Calculate profit based on total amount invested (from ledger) 
+          // or a specific 'activeInvestment' field. 
+          // For simplicity, we calculate profit based on their last investment entry:
+          const lastInvestment = user.ledger
+            .filter(entry => entry.type === 'investment')
+            .pop();
+
+          if (lastInvestment) {
+            const dailyProfit = lastInvestment.amount * rate;
+            const currentEur = user.balances.get('EUR') || 0;
+
+            // 4. Update EUR balance and add entry to ledger
+            user.balances.set('EUR', currentEur + dailyProfit);
+            
+            user.ledger.push({
+              amount: dailyProfit,
+              currency: 'EUR',
+              type: 'profit',
+              status: 'completed',
+              description: `Daily profit from ${user.plan}`,
+              createdAt: new Date()
+            });
+
+            await user.save();
+          }
         }
       }
+      console.log(`✅ [CRON] Distributed profits to ${activeUsers.length} users.`);
     } catch (err) {
-      console.error('[Cron Error] ROI Engine:', err.message);
+      console.error('❌ [CRON_ERROR]:', err.message);
     }
   });
-}
+};
+
+export default initCronJobs;
 
