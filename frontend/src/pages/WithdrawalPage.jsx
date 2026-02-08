@@ -1,161 +1,149 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Wallet, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { getUserBalance, requestWithdrawal } from '../api';
+import { useAuth } from '../context/AuthContext';
+import { 
+  ArrowLeft, 
+  Wallet, 
+  Send, 
+  ShieldAlert, 
+  Info, 
+  RefreshCw,
+  Banknote
+} from 'lucide-react';
 import toast from 'react-hot-toast';
+import api from '../api/apiService';
 
 export default function WithdrawalPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  
+  const [amount, setAmount] = useState('');
+  const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
-  const [balances, setBalances] = useState({ BTC: 0, USDT: 0, ETH: 0 });
-  const [formData, setFormData] = useState({
-    amount: '',
-    currency: 'BTC',
-    address: '',
-    referenceId: `TX-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
-  });
 
-  useEffect(() => {
-    fetchBalances();
-  }, []);
+  const availableBalance = user?.balances?.EUR || 0;
 
-  const fetchBalances = async () => {
-    try {
-      const res = await getUserBalance();
-      // Ensure this matches your backend User.balances structure
-      setBalances(res.data.user.balances || { BTC: 0, USDT: 0, ETH: 0 });
-    } catch (err) {
-      toast.error("Failed to load account balances");
-    }
-  };
-
-  const handleWithdraw = async (e) => {
+  const handleWithdrawal = async (e) => {
     e.preventDefault();
-    if (Number(formData.amount) > (balances[formData.currency] || 0)) {
-      return toast.error(`Insufficient ${formData.currency} balance`);
-    }
+    const numAmount = parseFloat(amount);
+
+    if (numAmount < 80) return toast.error("Minimum withdrawal is €80.00");
+    if (numAmount > availableBalance) return toast.error("Insufficient EUR balance");
 
     setLoading(true);
     try {
-      const res = await requestWithdrawal(formData);
+      const res = await api.post('/transactions/withdraw', {
+        amount: numAmount,
+        walletAddress: address,
+        currency: 'EUR'
+      });
+
       if (res.data.success) {
-        toast.success("Withdrawal request submitted successfully!");
+        toast.success("Withdrawal request submitted for review");
         navigate('/dashboard');
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Withdrawal failed");
+      toast.error(err.message || "Withdrawal failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-4 sm:p-6 lg:p-8">
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
+    <div className="min-h-screen bg-[#05070a] text-white p-6 md:p-12">
+      <div className="max-w-3xl mx-auto">
+        
+        {/* Navigation */}
         <button 
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors mb-8"
+          className="flex items-center gap-2 text-slate-500 hover:text-white transition mb-10 group"
         >
-          <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+          <ArrowLeft className="group-hover:-translate-x-1 transition" size={18} />
+          <span className="text-xs font-black uppercase tracking-widest">Return</span>
         </button>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-10 shadow-2xl">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="p-3 bg-red-500/10 rounded-2xl">
-              <Wallet className="h-8 w-8 text-red-500" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">Withdraw Funds</h1>
-              <p className="text-slate-500 text-xs uppercase tracking-widest">Secure Asset Outflow</p>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-10">
+          {/* Main Form */}
+          <div className="lg:col-span-3 space-y-8">
+            <header>
+              <h1 className="text-3xl font-black italic uppercase tracking-tighter">Liquidate Assets</h1>
+              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-2">Withdraw EUR to External Node</p>
+            </header>
 
-          {/* Balance Cards */}
-          <div className="grid grid-cols-3 gap-4 mb-8">
-            {Object.entries(balances).map(([symbol, val]) => (
-              <div key={symbol} className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                <p className="text-slate-500 text-[10px] font-bold uppercase">{symbol}</p>
-                <p className="text-lg font-mono font-bold">{val.toFixed(4)}</p>
+            <form onSubmit={handleWithdrawal} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black uppercase text-slate-600 tracking-widest ml-1">Payout Amount (EUR)</label>
+                <div className="relative">
+                  <div className="absolute left-5 top-1/2 -translate-y-1/2 text-xl font-bold text-blue-500">€</div>
+                  <input 
+                    type="number" 
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full bg-black/40 border border-white/5 rounded-2xl py-6 pl-12 pr-6 text-2xl font-mono font-bold outline-none focus:border-blue-500 transition"
+                  />
+                </div>
+                <div className="flex justify-between px-2">
+                    <span className="text-[10px] text-slate-500 font-bold">MIN: €80.00</span>
+                    <button 
+                        type="button"
+                        onClick={() => setAmount(availableBalance)}
+                        className="text-[10px] text-blue-500 font-bold hover:underline"
+                    >
+                        MAX: €{availableBalance.toLocaleString('de-DE')}
+                    </button>
+                </div>
               </div>
-            ))}
-          </div>
 
-          <form onSubmit={handleWithdraw} className="space-y-6">
-            {/* Currency Select */}
-            <div>
-              <label className="block text-slate-400 text-sm mb-2 font-medium">Select Asset</label>
-              <select 
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:border-indigo-500 outline-none transition-all"
-                value={formData.currency}
-                onChange={(e) => setFormData({...formData, currency: e.target.value})}
-              >
-                <option value="BTC">Bitcoin (BTC)</option>
-                <option value="USDT">Tether (USDT)</option>
-                <option value="ETH">Ethereum (ETH)</option>
-              </select>
-            </div>
-
-            {/* Amount Input */}
-            <div>
-              <label className="block text-slate-400 text-sm mb-2 font-medium">Withdrawal Amount</label>
-              <div className="relative">
+              <div className="space-y-2">
+                <label className="text-[9px] font-black uppercase text-slate-600 tracking-widest ml-1">Destination Address (BTC/SEPA)</label>
                 <input 
-                  type="number" 
-                  step="any"
-                  required
-                  placeholder="0.00"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:border-indigo-500 outline-none transition-all font-mono"
-                  value={formData.amount}
-                  onChange={(e) => setFormData({...formData, amount: e.target.value})}
+                  type="text" 
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Enter external wallet or IBAN"
+                  className="w-full bg-black/40 border border-white/5 rounded-2xl p-5 text-sm font-mono outline-none focus:border-blue-500 transition"
                 />
-                <button 
-                  type="button"
-                  onClick={() => setFormData({...formData, amount: balances[formData.currency]})}
-                  className="absolute right-3 top-3 text-xs text-indigo-500 font-bold hover:text-indigo-400"
-                >
-                  MAX
-                </button>
               </div>
+
+              <button 
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-2xl font-black uppercase tracking-[0.3em] text-[10px] transition-all flex items-center justify-center gap-3 shadow-2xl shadow-blue-600/20"
+              >
+                {loading ? <RefreshCw className="animate-spin" /> : <><Send size={18}/> Initiate Payout</>}
+              </button>
+            </form>
+          </div>
+
+          {/* Right Sidebar: Security Info */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] backdrop-blur-xl">
+               <div className="flex items-center gap-3 mb-6">
+                 <ShieldAlert className="text-amber-500" size={20} />
+                 <h4 className="text-[10px] font-black uppercase tracking-widest">Protocol Notice</h4>
+               </div>
+               <ul className="space-y-4 text-[11px] text-slate-400 font-medium leading-relaxed">
+                 <li className="flex gap-2">
+                   <div className="w-1 h-1 bg-blue-500 rounded-full mt-1.5 shrink-0" />
+                   Withdrawals are subject to 24-hour manual audit.
+                 </li>
+                 <li className="flex gap-2">
+                   <div className="w-1 h-1 bg-blue-500 rounded-full mt-1.5 shrink-0" />
+                   SEPA transfers (EUR) typically incur no platform fees.
+                 </li>
+                 <li className="flex gap-2">
+                   <div className="w-1 h-1 bg-blue-500 rounded-full mt-1.5 shrink-0" />
+                   Ensure destination address accuracy. Trustra cannot reverse blockchain settlements.
+                 </li>
+               </ul>
             </div>
 
-            {/* Destination Address */}
-            <div>
-              <label className="block text-slate-400 text-sm mb-2 font-medium">Destination Wallet Address</label>
-              <input 
-                type="text" 
-                required
-                placeholder={`Enter your ${formData.currency} address`}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 focus:border-indigo-500 outline-none transition-all font-mono text-sm"
-                value={formData.address}
-                onChange={(e) => setFormData({...formData, address: e.target.value})}
-              />
+            <div className="bg-blue-600/10 border border-blue-600/20 p-8 rounded-[2.5rem] text-center">
+              <Banknote className="mx-auto text-blue-500 mb-4" size={32} />
+              <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.2em] mb-1">Standard Processing</p>
+              <p className="text-xs font-bold">1–2 Hours (2026 Avg.)</p>
             </div>
-
-            {/* Security Warning */}
-            <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl flex gap-3">
-              <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
-              <p className="text-xs text-amber-200/70 leading-relaxed">
-                Ensure the destination address is correct. Crypto transfers are irreversible. 
-                Withdrawals are usually processed within 1-2 hours.
-              </p>
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-800 py-4 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
-                  <ShieldCheck className="h-5 w-5" />
-                  Confirm Withdrawal
-                </>
-              )}
-            </button>
-          </form>
+          </div>
         </div>
       </div>
     </div>
