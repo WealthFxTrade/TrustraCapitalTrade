@@ -1,57 +1,38 @@
-import User from '../models/User.js';
-import { ApiError } from '../middleware/errorMiddleware.js';
+import HotWallet from '../models/HotWallet.js';
+import BtcAddress from '../models/BtcAddress.js';
+import { deriveBtcAddress } from '../utils/bitcoinUtils.js';
 
-/**
- * Request a withdrawal in EUR
- * @route POST /api/withdrawals/request
- * @access Private
- */
-export const requestWithdrawal = async (req, res, next) => {
+export const getBtcAddress = async (req, res) => {
   try {
-    const { amount, walletAddress } = req.body;
+    const userId = req.user._id;
+    const { force } = req.query;
 
-    if (!amount || amount <= 0) {
-      throw new ApiError(400, 'Invalid withdrawal amount');
+    if (force !== 'true') {
+      const existing = await BtcAddress.findOne({ user: userId });
+      if (existing) return res.json({ address: existing.address });
     }
 
-    if (!walletAddress) {
-      throw new ApiError(400, 'Destination wallet address is required');
+    let hotWallet = await HotWallet.findOne({});
+    if (!hotWallet) {
+      hotWallet = await HotWallet.create({ currency: 'BTC', balance: 0, lastIndex: 0 });
     }
 
-    // 1. Fetch user
-    const user = await User.findById(req.user._id);
-    if (!user) throw new ApiError(404, 'User not found');
+    const nextIndex = (hotWallet.lastIndex || 0) + 1;
+    const newAddress = deriveBtcAddress(nextIndex);
 
-    // 2. Check EUR balance
-    const currentBal = user.balances.get('EUR') || 0;
-    if (currentBal < amount) {
-      throw new ApiError(400, 'Insufficient Euro balance');
-    }
+    hotWallet.lastIndex = nextIndex;
+    await hotWallet.save();
 
-    // 3. Lock funds
-    user.balances.set('EUR', currentBal - amount);
+    await BtcAddress.findOneAndUpdate(
+      { user: userId },
+      { address: newAddress, index: nextIndex },
+      { upsert: true, new: true }
+    );
 
-    // 4. Add ledger entry
-    user.ledger.push({
-      amount: Number(amount),
-      currency: 'EUR',
-      type: 'withdrawal',
-      status: 'pending',
-      description: `Withdrawal request to: ${walletAddress}`,
-      createdAt: new Date()
-    });
-
-    user.markModified('balances');
-    user.markModified('ledger');
-
-    await user.save();
-
-    res.json({
-      success: true,
-      message: 'Withdrawal request submitted for approval'
-    });
-
-  } catch (err) {
-    next(err); // use global error handler
+    res.json({ address: newAddress });
+  } catch (error) {
+    console.error('[Controller Error]:', error.message);
+    res.status(500).json({ error: 'Failed to provide BTC address' });
   }
 };
+

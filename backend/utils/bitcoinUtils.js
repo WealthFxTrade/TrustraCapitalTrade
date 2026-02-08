@@ -5,13 +5,13 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Initialize BIP32 with the elliptic curve library for Node v25 compatibility
+// ✅ Correct ESM Initialization for BIP32
 const bip32 = BIP32Factory(ecc);
 const NETWORK = bitcoin.networks.bitcoin; 
 const BTC_XPUB = process.env.BITCOIN_XPUB;
 
 /**
- * Derive Native Segwit (P2WPKH) address from XPUB and index
+ * Derive Native Segwit (bc1...) address from XPUB and index
  */
 export const deriveBtcAddress = (index) => {
   if (!BTC_XPUB) throw new Error('BITCOIN_XPUB not set in env');
@@ -25,35 +25,33 @@ export const deriveBtcAddress = (index) => {
 };
 
 /**
- * Fetch BTC balance from Blockchain.info API
+ * Fetch BTC balance from Blockchain API
  */
 export const getBtcBalance = async (address) => {
   try {
     const response = await fetch(`https://blockchain.info{address}`);
-    if (!response.ok) throw new Error('API Error');
+    if (!response.ok) throw new Error('API unreachable');
     const data = await response.json();
+    // Return in BTC (API returns satoshis)
     return data.final_balance / 100000000;
   } catch (error) {
-    console.error(`Balance fetch failed for ${address}:`, error.message);
+    console.error(`[BTC Utils] Balance error for ${address}:`, error.message);
     return 0;
   }
 };
 
 /**
- * Get confirmations for a transaction ID
+ * Fetch Confirmations for a transaction
  */
 export const getBtcTxConfirmations = async (txid) => {
   try {
     const response = await fetch(`https://blockchain.info{txid}`);
     if (!response.ok) return 0;
     const data = await response.json();
-    
     if (!data.block_height) return 0;
 
-    const latestRes = await fetch('https://blockchain.info');
-    const latestData = await latestRes.json();
-    
-    return latestData.height - data.block_height + 1;
+    const latest = await (await fetch('https://blockchain.info')).json();
+    return latest.height - data.block_height + 1;
   } catch (error) {
     return 0;
   }

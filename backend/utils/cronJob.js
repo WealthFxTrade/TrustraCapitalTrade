@@ -12,9 +12,9 @@ const PLAN_RATES = {
 };
 
 export default function initCronJobs() {
-  console.log('🕒 Initializing Trustra Capital Cron Jobs');
+  console.log('🕒 [Cron] Trustra Capital 2026 Engine Online');
 
-  // BTC Deposit Watcher (every 1 minute)
+  // BTC Deposit Watcher: Runs every minute
   cron.schedule('* * * * *', async () => {
     try {
       const deposits = await Deposit.find({
@@ -23,32 +23,26 @@ export default function initCronJobs() {
         locked: { $ne: true }
       });
 
-      if (deposits.length === 0) return;
-
       for (const deposit of deposits) {
-        try {
-          deposit.locked = true;
-          await deposit.save();
-
-          await confirmDeposit(deposit._id);
-
-          deposit.locked = false;
-          await deposit.save();
-        } catch (err) {
-          deposit.locked = false;
-          await deposit.save();
-        }
+        deposit.locked = true;
+        await deposit.save();
+        
+        await confirmDeposit(deposit._id);
+        
+        deposit.locked = false;
+        await deposit.save();
       }
     } catch (err) {
-      console.error('[Deposit Watcher CRON ERROR]', err.message);
+      console.error('[Cron Error] Deposit Watcher:', err.message);
     }
-  }, { scheduled: true, timezone: 'Europe/Berlin' });
+  });
 
-  // Daily ROI Engine (every day at 00:00)
+  // Daily ROI Engine: Runs at midnight
   cron.schedule('0 0 * * *', async () => {
+    console.log('[Cron] Calculating Daily ROI...');
     try {
-      const activeUsers = await User.find({ isPlanActive: true });
-      for (const user of activeUsers) {
+      const users = await User.find({ isPlanActive: true });
+      for (const user of users) {
         const rate = PLAN_RATES[user.plan];
         if (rate && user.investedAmount > 0) {
           const dailyProfit = Number((user.investedAmount * rate).toFixed(2));
@@ -58,10 +52,9 @@ export default function initCronJobs() {
           await user.save();
         }
       }
-      console.log('✅ Daily ROI distributed.');
     } catch (err) {
-      console.error('ROI Engine Error:', err.message);
+      console.error('[Cron Error] ROI Engine:', err.message);
     }
-  }, { scheduled: true, timezone: 'Europe/Berlin' });
+  });
 }
 
