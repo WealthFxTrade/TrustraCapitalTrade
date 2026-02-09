@@ -1,137 +1,87 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import DashboardHeader from '../components/DashboardHeader';
-import DashboardCharts from '../components/DashboardCharts';
-import RecentTransactions from '../components/RecentTransactions';
-import { fetchBTCPrice } from '../api/market';
-import { fetchPlans } from '../api/plan';
-import api from '../api/apiService';
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { 
+  TrendingUp, Wallet, ArrowDownCircle, ArrowUpCircle, 
+  LogOut, User as UserIcon, ShieldCheck 
+} from 'lucide-react';
 
-export default function DashboardPage({ token, user, logout }) {
-  const navigate = useNavigate();
-
-  // ---------- State ----------
-  const [balance, setBalance] = useState(null);
-  const [plan, setPlan] = useState(null);
-  const [dailyRate, setDailyRate] = useState(null);
-  const [transactions, setTransactions] = useState([]);
-  const [btcPrice, setBtcPrice] = useState(77494);
-  const [btcHistory, setBtcHistory] = useState([]);
-  const [portfolioHistory, setPortfolioHistory] = useState([]);
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  // ---------- Fetch Dashboard Data ----------
-  const fetchDashboardData = useCallback(async (signal) => {
-    try {
-      if (!token) return;
-
-      // Fetch user, transactions, BTC price, plans in parallel
-      const [userRes, txRes, btcRes, plansRes] = await Promise.all([
-        api.get('/user/me', { signal }),
-        api.get('/user/transactions', { signal }),
-        fetchBTCPrice(),
-        fetchPlans()
-      ]);
-
-      // ---------- User Info ----------
-      if (userRes.data) {
-        setBalance(userRes.data.user.balance);
-        setPlan(userRes.data.user.plan);
-        setDailyRate(userRes.data.dailyRate);
-      }
-
-      // ---------- Transactions ----------
-      if (txRes.data) {
-        setTransactions(txRes.data.transactions || []);
-      }
-
-      // ---------- BTC Price ----------
-      if (btcRes !== null) {
-        setBtcPrice(btcRes);
-        setBtcHistory(prev => [...prev, btcRes].slice(-10));
-      }
-
-      // ---------- Plans & Portfolio ----------
-      if (plansRes.success) {
-        setPlans(plansRes.data);
-        const simulatedTotal = plansRes.data.reduce((acc, p) => acc + (p.min * 1.5), 0);
-        const flux = simulatedTotal * (btcRes / 77000);
-        setPortfolioHistory(prev => [...prev, flux].slice(-10));
-      }
-
-      setError(null);
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        console.error('Dashboard Sync Error:', err);
-        setError('Failed to sync dashboard data');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  // ---------- Lifecycle ----------
-  useEffect(() => {
-    if (!token) {
-      navigate('/login', { replace: true });
-      return;
-    }
-
-    const controller = new AbortController();
-    fetchDashboardData(controller.signal);
-    const interval = setInterval(() => fetchDashboardData(controller.signal), 30000);
-
-    return () => {
-      clearInterval(interval);
-      controller.abort();
-    };
-  }, [token, navigate, fetchDashboardData]);
-
-  // ---------- Logout ----------
-  const handleLogout = () => {
-    logout();
-    navigate('/', { replace: true });
-  };
-
-  // ---------- Loading ----------
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500" />
-      </div>
-    );
-  }
+export default function DashboardHeader({ user, balances, plan, dailyRate, logout, currency = "€" }) {
+  // Total balance in EUR (we assume USD converted to € or just use balances.USD)
+  const totalBalance = balances?.USD || 0;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      {/* Header */}
-      <DashboardHeader
-        user={user}
-        balance={balance}
-        plan={plan}
-        dailyRate={dailyRate}
-        logout={handleLogout}
-      />
+    <nav className="bg-[#0a0d14] border-b border-white/5 px-6 sticky top-0 z-50 backdrop-blur-xl">
+      <div className="max-w-7xl mx-auto py-4">
+        {/* Top Row: Brand & Profile */}
+        <div className="flex items-center justify-between mb-6">
+          <Link to="/" className="flex items-center gap-2">
+            <TrendingUp className="h-6 w-6 text-blue-500" />
+            <span className="font-black italic uppercase tracking-tighter text-lg">Trustra</span>
+          </Link>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
-        {error && (
-          <div className="bg-red-500/10 border border-red-500 text-red-500 p-4 rounded-lg">
-            {error}
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex flex-col items-end mr-2">
+              <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest italic">
+                Node: {plan}
+              </span>
+              <span className="text-xs font-bold text-white uppercase tracking-tighter">
+                {user?.fullName}
+              </span>
+            </div>
+            <button 
+              onClick={logout}
+              className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/10 hover:border-red-500/20 group transition-all"
+              title="Secure Logout"
+            >
+              <LogOut className="h-4 w-4 text-slate-400 group-hover:text-red-500" />
+            </button>
           </div>
-        )}
+        </div>
 
-        <DashboardCharts
-          btcHistory={btcHistory}
-          portfolioHistory={portfolioHistory}
-          btcPrice={btcPrice}
-          plans={plans}
-        />
+        {/* Bottom Row: Balance & Growth */}
+        <div className="flex flex-col md:flex-row items-end md:items-center justify-between gap-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+            {/* Command Balance */}
+            <div className="bg-blue-600/10 p-4 rounded-2xl border border-blue-500/20">
+              <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em] mb-1">Command Balance</p>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-black font-mono">
+                  {currency}{totalBalance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              {/* Optional: show BTC & USDT */}
+              <p className="text-[8px] text-slate-400 mt-1">
+                BTC: {balances?.BTC ?? 0} | USDT: {balances?.USDT ?? 0}
+              </p>
+            </div>
+            
+            {/* Daily Yield */}
+            <div className="hidden sm:block">
+              <p className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-1">Daily Yield</p>
+              <div className="flex items-center gap-1 text-emerald-400">
+                <TrendingUp size={14} />
+                <span className="text-lg font-black">+{dailyRate}%</span>
+              </div>
+            </div>
+          </div>
 
-        <RecentTransactions transactions={transactions} />
-      </main>
-    </div>
+          {/* Actions: Deposit & Withdraw */}
+          <div className="flex gap-2 w-full md:w-auto">
+            <Link 
+              to="/deposit" 
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition shadow-lg shadow-blue-600/20"
+            >
+              <ArrowDownCircle size={14} /> Deposit
+            </Link>
+            <Link 
+              to="/withdraw" 
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white/5 border border-white/10 hover:bg-white/10 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition"
+            >
+              <ArrowUpCircle size={14} /> Withdraw
+            </Link>
+          </div>
+        </div>
+      </div>
+    </nav>
   );
 }

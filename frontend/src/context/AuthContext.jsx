@@ -8,7 +8,7 @@ const initialState = {
   user: null,
   token: null,
   loading: true,
-  initialized: false, 
+  initialized: false,
   isAuthenticated: false,
 };
 
@@ -25,7 +25,11 @@ function authReducer(state, action) {
       };
     case 'LOGOUT':
     case 'AUTH_FAILED':
-      return { ...initialState, loading: false, initialized: true };
+      return { 
+        ...initialState, 
+        loading: false, 
+        initialized: true 
+      };
     default:
       return state;
   }
@@ -34,9 +38,10 @@ function authReducer(state, action) {
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
+  // 1. AUTO-LOGIN: Check for token on app load
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('token'); // Matches api.js
+      const token = localStorage.getItem('token'); // Matches api.js interceptor
       if (!token) {
         dispatch({ type: 'AUTH_FAILED' });
         return;
@@ -55,22 +60,35 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
+  // 2. LOGIN ACTION: Called by Login.jsx
+  const login = (user, token) => {
+    localStorage.setItem('token', token);
+    dispatch({
+      type: 'LOGIN',
+      payload: { user, token },
+    });
+  };
+
+  // 3. LOGOUT ACTION: Clears state and disk
   const logout = () => {
     localStorage.removeItem('token');
     dispatch({ type: 'LOGOUT' });
-    toast.success('Logged out successfully');
+    toast.success('Securely logged out');
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, dispatch, logout }}>
+    <AuthContext.Provider value={{ ...state, dispatch, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => {
+// Custom hook for components
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used inside AuthProvider');
+  if (!context) {
+    throw new Error('useAuth must be used inside an AuthProvider');
+  }
   return context;
-};
+}
 

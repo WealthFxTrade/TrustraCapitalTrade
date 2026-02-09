@@ -20,7 +20,7 @@ export default function Signup() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -29,22 +29,17 @@ export default function Signup() {
 
     const { fullName, email, password, confirmPassword } = formData;
 
-    // Basic client-side validation
-    if (!fullName.trim() || fullName.trim().length < 2) {
+    // ✅ Client-side validation
+    if (!fullName.trim() || fullName.trim().length < 2)
       return toast.error('Please enter a valid full name');
-    }
-    if (!email.trim()) {
+    if (!email.trim())
       return toast.error('Email is required');
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
       return toast.error('Please enter a valid email address');
-    }
-    if (password.length < 8) {
+    if (password.length < 8)
       return toast.error('Password must be at least 8 characters');
-    }
-    if (password !== confirmPassword) {
+    if (password !== confirmPassword)
       return toast.error('Passwords do not match');
-    }
 
     setLoading(true);
 
@@ -57,11 +52,11 @@ export default function Signup() {
 
       const { user, token } = response.data;
 
+      // Log the user in immediately
       login(user, token);
-
       toast.success('Account created successfully! Welcome aboard.');
 
-      // Smart redirect: where user came from or default to dashboard/plans
+      // Redirect smartly
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } catch (error) {
@@ -89,6 +84,7 @@ export default function Signup() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Full Name */}
           <div className="relative">
             <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
@@ -104,6 +100,7 @@ export default function Signup() {
             />
           </div>
 
+          {/* Email */}
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
@@ -119,6 +116,7 @@ export default function Signup() {
             />
           </div>
 
+          {/* Password */}
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
@@ -134,6 +132,7 @@ export default function Signup() {
             />
           </div>
 
+          {/* Confirm Password */}
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
@@ -149,6 +148,7 @@ export default function Signup() {
             />
           </div>
 
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
@@ -160,8 +160,7 @@ export default function Signup() {
           >
             {loading ? (
               <>
-                <RefreshCw className="animate-spin" size={18} />
-                Creating Account...
+                <RefreshCw className="animate-spin" size={18} /> Creating Account...
               </>
             ) : (
               'Create Account'

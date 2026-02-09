@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { useAuth } from '../context/AuthContext.jsx'; // adjust path if needed
+import { useAuth } from '../context/AuthContext.jsx';
 import api from '../api/api.js';
 import { TrendingUp, Mail, Lock, RefreshCw, ChevronRight } from 'lucide-react';
 
@@ -12,40 +12,29 @@ export default function Login() {
 
   const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation(); // ← important: to redirect back after login
+  const location = useLocation();
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
     if (!email.trim() || !password) {
       return toast.error('Please enter email and password');
     }
-
     setLoading(true);
-
     try {
-      const response = await api.post('/auth/login', {
-        email: email.trim(),
-        password,
-      });
+      const res = await api.post('/auth/login', { email: email.trim(), password });
+      const { user, token } = res.data;
 
-      const { user, token } = response.data;
-
-      // Call context login (which should handle localStorage + state)
+      // Update AuthContext + localStorage
       login(user, token);
 
       toast.success('Access Granted');
 
-      // Smart redirect: go back to where user came from (if protected route sent them here)
-      // otherwise default to dashboard or plans
+      // Redirect to previous protected route or dashboard
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
-    } catch (error) {
-      // Better error handling — show backend message when available
-      const message =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        'Login failed. Please check your credentials.';
+    } catch (err) {
+      console.error(err);
+      const message = err.response?.data?.message || 'Login failed. Check credentials';
       toast.error(message);
     } finally {
       setLoading(false);
@@ -68,10 +57,7 @@ export default function Login() {
         <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl">
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="relative">
-              <Mail
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
-                size={16}
-              />
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
               <input
                 type="email"
                 placeholder="investor@trustra.com"
@@ -85,10 +71,7 @@ export default function Login() {
             </div>
 
             <div className="relative">
-              <Lock
-                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
-                size={16}
-              />
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
               <input
                 type="password"
                 placeholder="••••••••"
@@ -123,19 +106,12 @@ export default function Login() {
           </form>
 
           <div className="mt-6 text-center text-xs space-y-3">
-            <Link
-              to="/forgot-password"
-              className="text-blue-400 hover:text-blue-300 transition-colors block"
-            >
+            <Link to="/forgot-password" className="text-blue-400 hover:text-blue-300 transition-colors block">
               Forgot password?
             </Link>
-
             <p className="text-slate-500">
               No account?{' '}
-              <Link
-                to="/register"
-                className="text-white font-bold hover:text-blue-400 transition-colors underline"
-              >
+              <Link to="/register" className="text-white font-bold hover:text-blue-400 transition-colors underline">
                 Register here
               </Link>
             </p>
