@@ -1,10 +1,11 @@
-// src/App.jsx
 import React, { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 
+// Context & Hooks
+import { useAuth } from "./context/AuthContext.jsx";
+
 // Guards & Layout
-import AuthGuard from "./components/AuthGuard.jsx";
 import GuestGuard from "./components/GuestGuard.jsx";
 import ProtectedLayout from "./components/ProtectedLayout.jsx";
 
@@ -24,6 +25,11 @@ import AdminPanel from "./pages/AdminPanel.jsx";
 import AdminWithdrawals from "./pages/AdminWithdrawals.jsx";
 
 export default function App() {
+  const { initialized } = useAuth();
+
+  // Wait until AuthContext is ready
+  if (!initialized) return <LoadingScreen message="Initializing Trustra..." />;
+
   return (
     <div className="min-h-screen bg-[#05070a] text-slate-50 selection:bg-blue-500/30">
       <Toaster
@@ -46,85 +52,22 @@ export default function App() {
           <Route path="/" element={<Landing />} />
 
           {/* 2️⃣ GUEST ONLY */}
-          <Route
-            path="/login"
-            element={
-              <GuestGuard>
-                <Login />
-              </GuestGuard>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <GuestGuard>
-                <Signup />
-              </GuestGuard>
-            }
-          />
+          <Route path="/login" element={<GuestGuard><Login /></GuestGuard>} />
+          <Route path="/register" element={<GuestGuard><Signup /></GuestGuard>} />
 
           {/* 3️⃣ PROTECTED USER ROUTES */}
           <Route element={<ProtectedLayout />}>
-            <Route
-              path="/dashboard"
-              element={
-                <AuthGuard>
-                  <DashboardPage />
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/invest"
-              element={
-                <AuthGuard>
-                  <Invest />
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/deposit"
-              element={
-                <AuthGuard>
-                  <DepositPage />
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/withdraw"
-              element={
-                <AuthGuard>
-                  <WithdrawalPage />
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/profile"
-              element={
-                <AuthGuard>
-                  <ProfilePage />
-                </AuthGuard>
-              }
-            />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/invest" element={<Invest />} />
+            <Route path="/deposit" element={<DepositPage />} />
+            <Route path="/withdraw" element={<WithdrawalPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
           {/* 4️⃣ ADMIN ROUTES */}
           <Route element={<ProtectedLayout adminOnly />}>
-            <Route
-              path="/admin"
-              element={
-                <AuthGuard>
-                  <AdminPanel />
-                </AuthGuard>
-              }
-            />
-            <Route
-              path="/admin/withdrawals"
-              element={
-                <AuthGuard>
-                  <AdminWithdrawals />
-                </AuthGuard>
-              }
-            />
+            <Route path="/admin" element={<AdminPanel />} />
+            <Route path="/admin/withdrawals" element={<AdminWithdrawals />} />
           </Route>
 
           {/* 5️⃣ FALLBACK */}
