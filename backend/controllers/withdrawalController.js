@@ -1,166 +1,136 @@
+import mongoose from 'mongoose';
 import Withdrawal from '../models/Withdrawal.js';
 import User from '../models/User.js';
-import { ApiError } from '../middleware/errorMiddleware.js';
-import mongoose from 'mongoose';
 
 /**
- * User requests withdrawal
+ * Trustra Capital Trade - Withdrawal Controller (Rio Series 2026)
+ * Handles secure fund deduction and admin review queuing.
  */
-export const requestWithdrawal = async (req, res, next) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
 
+// @desc    Request a new withdrawal
+// @route   POST /api/withdrawals
+// @access  Private
+export const requestWithdrawal = async (req, res) => {
+  const session = await mongoose.startSession();
+  
   try {
-    const { asset, amount, address } = req.body;
+    session.startTransaction();
+
+    const { amount, asset, address } = req.body;
     const userId = req.user._id;
 
-    if (!amount || amount <= 0) throw new ApiError(400, "Invalid amount");
-    if (!address) throw new ApiError(400, "Wallet address is required");
-    if (!asset) throw new ApiError(400, "Asset type is required");
+    // 1. Validation
+    if (!amount || amount <= 0) throw new Error('Invalid withdrawal amount');
+    if (!['BTC', 'ETH', 'USDT'].includes(asset)) throw new Error('Unsupported asset');
 
     const user = await User.findById(userId).session(session);
-    if (!user) throw new ApiError(404, "User not found");
+    if (!user) throw new Error('User Node not found');
 
-    // Check balance
     const currentBalance = user.balances.get(asset) || 0;
+
+    // 2. Anti-Fraud: Check for sufficient funds
     if (currentBalance < amount) {
-      throw new ApiError(400, `Insufficient ${asset} balance`);
+      throw new Error(`Insufficient ${asset} balance. Required: ${amount}, Available: ${currentBalance}`);
     }
 
-    // Deduct funds (lock)
+    // 3. Atomic Deduction: Subtract from balance immediately
     user.balances.set(asset, currentBalance - amount);
-    user.markModified('balances');
-
-    // Create withdrawal
-    const [withdrawal] = await Withdrawal.create([{
-      user: userId,
-      asset,
-      amount,
-      address,
-      status: 'pending'
-    }], { session });
-
-    // Ledger entry
+    
+    // 4. Update Ledger: Mark as pending withdrawal
     user.ledger.push({
-      amount,
+      amount: -amount, // Negative to show deduction
       currency: asset,
       type: 'withdrawal',
       status: 'pending',
-      description: `Withdrawal request to ${address}`,
-      referenceId: withdrawal._id
+      description: `Withdrawal request to ${address.slice(0, 8)}...`,
+      createdAt: new Date()
     });
+
+    user.markModified('balances');
     user.markModified('ledger');
     await user.save({ session });
 
+    // 5. Create Withdrawal Record
+    const withdrawal = await Withdrawal.create([{
+      user: userId,
+      asset,
+      address,
+      amount,
+      status: 'pending',
+      fee: 0 // Logic for fees can be added here
+    }], { session });
+
     await session.commitTransaction();
-    res.status(201).json({ success: true, message: "Withdrawal requested", withdrawal });
-  } catch (err) {
+
+    res.status(201).json({
+      success: true,
+      message: 'Withdrawal request transmitted to Security Node',
+      withdrawal: withdrawal[0]
+    });
+
+  } catch (error) {
     await session.abortTransaction();
-    next(err);
+    console.error(`[WITHDRAWAL_ERROR]: ${error.message}`);
+    res.status(400).json({ success: false, message: error.message });
   } finally {
     session.endSession();
   }
 };
 
-/**
- * Admin approves withdrawal
- */
-export const approveWithdrawal = async (req, res, next) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
+// @desc    Get user withdrawal history
+// @route   GET /api/withdrawals/my
+// @access  Private
+export const getUserWithdrawals = async (req, res) => {
   try {
-    const { withdrawalId } = req.params;
-    const withdrawal = await Withdrawal.findById(withdrawalId).session(session);
-    if (!withdrawal) throw new ApiError(404, "Withdrawal not found");
-    if (withdrawal.status !== 'pending') throw new ApiError(400, "Already processed");
-
-    withdrawal.status = 'completed';
-    withdrawal.processedAt = new Date();
-    await withdrawal.save({ session });
-
-    // Update ledger
-    const user = await User.findById(withdrawal.user).session(session);
-    const ledgerItem = user.ledger.find(l => l.referenceId.toString() === withdrawal._id.toString());
-    if (ledgerItem) {
-      ledgerItem.status = 'completed';
-      user.markModified('ledger');
-      await user.save({ session });
-    }
-
-    await session.commitTransaction();
-    res.json({ success: true, message: "Withdrawal approved", withdrawal });
-  } catch (err) {
-    await session.abortTransaction();
-    next(err);
-  } finally {
-    session.endSession();
-  }
-};
-
-/**
- * Admin rejects withdrawal
- */
-export const rejectWithdrawal = async (req, res, next) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const { withdrawalId } = req.params;
-    const withdrawal = await Withdrawal.findById(withdrawalId).session(session);
-    if (!withdrawal) throw new ApiError(404, "Withdrawal not found");
-    if (withdrawal.status !== 'pending') throw new ApiError(400, "Already processed");
-
-    // Refund user
-    const user = await User.findById(withdrawal.user).session(session);
-    const currentBalance = user.balances.get(withdrawal.asset) || 0;
-    user.balances.set(withdrawal.asset, currentBalance + withdrawal.amount);
-
-    // Update ledger
-    const ledgerItem = user.ledger.find(l => l.referenceId.toString() === withdrawal._id.toString());
-    if (ledgerItem) {
-      ledgerItem.status = 'rejected';
-      user.markModified('ledger');
-    }
-
-    await user.save({ session });
-
-    withdrawal.status = 'rejected';
-    withdrawal.processedAt = new Date();
-    await withdrawal.save({ session });
-
-    await session.commitTransaction();
-    res.json({ success: true, message: "Withdrawal rejected and funds returned", withdrawal });
-  } catch (err) {
-    await session.abortTransaction();
-    next(err);
-  } finally {
-    session.endSession();
-  }
-};
-
-/**
- * User withdrawal history
- */
-export const getUserWithdrawals = async (req, res, next) => {
-  try {
-    const withdrawals = await Withdrawal.find({ user: req.user._id }).sort({ createdAt: -1 });
-    res.json({ success: true, withdrawals });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
- * Admin: all withdrawals
- */
-export const getAllWithdrawals = async (req, res, next) => {
-  try {
-    const withdrawals = await Withdrawal.find()
-      .populate('user', 'fullName email')
+    const withdrawals = await Withdrawal.find({ user: req.user._id })
       .sort({ createdAt: -1 });
-    res.json({ success: true, count: withdrawals.length, withdrawals });
-  } catch (err) {
-    next(err);
+
+    res.json({ success: true, withdrawals });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to retrieve history' });
   }
 };
+
+// @desc    Admin: Approve or Reject Withdrawal
+// @route   PATCH /api/withdrawals/:id/status (Admin Only)
+export const adminUpdateWithdrawal = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminNote, txHash } = req.body;
+
+    const withdrawal = await Withdrawal.findById(id);
+    if (!withdrawal) return res.status(404).json({ success: false, message: 'Record not found' });
+    
+    if (withdrawal.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Request already processed' });
+    }
+
+    if (status === 'rejected') {
+      // Revert funds to user balance
+      const user = await User.findById(withdrawal.user);
+      const current = user.balances.get(withdrawal.asset) || 0;
+      user.balances.set(withdrawal.asset, current + withdrawal.amount);
+      
+      user.ledger.push({
+        amount: withdrawal.amount,
+        currency: withdrawal.asset,
+        type: 'deposit', // Re-crediting as a deposit type
+        status: 'completed',
+        description: `Refund: Rejected Withdrawal #${id.slice(-6)}`
+      });
+
+      user.markModified('balances');
+      await user.save();
+    }
+
+    withdrawal.status = status;
+    withdrawal.adminNote = adminNote;
+    withdrawal.txHash = txHash;
+    await withdrawal.save();
+
+    res.json({ success: true, message: `Withdrawal ${status}` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

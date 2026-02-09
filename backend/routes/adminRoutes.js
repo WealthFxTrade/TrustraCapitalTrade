@@ -1,35 +1,35 @@
 import express from 'express';
+import {
+  getDashboardStats,
+  updateBalance,
+  getAuditLogs
+} from '../controllers/adminController.js';
+import {
+  getKycRequests,
+  approveKyc,
+  rejectKyc
+} from '../controllers/adminKycController.js';
+import { protect, admin } from '../middleware/auth.js';
+
 const router = express.Router();
 
-// Import all the controllers we fixed
-import { 
-  getDashboardStats, 
-  updateBalance, 
-  addBonus 
-} from '../controllers/adminController.js';
-
-// Import your existing user controllers
-import { getUsers, toggleBlock } from '../controllers/userController.js';
-
-// Middlewares
-import authMiddleware from '../middleware/auth.js';
-import adminMiddleware from '../middleware/admin.js';
-
 /**
- * ALL ROUTES PROTECTED BY AUTH AND ADMIN MIDDLEWARE
+ * SECURITY NODE: All routes below are restricted to
+ * Administrators with valid JWT Bearer tokens.
  */
-router.use(authMiddleware, adminMiddleware);
+router.use(protect, admin);
 
-// 1. Global Platform Stats (The Overview Cards)
+// --- 1. Global Intelligence ---
 router.get('/stats', getDashboardStats);
+router.get('/audit-logs', getAuditLogs);
 
-// 2. User Management (The Table)
-router.get('/users', getUsers);
-router.post('/users/toggle-block', toggleBlock);
-
-// 3. Financial Synchronization (The "Adjust Funds" & "+ Add Bonus" Logic)
+// --- 2. Financial Management ---
 router.post('/users/update-balance', updateBalance);
-router.post('/users/add-bonus', addBonus);
+
+// --- 3. Compliance & KYC ---
+router.get('/kyc', getKycRequests);
+router.patch('/kyc/:id/approve', approveKyc);
+router.patch('/kyc/:id/reject', rejectKyc);
 
 export default router;
 

@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 // Sub-schema for ledger
 const ledgerSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
-  currency: { type: String, default: 'USD' },
+  currency: { type: String, default: 'EUR' },           // ← Changed to EUR
   type: {
     type: String,
     enum: ['deposit', 'withdrawal', 'investment', 'roi_profit', 'bonus'],
@@ -27,20 +27,26 @@ const userSchema = new mongoose.Schema({
   role: { type: String, default: 'user', enum: ['user', 'admin'] },
   plan: { type: String, default: 'none' },
   isPlanActive: { type: Boolean, default: false },
+
   balances: {
     type: Map,
     of: Number,
-    default: { BTC: 0, USD: 0, USDT: 0 }
+    default: () => new Map([
+      ['BTC', 0],
+      ['EUR', 0],      // ← Changed from USD to EUR
+      ['USDT', 0]
+    ])
   },
-  
+
   // CRITICAL FIX: Add this field to store generated crypto addresses
   depositAddresses: {
     type: Map,
     of: String,
-    default: {}
+    default: () => new Map()
   },
 
-  ledger: [ledgerSchema], 
+  ledger: [ledgerSchema],
+
   isActive: { type: Boolean, default: true },
   banned: { type: Boolean, default: false }
 }, { timestamps: true });
@@ -57,4 +63,3 @@ userSchema.methods.comparePassword = async function (pass) {
 };
 
 export default mongoose.models.User || mongoose.model('User', userSchema);
-

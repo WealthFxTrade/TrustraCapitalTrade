@@ -1,4 +1,3 @@
-// src/pages/DashboardPage.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardHeader from '../components/DashboardHeader';
@@ -6,8 +5,7 @@ import DashboardCharts from '../components/DashboardCharts';
 import RecentTransactions from '../components/RecentTransactions';
 import { fetchBTCPrice } from '../api/market';
 import { fetchPlans } from '../api/plan';
-
-const BACKEND_URL = 'https://trustracapitaltrade-backend.onrender.com';
+import api from '../api/apiService';
 
 export default function DashboardPage({ token, user, logout }) {
   const navigate = useNavigate();
@@ -29,40 +27,37 @@ export default function DashboardPage({ token, user, logout }) {
     try {
       if (!token) return;
 
-      // Fetch user, transactions, BTC, plans in parallel
+      // Fetch user, transactions, BTC price, plans in parallel
       const [userRes, txRes, btcRes, plansRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/user/me`, { headers: { Authorization: `Bearer ${token}` }, signal }),
-        fetch(`${BACKEND_URL}/api/user/transactions`, { headers: { Authorization: `Bearer ${token}` }, signal }),
+        api.get('/user/me', { signal }),
+        api.get('/user/transactions', { signal }),
         fetchBTCPrice(),
         fetchPlans()
       ]);
 
       // ---------- User Info ----------
-      if (userRes.ok) {
-        const data = await userRes.json();
-        setBalance(data.user.balance);
-        setPlan(data.user.plan);
-        setDailyRate(data.dailyRate);
+      if (userRes.data) {
+        setBalance(userRes.data.user.balance);
+        setPlan(userRes.data.user.plan);
+        setDailyRate(userRes.data.dailyRate);
       }
 
       // ---------- Transactions ----------
-      if (txRes.ok) {
-        const txData = await txRes.json();
-        setTransactions(txData.transactions || []);
+      if (txRes.data) {
+        setTransactions(txRes.data.transactions || []);
       }
 
       // ---------- BTC Price ----------
-      if (btcRes.success) {
-        const price = Number(btcRes.price);
-        setBtcPrice(price);
-        setBtcHistory(prev => [...prev, price].slice(-10)); // Keep last 10
+      if (btcRes !== null) {
+        setBtcPrice(btcRes);
+        setBtcHistory(prev => [...prev, btcRes].slice(-10));
       }
 
       // ---------- Plans & Portfolio ----------
       if (plansRes.success) {
         setPlans(plansRes.data);
         const simulatedTotal = plansRes.data.reduce((acc, p) => acc + (p.min * 1.5), 0);
-        const flux = simulatedTotal * (Number(btcRes.price) / 77000);
+        const flux = simulatedTotal * (btcRes / 77000);
         setPortfolioHistory(prev => [...prev, flux].slice(-10));
       }
 
@@ -86,7 +81,6 @@ export default function DashboardPage({ token, user, logout }) {
 
     const controller = new AbortController();
     fetchDashboardData(controller.signal);
-
     const interval = setInterval(() => fetchDashboardData(controller.signal), 30000);
 
     return () => {
@@ -113,12 +107,12 @@ export default function DashboardPage({ token, user, logout }) {
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Header */}
-      <DashboardHeader 
-        user={user} 
-        balance={balance} 
-        plan={plan} 
-        dailyRate={dailyRate} 
-        logout={handleLogout} 
+      <DashboardHeader
+        user={user}
+        balance={balance}
+        plan={plan}
+        dailyRate={dailyRate}
+        logout={handleLogout}
       />
 
       {/* Main Content */}
@@ -129,11 +123,11 @@ export default function DashboardPage({ token, user, logout }) {
           </div>
         )}
 
-        <DashboardCharts 
-          btcHistory={btcHistory} 
-          portfolioHistory={portfolioHistory} 
-          btcPrice={btcPrice} 
-          plans={plans} 
+        <DashboardCharts
+          btcHistory={btcHistory}
+          portfolioHistory={portfolioHistory}
+          btcPrice={btcPrice}
+          plans={plans}
         />
 
         <RecentTransactions transactions={transactions} />

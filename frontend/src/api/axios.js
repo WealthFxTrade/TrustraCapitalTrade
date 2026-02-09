@@ -1,19 +1,20 @@
-import axios from "axios";
+import axios from 'axios';
+import { getAccessToken, setAccessToken } from './tokenService';
 
-// Axios instance
+// Create Axios instance
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:10000/api",
-  withCredentials: true,
-  timeout: 15000, // 15s timeout to avoid hanging requests
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:10000/api',
+  withCredentials: true, // required to send HttpOnly cookies
+  timeout: 15000,        // 15s timeout
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor: auto-add JWT token
+// Request interceptor: attach in-memory access token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    const token = getAccessToken(); // in-memory token only
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -22,18 +23,48 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor: centralized error handling
+// Response interceptor: handle 401 errors & token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Network or CORS errors
     if (!error.response) {
-      // Network or CORS error
-      console.error("Network error:", error);
-      return Promise.reject({ message: "Network error. Please try again." });
+      console.error('Network error:', error);
+      return Promise.reject({ message: 'Network error. Please try again.' });
     }
 
-    // API returned an error
-    const message = error.response.data?.message || "Unexpected API error";
+    // Handle expired access token
+    if (error.response.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        // Request new access token using refresh token cookie
+        const { data } = await axios.post(
+          '/auth/refresh', 
+          {}, 
+          {
+            baseURL: api.defaults.baseURL,
+            withCredentials: true,
+          }
+        );
+
+        // Store new token in memory
+        setAccessToken(data.accessToken);
+
+        // Retry original request with new token
+        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed → force logout
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    // Other API errors
+    const message = error.response.data?.message || 'Unexpected API error';
     return Promise.reject({ ...error.response.data, message });
   }
 );

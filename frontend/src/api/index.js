@@ -1,92 +1,50 @@
-import api from './apiService'; // Your axios instance with interceptors
+import api from './apiService';
 
 /**
- * TRUSTRA CAPITAL TRADE - API LAYER 2026
- * Finalized Production Sync
+ * TRUSTRA CAPITAL TRADE - CORE API MANIFEST (2026)
+ * Standardized endpoints for User, Wallet, and Admin Operations.
  */
 
-// Helper to extract data from Axios response
-const withData = (promise) => promise.then((res) => res.data);
+// ─── 1. AUTHENTICATION & PROFILE ───
+export const login = (data) => api.post('/auth/login', data);
+export const register = (data) => api.post('/auth/register', data);
+export const getProfile = () => api.get('/user/me');
+export const updateProfile = (data) => api.put('/user/me', data);
 
-// ────────────────────────────────────────────────
-// AUTHENTICATION
-// ────────────────────────────────────────────────
-export const loginUser = (credentials) => 
-  withData(api.post('/auth/login', credentials));
+// ─── 2. WALLET & NODE OPERATIONS ───
+/** Generates a unique BTC/ETH/USDT deposit address */
+export const generateAddress = (asset) => api.post(`/wallet/generate/${asset}`);
 
-export const registerUser = (data) => 
-  withData(api.post('/auth/register', data));
+/** Fetches real-time EUR balances and recent node activity */
+export const getDashboardData = () => api.get('/user/dashboard');
 
-export const logoutUser = () => {
-  localStorage.removeItem('token');
-  window.location.href = '/login';
+/** Initiates an EUR liquidation request */
+export const withdrawFunds = (data) => api.post('/transactions/withdraw', data);
+
+// ─── 3. ADMIN OPERATIONS (Operations Center) ───
+/** Aggregates global liquidity and user metrics */
+export const adminStats = () => api.get('/admin/stats');
+
+/** Retrieves the queue of investors awaiting KYC verification */
+export const adminKyc = () => api.get('/admin/kyc');
+
+/** Finalizes investor verification for 2026 Compliance */
+export const adminApproveKyc = (userId) => api.post(`/admin/verify/${userId}`);
+
+/** Manually adjust a user node balance (Admin Override) */
+export const adminUpdateBalance = (data) => api.post('/admin/users/update-balance', data);
+
+export default {
+  login,
+  register,
+  getProfile,
+  updateProfile,
+  generateAddress,
+  getDashboardData,
+  withdrawFunds,
+  adminStats,
+  adminKyc,
+  adminApproveKyc,
+  adminUpdateBalance
 };
-
-// ────────────────────────────────────────────────
-// USER & WALLET DATA
-// ────────────────────────────────────────────────
-export const getProfile = () => 
-  withData(api.get('/user/me'));
-
-export const updateProfile = (payload) => 
-  withData(api.put('/user/me', payload));
-
-// Fetches live balances for BTC, ETH, USDT
-export const getUserBalance = () => 
-  withData(api.get('/user/balances')); 
-
-// ────────────────────────────────────────────────
-// DEPOSITS (Address Generation & History)
-// ────────────────────────────────────────────────
-
-/**
- * FIXED: Generates unique address via Backend HD Derivation
- * Matches Backend: router.post('/wallet/:asset', protect, ...)
- */
-export const getDepositAddress = (currency) => 
-  withData(api.post(`/wallet/${currency.toUpperCase()}`));
-
-/**
- * Fetches user-specific deposit history
- * Matches Backend: router.get('/deposits/my', protect, ...)
- */
-export const getDepositHistory = () => 
-  withData(api.get('/deposits/my'));
-
-// ────────────────────────────────────────────────
-// WITHDRAWALS
-// ────────────────────────────────────────────────
-
-/**
- * Submits a payout request and locks user balance
- * Matches Backend: router.post('/withdrawals/request', protect, ...)
- */
-export const requestWithdrawal = (data) => 
-  withData(api.post('/withdrawals/request', data));
-
-// ────────────────────────────────────────────────
-// INVESTMENTS & PLANS
-// ────────────────────────────────────────────────
-export const getInvestmentPlans = () => 
-  withData(api.get('/plans'));
-
-export const subscribeToPlan = (planId, amount) =>
-  withData(api.post('/investments/subscribe', { planId, amount }));
-
-// ────────────────────────────────────────────────
-// TRANSACTIONS & MARKET
-// ────────────────────────────────────────────────
-export const getTransactions = () => 
-  withData(api.get('/transactions/my'));
-
-export const getBtcPrice = () => 
-  withData(api.get('/market/btc-price'));
-
-// ────────────────────────────────────────────────
-// ADMIN ENDPOINTS
-// ────────────────────────────────────────────────
-export const adminStats = () => withData(api.get('/admin/stats'));
-export const adminUsers = () => withData(api.get('/admin/users'));
-export const adminApproveDeposit = (id) => withData(api.patch(`/admin/deposits/${id}/approve`));
-export const adminRejectDeposit = (id) => withData(api.patch(`/admin/deposits/${id}/reject`));
 

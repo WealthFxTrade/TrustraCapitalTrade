@@ -1,40 +1,43 @@
-// backend/models/Withdrawal.js
 import mongoose from 'mongoose';
 
+/**
+ * Trustra Capital Trade - Withdrawal Schema (Rio Series 2026)
+ * Multi-asset support with on-chain address validation.
+ */
 const withdrawalSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'User is required'],
+      required: [true, 'User Node ID is required'],
       index: true,
     },
-    // Added to support multi-asset logic from Dashboard
     asset: {
       type: String,
       enum: ['BTC', 'ETH', 'USDT'],
       required: [true, 'Asset type is required'],
       default: 'BTC'
     },
-    // Renamed from btcAddress to be generic
     address: {
       type: String,
       required: [true, 'Destination address is required'],
       trim: true,
       validate: {
         validator: function(v) {
-          // BTC: Legacy, Segwit, Taproot | ETH/USDT: 0x...
+          // BTC: Legacy (1), Segwit (3), Native Segwit (bc1q), Taproot (bc1p)
           const btcRegex = /^(1|3|bc1q|bc1p)[a-zA-Z0-9]{25,62}$/;
+          // ETH & USDT (ERC-20): 0x followed by 40 hex chars
           const ethRegex = /^0x[a-fA-F0-9]{40}$/;
+          
           return this.asset === 'BTC' ? btcRegex.test(v) : ethRegex.test(v);
         },
-        message: props => `Invalid ${props.value} address format for selected asset`,
+        message: props => `Format error: ${props.value} is not a valid address for the selected network.`
       },
     },
     amount: {
       type: Number,
       required: [true, 'Withdrawal amount is required'],
-      min: [0.00001, 'Amount too small'], // Lowered for 2026 satoshi-level compatibility
+      min: [0.00001, 'Minimum node depth not reached (0.00001 min)'],
     },
     status: {
       type: String,
@@ -42,19 +45,35 @@ const withdrawalSchema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
-    txHash: { type: String, trim: true, sparse: true },
-    adminNote: { type: String, trim: true, maxlength: 500 },
-    fee: { type: Number, default: 0, min: 0 },
-    netAmount: { type: Number, min: 0 },
+    txHash: { 
+      type: String, 
+      trim: true, 
+      sparse: true, 
+      index: true 
+    },
+    adminNote: { 
+      type: String, 
+      trim: true, 
+      maxlength: 500 
+    },
+    fee: { 
+      type: Number, 
+      default: 0, 
+      min: 0 
+    },
+    netAmount: { 
+      type: Number, 
+      min: 0 
+    },
   },
-  { 
+  {
     timestamps: true,
     toJSON: { virtuals: true },
     toObject: { virtuals: true },
   }
 );
 
-// Virtual for frontend-friendly createdAt
+// Virtual for formatted date (Dashboard friendly)
 withdrawalSchema.virtual('formattedDate').get(function () {
   return this.createdAt.toLocaleString('en-US', {
     year: 'numeric',
@@ -65,16 +84,17 @@ withdrawalSchema.virtual('formattedDate').get(function () {
   });
 });
 
-// Pre-save hook: Ensure netAmount is calculated
+// Pre-save hook: Automatic Net Calculation
 withdrawalSchema.pre('save', function (next) {
   if (this.amount != null) {
-    this.netAmount = this.amount - (this.fee || 0);
+    this.netAmount = Math.max(0, this.amount - (this.fee || 0));
   }
   next();
 });
 
-// Optimized Indexes
+// Optimized Multi-key Index for fast history lookups
 withdrawalSchema.index({ user: 1, createdAt: -1 });
 
-export default mongoose.model('Withdrawal', withdrawalSchema);
+const Withdrawal = mongoose.models.Withdrawal || mongoose.model('Withdrawal', withdrawalSchema);
+export default Withdrawal;
 

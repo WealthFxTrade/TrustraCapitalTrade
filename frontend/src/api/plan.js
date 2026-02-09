@@ -1,42 +1,29 @@
-import api from './apiService'; // Use the unified production engine
+import api from "./apiService";
 
 /**
  * Fetch all available investment plans
  * Endpoint: GET /api/plan
- * @returns {Promise<{ success: boolean, count: number, data: Array }>}
  */
 export const fetchPlans = async () => {
   try {
-    // Hits: https://trustracapitaltrade-backend.onrender.com
-    const response = await api.get('/plan');
-    return response.data; 
+    const res = await api.get("/plan");
+    return res.data; // { success, count, data }
   } catch (err) {
-    console.error('⚠️ Plan Fetch Error:', err.message);
-    return {
-      success: false,
-      count: 0,
-      data: [],
-      message: err.message || 'Failed to fetch investment plans',
-    };
+    console.error("⚠️ Plan Fetch Error:", err.message);
+    return { success: false, count: 0, data: [], message: err.message || "Failed to fetch plans" };
   }
 };
 
 /**
- * Fetch a specific plan by its ID
+ * Fetch specific plan by ID
  * Endpoint: GET /api/plan/:id
- * @param {string} id
  */
 export const fetchPlanById = async (id) => {
   try {
-    const response = await api.get(`/plan/${id}`);
-    return response.data;
+    const res = await api.get(`/plan/${id}`);
+    return res.data;
   } catch (err) {
-    console.error(`⚠️ Error fetching plan ${id}:`, err.message);
-    return {
-      success: false,
-      data: null,
-      message: err.message || 'Failed to fetch specific plan',
-    };
+    console.error(`⚠️ Fetch Plan ${id} Error:`, err.message);
+    return { success: false, data: null, message: err.message || "Failed to fetch plan" };
   }
 };
-

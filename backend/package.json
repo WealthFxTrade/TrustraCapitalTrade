@@ -15,6 +15,7 @@
     "axios": "^1.13.4",
     "bcryptjs": "^2.4.3",
     "bip32": "^4.0.0",
+    "bip39": "^3.1.0",
     "bitcoinjs-lib": "^7.0.1",
     "body-parser": "^2.2.2",
     "bs58check": "^4.0.0",
