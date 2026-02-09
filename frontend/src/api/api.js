@@ -1,7 +1,8 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:10000/api",
+  // Remove /api from baseURL
+  baseURL: import.meta.env.VITE_API_URL || "https://trustracapitaltrade-backend.onrender.com",
   withCredentials: true,
   timeout: 15000,
   headers: {
@@ -21,7 +22,10 @@ api.interceptors.response.use(
     if (!error.response) {
       return Promise.reject({ message: "Network error. Try again." });
     }
-    return Promise.reject({ ...error.response.data, message: error.response.data?.message || "API error" });
+    return Promise.reject({
+      ...error.response.data,
+      message: error.response.data?.message || "API error",
+    });
   }
 );
 
