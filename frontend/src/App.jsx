@@ -1,42 +1,43 @@
-// src/App.jsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import LoadingScreen from './components/LoadingScreen';
 import ProtectedLayout from './layouts/ProtectedLayout';
-import Landing from './pages/Landing';
-import DashboardPage from './pages/DashboardPage';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
+import { publicRoutes, protectedRoutes, fallbackRoute } from './routes';
 
 export default function App() {
   const { initialized, user } = useAuth();
 
-  // Wait for auth to initialize
   if (!initialized) return <LoadingScreen message="Securing Trustra Node..." />;
 
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      {/* Public routes */}
+      {publicRoutes.map((r) => (
+        <Route
+          key={r.path}
+          path={r.path}
+          element={
+            user && (r.path === '/login' || r.path === '/register')
+              ? <Navigate to="/dashboard" replace />
+              : r.element
+          }
+        />
+      ))}
 
-      {/* Public Routes */}
-      <Route
-        path="/login"
-        element={user ? <Navigate to="/dashboard" replace /> : <Login />}
-      />
-      <Route
-        path="/register"
-        element={user ? <Navigate to="/dashboard" replace /> : <Signup />}
-      />
-
-      {/* Protected Routes */}
+      {/* Protected routes */}
       <Route element={<ProtectedLayout />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
-        {/* Add other protected routes here */}
+        {protectedRoutes.map((r) => (
+          <Route
+            key={r.path}
+            path={r.path}
+            element={user ? r.element : <Navigate to="/login" replace />}
+          />
+        ))}
       </Route>
 
-      {/* Catch-all redirect */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Fallback */}
+      <Route path={fallbackRoute.path} element={fallbackRoute.element} />
     </Routes>
   );
 }
