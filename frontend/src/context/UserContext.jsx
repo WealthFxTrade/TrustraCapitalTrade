@@ -1,76 +1,128 @@
 import React, { createContext, useState, useEffect, useCallback } from "react";
-// This import now looks for the named exports we added to src/api/index.js
-import { getUserStats, getUserTransactions } from "../api"; 
-import { useAuth } from "./AuthContext"; 
+import { getUserStats, getUserTransactions } from "../api";
+import { useAuth } from "./AuthContext";
+import { connectSocket, disconnectSocket } from "../services/socket";
 
 export const UserContext = createContext();
 
+const EMPTY_STATS = {
+  mainBalance: 0,
+  btcBalance: 0,
+  usdtBalance: 0,
+  activePlan: "Basic Node",
+  dailyRate: 0,
+};
+
 export const UserProvider = ({ children }) => {
   const { token, isAuthenticated } = useAuth();
-  
-  const [stats, setStats] = useState({
-    mainBalance: 0,
-    btcBalance: 0,
-    usdtBalance: 0,
-    activePlan: "Basic Node",
-    dailyRate: 0,
-  });
+
+  const [stats, setStats] = useState(EMPTY_STATS);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ─── SANITY GUARD ───────────────────────────────────────────
+  const normalizeStats = (data = {}) => ({
+    mainBalance:
+      Number(data?.mainBalance ?? data?.balances?.EUR ?? data?.balance ?? 0),
+    btcBalance:
+      Number(data?.btcBalance ?? data?.balances?.BTC ?? 0),
+    usdtBalance:
+      Number(data?.usdtBalance ?? data?.balances?.USDT ?? 0),
+    activePlan:
+      data?.activePlan ?? data?.plan ?? "Starter",
+    dailyRate:
+      Number(data?.dailyRate ?? 0.46),
+  });
+
+  // ─── API FALLBACK SYNC ──────────────────────────────────────
   const fetchStats = useCallback(async () => {
-    // 🛑 Prevent API calls if unauthorized to avoid 401 errors
     if (!token || !isAuthenticated) {
       setLoading(false);
       return;
     }
-    
-    setLoading(true);
+
     try {
-      // Parallel fetching for 2026 performance standards
+      setLoading(true);
       const [statsData, txData] = await Promise.all([
         getUserStats(),
-        getUserTransactions()
+        getUserTransactions(),
       ]);
 
-      // Map backend response keys to frontend state
-      setStats({
-        mainBalance: statsData?.mainBalance || statsData?.balance || 0,
-        btcBalance: statsData?.btcBalance || 0,
-        usdtBalance: statsData?.usdtBalance || 0,
-        activePlan: statsData?.activePlan || "Starter",
-        dailyRate: statsData?.dailyRate || 0,
-      });
-
-      // Handle nested transaction arrays or direct arrays
-      setTransactions(txData?.transactions || txData || []);
+      setStats(normalizeStats(statsData));
+      setTransactions(
+        Array.isArray(txData)
+          ? txData
+          : txData?.transactions || []
+      );
     } catch (err) {
-      console.error("User Data Sync Failed:", err);
+      console.error("UserContext API sync failed:", err);
     } finally {
       setLoading(false);
     }
   }, [token, isAuthenticated]);
 
-  // Handle Session Lifecycle
+  // ─── WEBSOCKET LIVE PUSH ────────────────────────────────────
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchStats();
-    } else {
-      // Security: Wipe state on logout
-      setStats({ mainBalance: 0, btcBalance: 0, usdtBalance: 0, activePlan: "Basic Node", dailyRate: 0 });
+    if (!isAuthenticated || !token) return;
+
+    const socket = connectSocket(token);
+
+    socket.on("balance:update", (payload) => {
+      setStats((prev) => ({
+        ...prev,
+        ...normalizeStats(payload),
+      }));
+    });
+
+    socket.on("transaction:new", (tx) => {
+      if (!tx?._id) return;
+      setTransactions((prev) => [tx, ...prev]);
+    });
+
+    return () => {
+      socket.off("balance:update");
+      socket.off("transaction:new");
+    };
+  }, [token, isAuthenticated]);
+
+  // ─── SESSION LIFECYCLE ──────────────────────────────────────
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setStats(EMPTY_STATS);
       setTransactions([]);
       setLoading(false);
+      disconnectSocket();
+      return;
     }
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000);
+
+    return () => clearInterval(interval);
   }, [isAuthenticated, fetchStats]);
 
-  // Optimistic UI Update for Deposits/Withdrawals
+  // ─── OPTIMISTIC UPDATE + HARD SYNC ──────────────────────────
   const addTransaction = (tx) => {
+    if (!tx?.amount) return;
+
     setTransactions((prev) => [tx, ...prev]);
+
     setStats((prev) => {
-      const keyMap = { BTC: 'btcBalance', USDT: 'usdtBalance', BANK: 'mainBalance' };
-      const key = keyMap[tx.method] || 'mainBalance';
-      return { ...prev, [key]: prev[key] + (tx.amount || 0) };
+      const keyMap = {
+        BTC: "btcBalance",
+        USDT: "usdtBalance",
+        BANK: "mainBalance",
+      };
+      const key = keyMap[tx.method] || "mainBalance";
+
+      return {
+        ...prev,
+        [key]: Number(prev[key]) + Number(tx.amount),
+      };
     });
+
+    // Ensure truth
+    setTimeout(fetchStats, 1500);
   };
 
   return (
@@ -87,4 +139,3 @@ export const UserProvider = ({ children }) => {
     </UserContext.Provider>
   );
 };
-
