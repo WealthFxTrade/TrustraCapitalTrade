@@ -1,7 +1,7 @@
-// src/api/apiService.js
 import axios from 'axios';
 
 const api = axios.create({
+  // Ensure the URL includes /api to match your backend app.use('/api', ...)
   baseURL: 'https://trustracapitaltrade-backend.onrender.com',
   headers: {
     'Content-Type': 'application/json',
@@ -23,6 +23,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // If token expires or is invalid, wipe session and move to login
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');

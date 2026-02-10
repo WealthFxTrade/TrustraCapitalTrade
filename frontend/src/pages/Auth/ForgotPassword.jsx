@@ -1,163 +1,147 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+import api from '../api/api.js'; // Use your intercepted axios instance
+import { TrendingUp, Phone, Lock, RefreshCw, KeyRound, ChevronLeft } from 'lucide-react';
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [resetLink, setResetLink] = useState('');
+  const [step, setStep] = useState(1); // 1: Send OTP, 2: Reset Password
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    phone: '',
+    otp: '',
+    password: '',
+  });
 
-  const handleSubmit = async (e) => {
+  const navigate = useNavigate();
+
+  // Step 1: Request OTP via SMS (Matches router.post('/forgot-password') in auth.js)
+  const handleSendOtp = async (e) => {
     e.preventDefault();
-
-    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-      setError('Please enter a valid email address');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-    setMessage('');
-    setResetLink('');
-
+    if (!formData.phone.trim()) return toast.error('Phone number is required');
+    
+    setLoading(true);
     try {
-      // API call to request password reset
-      const response = await fetch(
-        `${import.meta.env.VITE_API_BASE}/auth/forgot-password`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim() }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to send reset link');
-      }
-
-      setMessage(
-        'If an account exists with this email, a password reset link has been generated.'
-      );
-      setSubmitted(true);
-
-      // ⚡ For dev/testing: show the link immediately
-      setResetLink(`${import.meta.env.VITE_FRONTEND_URL}/reset-password/${data.token}`);
+      await api.post('/auth/forgot-password', { phone: formData.phone });
+      toast.success('Security code sent to your mobile device');
+      setStep(2);
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again.');
+      toast.error(err.response?.data?.message || 'Verification failed');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+    }
+  };
+
+  // Step 2: Submit OTP and New Password (Matches router.post('/reset-password-otp'))
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (formData.otp.length < 6) return toast.error('Enter the 6-digit code');
+    
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/reset-password-otp', formData);
+      toast.success('Password synchronized successfully');
+      
+      // Auto-login: Store session and move to dashboard
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+      navigate('/dashboard');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid or expired code');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
-        <div className="bg-gray-900 p-8 rounded-2xl shadow-xl border border-gray-800">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-white tracking-tight">
-              Reset your password
-            </h2>
-            <p className="mt-3 text-gray-400">
-              Enter your email and we'll send you a link to reset your password
-            </p>
-          </div>
+    <div className="min-h-screen bg-[#05070a] flex flex-col justify-center px-6 py-12">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
+        <TrendingUp className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+        <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter">
+          Account Recovery
+        </h2>
+        <p className="text-slate-500 text-[10px] mt-2 uppercase tracking-[0.3em] font-bold">
+          Secure Trustra Node Reset
+        </p>
+      </div>
 
-          {error && (
-            <div className="mb-6 p-4 bg-red-900/40 border border-red-700 text-red-200 rounded-lg text-sm">
-              {error}
-            </div>
-          )}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-slate-900/40 p-8 rounded-[2.5rem] border border-white/10 backdrop-blur-xl shadow-2xl">
+          {step === 1 ? (
+            <form onSubmit={handleSendOtp} className="space-y-6">
+              <div className="text-center space-y-2">
+                <p className="text-slate-400 text-xs uppercase tracking-widest font-medium">Step 01: Identification</p>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Enter your registered phone number to receive a temporary authentication code.
+                </p>
+              </div>
 
-          {message && (
-            <div className="mb-6 p-4 bg-green-900/40 border border-green-700 text-green-200 rounded-lg text-sm">
-              {message}
-            </div>
-          )}
-
-          {!submitted ? (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-gray-300 mb-1.5"
-                >
-                  Email address
-                </label>
+              <div className="relative">
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
+                  type="text"
+                  placeholder="Phone Number"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-blue-500 transition-all"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="appearance-none relative block w-full px-4 py-3.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
-                  placeholder="name@example.com"
                 />
               </div>
 
-              <div>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="group relative w-full flex justify-center py-3.5 px-4 border border-transparent rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {isLoading ? (
-                    <span className="flex items-center">
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      Sending...
-                    </span>
-                  ) : (
-                    'Send Reset Link'
-                  )}
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all"
+              >
+                {loading ? <RefreshCw className="animate-spin" size={16} /> : 'Request Reset Code'}
+              </button>
             </form>
           ) : (
-            <div className="text-center py-4 space-y-4">
-              {resetLink && (
-                <p className="text-sm text-blue-400 break-all">
-                  Test link: <a href={resetLink}>{resetLink}</a>
+            <form onSubmit={handleResetPassword} className="space-y-6">
+              <div className="text-center space-y-2">
+                <p className="text-blue-400 text-xs uppercase tracking-widest font-bold">Step 02: Verification</p>
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Enter the 6-digit code and create your new secure access credentials.
                 </p>
-              )}
-              <Link
-                to="/login"
-                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+              </div>
+
+              <div className="relative">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                <input
+                  type="text"
+                  placeholder="Verification Code"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-blue-500 font-mono tracking-[0.5em]"
+                  value={formData.otp}
+                  onChange={(e) => setFormData({ ...formData, otp: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                <input
+                  type="password"
+                  placeholder="New Secure Password"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-blue-500"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all"
               >
-                Return to Login
-              </Link>
-            </div>
+                {loading ? <RefreshCw className="animate-spin" size={16} /> : 'Update & Unlock Dashboard'}
+              </button>
+            </form>
           )}
 
-          <div className="mt-8 text-center text-sm">
-            <Link
-              to="/login"
-              className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors"
-            >
-              ← Back to sign in
+          <div className="mt-8 text-center border-t border-white/5 pt-6">
+            <Link to="/login" className="text-slate-500 hover:text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors">
+              <ChevronLeft size={14} /> Back to Entry Point
             </Link>
           </div>
         </div>
@@ -165,3 +149,4 @@ export default function ForgotPassword() {
     </div>
   );
 }
+
