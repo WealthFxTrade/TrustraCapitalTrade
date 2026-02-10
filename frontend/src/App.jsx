@@ -5,11 +5,12 @@ import { Toaster } from "react-hot-toast";
 // Context & Hooks
 import { useAuth } from "./context/AuthContext.jsx";
 
-// Guards & Layout
+// Guards & Layouts
 import GuestGuard from "./components/GuestGuard.jsx";
 import ProtectedLayout from "./components/ProtectedLayout.jsx";
+import AdminLayout from "./layouts/AdminLayout.jsx"; // Dedicated Admin Sidebar
 
-// Loading
+// Loading Components
 import LoadingScreen from "./components/LoadingScreen.jsx";
 
 // Pages
@@ -21,17 +22,21 @@ import Invest from "./pages/Invest.jsx";
 import DepositPage from "./pages/DepositPage.jsx";
 import WithdrawalPage from "./pages/WithdrawalPage.jsx";
 import ProfilePage from "./pages/Profile.jsx";
-import AdminPanel from "./pages/AdminPanel.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
 import AdminWithdrawals from "./pages/AdminWithdrawals.jsx";
 
 export default function App() {
   const { initialized } = useAuth();
 
-  // Wait until AuthContext is ready
-  if (!initialized) return <LoadingScreen message="Initializing Trustra..." />;
+  // 1️⃣ CRITICAL: Wait for AuthContext to initialize before rendering ANY routes
+  // This prevents the "Dark Blank Page" and "White Flickering" issues.
+  if (!initialized) {
+    return <LoadingScreen message="Initializing Trustra Security..." />;
+  }
 
   return (
     <div className="min-h-screen bg-[#05070a] text-slate-50 selection:bg-blue-500/30">
+      {/* Global Notifications */}
       <Toaster
         position="top-right"
         toastOptions={{
@@ -46,16 +51,16 @@ export default function App() {
         }}
       />
 
-      <Suspense fallback={<LoadingScreen message="Loading app..." />}>
+      <Suspense fallback={<LoadingScreen message="Syncing Nodes..." />}>
         <Routes>
-          {/* 1️⃣ PUBLIC */}
+          {/* 2️⃣ PUBLIC ROUTES: Accessible to everyone */}
           <Route path="/" element={<Landing />} />
 
-          {/* 2️⃣ GUEST ONLY */}
+          {/* 3️⃣ GUEST ONLY: Redirects to /dashboard if user is already logged in */}
           <Route path="/login" element={<GuestGuard><Login /></GuestGuard>} />
           <Route path="/register" element={<GuestGuard><Signup /></GuestGuard>} />
 
-          {/* 3️⃣ PROTECTED USER ROUTES */}
+          {/* 4️⃣ PROTECTED USER ROUTES: Requires Authentication */}
           <Route element={<ProtectedLayout />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/invest" element={<Invest />} />
@@ -64,16 +69,17 @@ export default function App() {
             <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
-          {/* 4️⃣ ADMIN ROUTES */}
-          <Route element={<ProtectedLayout adminOnly />}>
-            <Route path="/admin" element={<AdminPanel />} />
+          {/* 5️⃣ ADMIN ROUTES: Requires 'admin' role & specialized Sidebar Layout */}
+          <Route element={<AdminLayout />}>
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/withdrawals" element={<AdminWithdrawals />} />
           </Route>
 
-          {/* 5️⃣ FALLBACK */}
+          {/* 6️⃣ FALLBACK: Redirect any unknown path to Landing */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </div>
   );
 }
+
