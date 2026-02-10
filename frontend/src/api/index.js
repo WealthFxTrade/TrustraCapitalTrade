@@ -1,46 +1,43 @@
-import api from './apiService';
+import api from './apiService'; 
 
 /**
- * TRUSTRA CAPITAL TRADE - CORE API MANIFEST (2026)
- * Standardized endpoints for User, Wallet, and Admin Operations.
+ * TRUSTRA CAPITAL - CORE API (2026 PRODUCTION)
+ * Unified endpoint manifest to resolve all build dependencies.
  */
 
-// ─── 1. AUTHENTICATION & PROFILE ───
+// ─── AUTH & PROFILE ───
 export const login = (data) => api.post('/auth/login', data);
 export const register = (data) => api.post('/auth/register', data);
 export const getProfile = () => api.get('/user/me');
 export const updateProfile = (data) => api.put('/user/me', data);
 
-// ─── 2. WALLET & NODE OPERATIONS ───
-/** Generates a unique BTC/ETH/USDT deposit address */
+// ─── USER & DASHBOARD (Aliases for UserContext) ───
+/** Fetches real-time EUR balances and stats */
+export const getUserStats = () => api.get('/user/dashboard').then(res => res.data);
+/** Fetches recent node activity/history */
+export const getUserTransactions = () => api.get('/transactions/my').then(res => res.data);
+
+// ─── WALLET & NODE OPERATIONS ───
 export const generateAddress = (asset) => api.post(`/wallet/generate/${asset}`);
-
-/** Fetches real-time EUR balances and recent node activity */
-export const getDashboardData = () => api.get('/user/dashboard');
-
-/** Initiates an EUR liquidation request */
+export const getDepositAddress = (asset) => api.get(`/wallet/address/${asset}`);
 export const withdrawFunds = (data) => api.post('/transactions/withdraw', data);
 
-// ─── 3. ADMIN OPERATIONS (Operations Center) ───
-/** Aggregates global liquidity and user metrics */
+// ─── ADMIN OPERATIONS ───
 export const adminStats = () => api.get('/admin/stats');
-
-/** Retrieves the queue of investors awaiting KYC verification */
 export const adminKyc = () => api.get('/admin/kyc');
-
-/** Finalizes investor verification for 2026 Compliance */
 export const adminApproveKyc = (userId) => api.post(`/admin/verify/${userId}`);
-
-/** Manually adjust a user node balance (Admin Override) */
 export const adminUpdateBalance = (data) => api.post('/admin/users/update-balance', data);
 
+// Default export for "import api from '@/api'" usage
 export default {
   login,
   register,
   getProfile,
   updateProfile,
+  getUserStats,
+  getUserTransactions,
   generateAddress,
-  getDashboardData,
+  getDepositAddress,
   withdrawFunds,
   adminStats,
   adminKyc,

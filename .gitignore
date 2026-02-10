@@ -1,13 +1,4 @@
-node_modules/
+node_modules
 .env
-dist/
-build/
-.cache/
-*.log
-
-node_modules/
-.env
-dist/
-build/
-frontend/dist/
-backend/node_modules/
+dist
+.DS_Store

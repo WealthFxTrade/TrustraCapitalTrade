@@ -14,7 +14,8 @@ import {
   Languages,
   Zap,
 } from 'lucide-react';
-import api from '../api/apiService'; // assuming this is your centralized axios instance
+
+import api from '../api/apiService'; // centralized axios instance
 
 export default function Dashboard({ logout }) {
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ export default function Dashboard({ logout }) {
     totalProfit: 0,
     activePlan: 'No Active Plan',
   });
+
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,7 +41,6 @@ export default function Dashboard({ logout }) {
       if (statsRes.data?.success) {
         setStats(statsRes.data.stats || stats);
       }
-
       setTransactions(txRes.data?.transactions || []);
     } catch (err) {
       console.error('Dashboard fetch error:', err);
@@ -49,16 +50,15 @@ export default function Dashboard({ logout }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [stats]);
 
   useEffect(() => {
     fetchDashboardData();
-
     const interval = setInterval(fetchDashboardData, 60000); // 1 min refresh
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
 
-  if (loading && stats.mainBalance === 0) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#05070a] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -73,7 +73,7 @@ export default function Dashboard({ logout }) {
 
   return (
     <div className="flex min-h-screen bg-[#05070a] text-white font-sans selection:bg-blue-500/30">
-      {/* SIDEBAR – hidden on mobile, can be made drawer later */}
+      {/* SIDEBAR */}
       <aside className="w-64 bg-[#0a0c10] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen overflow-y-auto">
         <div className="p-8 border-b border-white/5 flex items-center gap-2">
           <TrendingUp className="h-6 w-6 text-blue-500" />
@@ -150,7 +150,10 @@ export default function Dashboard({ logout }) {
         <main className="p-6 md:p-8 lg:p-12 space-y-10 max-w-7xl w-full mx-auto">
           {error && (
             <div className="bg-red-900/30 border border-red-500/30 rounded-2xl p-6 text-center text-red-300">
-              {error} • <button onClick={fetchDashboardData} className="underline hover:text-white">Retry</button>
+              {error} •{' '}
+              <button onClick={fetchDashboardData} className="underline hover:text-white">
+                Retry
+              </button>
             </div>
           )}
 
@@ -185,20 +188,22 @@ export default function Dashboard({ logout }) {
           </div>
 
           {/* TRANSACTIONS */}
-          <TransactionTable transactions={transactions} />
+          <TransactionTable transactions={transactions || []} />
         </main>
       </div>
     </div>
   );
 }
 
-/* ── CHILD COMPONENTS (unchanged except minor polish) ── */
+/* ── CHILD COMPONENTS ── */
 const WalletCard = ({ balance }) => (
   <div className="bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-md relative overflow-hidden group hover:border-blue-500/30 transition-all">
     <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform duration-300">
       <Wallet size={80} />
     </div>
-    <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">Available Balance</p>
+    <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.2em] mb-4">
+      Available Balance
+    </p>
     <h3 className="text-4xl font-mono font-black text-white">
       €{Number(balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </h3>

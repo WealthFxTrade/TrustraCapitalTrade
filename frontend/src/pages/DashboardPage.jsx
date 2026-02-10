@@ -1,87 +1,88 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { 
-  TrendingUp, Wallet, ArrowDownCircle, ArrowUpCircle, 
-  LogOut, User as UserIcon, ShieldCheck 
-} from 'lucide-react';
+import React, { useContext } from "react";
+import DashboardHeader from "../components/DashboardHeader.jsx";
+import { UserContext } from "../context/UserContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx"; // 🔥 Added Auth for real user data
+import { useNavigate } from "react-router-dom";
 
-export default function DashboardHeader({ user, balances, plan, dailyRate, logout, currency = "€" }) {
-  // Total balance in EUR (we assume USD converted to € or just use balances.USD)
-  const totalBalance = balances?.USD || 0;
+export default function DashboardPage() {
+  const { stats, transactions, loading: statsLoading } = useContext(UserContext);
+  const { user, logout, initialized } = useAuth(); // 🔥 Get real user and logout function
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
+  // Wait for both Auth and User data to be ready
+  if (!initialized || statsLoading) {
+    return (
+      <div className="min-h-screen bg-[#05070a] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-500" />
+      </div>
+    );
+  }
 
   return (
-    <nav className="bg-[#0a0d14] border-b border-white/5 px-6 sticky top-0 z-50 backdrop-blur-xl">
-      <div className="max-w-7xl mx-auto py-4">
-        {/* Top Row: Brand & Profile */}
-        <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2">
-            <TrendingUp className="h-6 w-6 text-blue-500" />
-            <span className="font-black italic uppercase tracking-tighter text-lg">Trustra</span>
-          </Link>
+    <div className="min-h-screen bg-[#05070a] text-slate-50 selection:bg-blue-500/30">
+      {/* Dashboard Header - Now using REAL data */}
+      <DashboardHeader
+        user={user} 
+        balances={{
+          USD: stats?.mainBalance || 0,
+          BTC: stats?.btcBalance || 0,
+          USDT: stats?.usdtBalance || 0,
+        }}
+        plan={stats?.activePlan || "Starter Node"}
+        dailyRate={stats?.dailyRate || 0}
+        logout={handleLogout}
+        currency="€"
+      />
 
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex flex-col items-end mr-2">
-              <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest italic">
-                Node: {plan}
-              </span>
-              <span className="text-xs font-bold text-white uppercase tracking-tighter">
-                {user?.fullName}
-              </span>
-            </div>
-            <button 
-              onClick={logout}
-              className="p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-red-500/10 hover:border-red-500/20 group transition-all"
-              title="Secure Logout"
-            >
-              <LogOut className="h-4 w-4 text-slate-400 group-hover:text-red-500" />
-            </button>
+      {/* Main Content */}
+      <main className="p-6 md:p-12 max-w-7xl mx-auto space-y-10">
+        <header>
+          <h2 className="text-xl font-black italic uppercase tracking-tighter">Recent Node Activity</h2>
+          <p className="text-[10px] text-slate-500 uppercase tracking-[0.3em] mt-1">Transaction Ledger v4.0</p>
+        </header>
+
+        {transactions?.length === 0 ? (
+          <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-[2rem]">
+            <p className="text-slate-600 text-xs font-bold uppercase tracking-widest italic">No recent network activity.</p>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {transactions.slice(0, 10).map((tx) => (
+              <div
+                key={tx._id}
+                className="flex justify-between items-center p-5 bg-[#0a0d14] rounded-2xl border border-white/5 hover:border-white/10 transition-all group"
+              >
+                <div className="space-y-1">
+                  <p className="text-sm font-black font-mono text-white">
+                    €{tx.amount.toLocaleString("de-DE", { minimumFractionDigits: 2 })}
+                  </p>
+                  <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">
+                    {new Date(tx.createdAt).toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
 
-        {/* Bottom Row: Balance & Growth */}
-        <div className="flex flex-col md:flex-row items-end md:items-center justify-between gap-6">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-            {/* Command Balance */}
-            <div className="bg-blue-600/10 p-4 rounded-2xl border border-blue-500/20">
-              <p className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em] mb-1">Command Balance</p>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-black font-mono">
-                  {currency}{totalBalance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
-                </span>
+                <div className="text-right">
+                  <span
+                    className={`text-[9px] font-black uppercase px-3 py-1.5 rounded-lg border ${
+                      tx.status === "completed"
+                        ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/10"
+                        : "text-amber-500 border-amber-500/20 bg-amber-500/10"
+                    }`}
+                  >
+                    {tx.status}
+                  </span>
+                </div>
               </div>
-              {/* Optional: show BTC & USDT */}
-              <p className="text-[8px] text-slate-400 mt-1">
-                BTC: {balances?.BTC ?? 0} | USDT: {balances?.USDT ?? 0}
-              </p>
-            </div>
-            
-            {/* Daily Yield */}
-            <div className="hidden sm:block">
-              <p className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-1">Daily Yield</p>
-              <div className="flex items-center gap-1 text-emerald-400">
-                <TrendingUp size={14} />
-                <span className="text-lg font-black">+{dailyRate}%</span>
-              </div>
-            </div>
+            ))}
           </div>
-
-          {/* Actions: Deposit & Withdraw */}
-          <div className="flex gap-2 w-full md:w-auto">
-            <Link 
-              to="/deposit" 
-              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition shadow-lg shadow-blue-600/20"
-            >
-              <ArrowDownCircle size={14} /> Deposit
-            </Link>
-            <Link 
-              to="/withdraw" 
-              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white/5 border border-white/10 hover:bg-white/10 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition"
-            >
-              <ArrowUpCircle size={14} /> Withdraw
-            </Link>
-          </div>
-        </div>
-      </div>
-    </nav>
+        )}
+      </main>
+    </div>
   );
 }
+

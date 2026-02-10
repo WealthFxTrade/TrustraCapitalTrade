@@ -1,35 +1,22 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import api from '../api/api';
-import toast from 'react-hot-toast';
 
 const AuthContext = createContext(null);
 
 const initialState = {
   user: null,
-  token: null,
+  token: localStorage.getItem('token'),
   loading: true,
-  initialized: false,
-  isAuthenticated: false,
+  initialized: false, // Critical for App.jsx
 };
 
 function authReducer(state, action) {
   switch (action.type) {
     case 'LOGIN':
-      return {
-        ...state,
-        user: action.payload.user,
-        token: action.payload.token,
-        loading: false,
-        initialized: true,
-        isAuthenticated: true,
-      };
+      return { ...state, user: action.payload.user, token: action.payload.token, loading: false, initialized: true };
     case 'LOGOUT':
     case 'AUTH_FAILED':
-      return { 
-        ...initialState, 
-        loading: false, 
-        initialized: true 
-      };
+      return { ...initialState, loading: false, initialized: true, token: null };
     default:
       return state;
   }
@@ -38,20 +25,13 @@ function authReducer(state, action) {
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // 1. AUTO-LOGIN: Check for token on app load
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('token'); // Matches api.js interceptor
-      if (!token) {
-        dispatch({ type: 'AUTH_FAILED' });
-        return;
-      }
+      const token = localStorage.getItem('token');
+      if (!token) return dispatch({ type: 'AUTH_FAILED' });
       try {
         const res = await api.get('/auth/me');
-        dispatch({
-          type: 'LOGIN',
-          payload: { user: res.data.user || res.data, token },
-        });
+        dispatch({ type: 'LOGIN', payload: { user: res.data.user || res.data, token } });
       } catch (err) {
         localStorage.removeItem('token');
         dispatch({ type: 'AUTH_FAILED' });
@@ -60,35 +40,12 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
-  // 2. LOGIN ACTION: Called by Login.jsx
-  const login = (user, token) => {
-    localStorage.setItem('token', token);
-    dispatch({
-      type: 'LOGIN',
-      payload: { user, token },
-    });
-  };
-
-  // 3. LOGOUT ACTION: Clears state and disk
-  const logout = () => {
-    localStorage.removeItem('token');
-    dispatch({ type: 'LOGOUT' });
-    toast.success('Securely logged out');
-  };
-
   return (
-    <AuthContext.Provider value={{ ...state, dispatch, login, logout }}>
+    <AuthContext.Provider value={{ ...state, dispatch }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-// Custom hook for components
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used inside an AuthProvider');
-  }
-  return context;
-}
+export const useAuth = () => useContext(AuthContext);
 
