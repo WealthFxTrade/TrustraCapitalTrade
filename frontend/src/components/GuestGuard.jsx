@@ -5,13 +5,14 @@ import LoadingScreen from './LoadingScreen';
 export default function GuestGuard({ children }) {
   const { user, loading, initialized } = useAuth();
 
-  if (!initialized || loading) return <LoadingScreen />;
+  // 1. Wait until AuthContext is ready
+  if (!initialized || loading) return <LoadingScreen message="Checking access..." />;
 
-  // If user is already logged in, send them to dashboard
+  // 2. Redirect logged-in users to dashboard
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return children;
+  // 3. Otherwise, show guest page (login/register)
+  return <>{children}</>;
 }
-

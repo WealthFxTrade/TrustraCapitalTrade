@@ -1,0 +1,138 @@
+//src/pages/Login.jsx
+import { useState } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext.jsx';
+import api from '../api/api.js';
+import { TrendingUp, Mail, Lock, RefreshCw, ChevronRight } from 'lucide-react';
+
+export default function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!email.trim() || !password) {
+      return toast.error('Please enter email and password');
+    }
+
+    setLoading(true);
+    try {
+      const res = await api.post('/auth/login', { email: email.trim(), password });
+      const { user, token } = res.data;
+
+      // Update AuthContext + localStorage
+      login(user, token);
+
+      toast.success('Access Granted');
+
+      // Redirect to previous protected route or dashboard
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+    } catch (err) {
+      console.error(err);
+      const message = err.response?.data?.message || 'Invalid credentials. Please try again.';
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#05070a] flex flex-col justify-center px-6">
+      {/* Logo & Header */}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
+        <TrendingUp className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+        <h2 className="text-3xl font-black uppercase italic text-white">Trustra Capital Trade</h2>
+        <p className="text-slate-500 text-xs mt-2 uppercase tracking-widest font-bold">
+          Secure Portfolio Access
+        </p>
+      </div>
+
+      {/* Login Card */}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl shadow-xl">
+          <form onSubmit={handleLogin} className="space-y-6">
+            {/* Email */}
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+              <input
+                type="email"
+                placeholder="investor@trustra.com"
+                className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 outline-none focus:border-blue-500 transition-colors duration-200"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+                disabled={loading}
+              />
+            </div>
+
+            {/* Password */}
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+              <input
+                type="password"
+                placeholder="••••••••"
+                className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 outline-none focus:border-blue-500 transition-colors duration-200"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+                disabled={loading}
+              />
+            </div>
+
+            {/* Login Button */}
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-blue-600/20 transition-all duration-200 ${
+                loading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-blue-700/30'
+              }`}
+            >
+              {loading ? (
+                <>
+                  <RefreshCw className="animate-spin" size={18} /> Authenticating...
+                </>
+              ) : (
+                <>
+                  Login <ChevronRight size={16} />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Footer Links */}
+          <div className="mt-6 text-center text-xs space-y-3">
+            <Link
+              to="/forgot-password"
+              className="text-blue-400 hover:text-blue-300 transition-colors block"
+            >
+              Forgot password?
+            </Link>
+            <p className="text-slate-500">
+              No account?{' '}
+              <Link
+                to="/register"
+                className="text-white font-bold hover:text-blue-400 transition-colors underline"
+              >
+                Register here
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        {/* Copyright */}
+        <p className="mt-10 text-center text-[9px] font-bold text-slate-700 uppercase tracking-widest">
+          © 2016–2026 Trustra Capital Trade • SSL Encrypted
+        </p>
+      </div>
+    </div>
+  );
+}

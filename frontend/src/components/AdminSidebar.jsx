@@ -1,29 +1,21 @@
-import React from 'react';
-import { Outlet, Navigate, Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
   CreditCard,
   ShieldCheck,
   LogOut,
+  Menu,
+  X,
   ChevronRight
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext.jsx';
 
-export default function AdminLayout() {
-  const { user, logout, initialized } = useAuth();
+export default function AdminSidebar() {
+  const { user, logout } = useAuth();
   const location = useLocation();
-
-  if (!initialized) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#05070a] text-white">
-        Initializing Admin Panel...
-      </div>
-    );
-  }
-
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
-  if (!isAdmin) return <Navigate to="/dashboard" replace />;
+  const [isOpen, setIsOpen] = useState(false); // Mobile toggle
 
   const menuItems = [
     { name: 'Overview', path: '/admin', icon: LayoutDashboard },
@@ -31,10 +23,31 @@ export default function AdminLayout() {
     { name: 'Withdrawals', path: '/admin/withdrawals', icon: CreditCard },
   ];
 
+  const toggleSidebar = () => setIsOpen(!isOpen);
+
   return (
-    <div className="flex min-h-screen bg-[#05070a] text-white font-sans">
+    <>
+      {/* Mobile Header */}
+      <div className="lg:hidden p-4 bg-[#0a0d14] border-b border-white/5 flex justify-between items-center">
+        <ShieldCheck className="text-indigo-500" />
+        <span className="text-[10px] font-black uppercase tracking-widest">Admin Control</span>
+        <div className="flex items-center gap-2">
+          <button onClick={logout} className="text-red-500">
+            <LogOut size={18} />
+          </button>
+          <button onClick={toggleSidebar} className="text-white">
+            {isOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+      </div>
+
       {/* Sidebar */}
-      <aside className="w-72 bg-[#0a0d14] border-r border-white/5 flex flex-col sticky top-0 h-screen hidden lg:flex overflow-y-auto">
+      <aside
+        className={`fixed lg:static top-0 left-0 h-full w-72 bg-[#0a0d14] border-r border-white/5 flex flex-col transition-transform duration-300 z-50 ${
+          isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        {/* Logo */}
         <div className="p-8 border-b border-white/5">
           <Link to="/" className="flex items-center gap-3 group">
             <ShieldCheck className="h-8 w-8 text-indigo-500 group-hover:rotate-12 transition-transform" />
@@ -45,7 +58,8 @@ export default function AdminLayout() {
           </Link>
         </div>
 
-        <nav className="flex-1 p-6 space-y-2">
+        {/* Menu */}
+        <nav className="flex-1 p-6 space-y-2 overflow-y-auto">
           {menuItems.map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             return (
@@ -57,6 +71,7 @@ export default function AdminLayout() {
                     ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
                     : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
                 }`}
+                onClick={() => setIsOpen(false)} // Close on mobile
               >
                 <div className="flex items-center gap-3">
                   <item.icon size={18} className={isActive ? 'text-white' : 'group-hover:text-indigo-400'} />
@@ -68,6 +83,7 @@ export default function AdminLayout() {
           })}
         </nav>
 
+        {/* Logout */}
         <div className="p-6 border-t border-white/5">
           <button
             onClick={logout}
@@ -79,21 +95,13 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 relative overflow-y-auto">
-        {/* Mobile Header */}
-        <div className="lg:hidden p-6 bg-[#0a0d14] border-b border-white/5 flex justify-between items-center">
-          <ShieldCheck className="text-indigo-500" />
-          <span className="text-[10px] font-black uppercase tracking-widest">Admin Control</span>
-          <button onClick={logout} className="text-red-500">
-            <LogOut size={18} />
-          </button>
-        </div>
-
-        <div className="max-w-6xl mx-auto">
-          <Outlet /> {/* Render admin pages */}
-        </div>
-      </main>
-    </div>
+      {/* Overlay for mobile */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+    </>
   );
 }
