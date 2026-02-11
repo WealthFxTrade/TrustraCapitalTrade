@@ -1,4 +1,3 @@
-// /middleware/auth.js
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { ApiError } from './errorMiddleware.js';
@@ -7,43 +6,52 @@ import { ApiError } from './errorMiddleware.js';
  * @desc    Protect routes - Ensures user is authenticated via JWT
  */
 export const protect = async (req, res, next) => {
-  let token;
-
-  // 1. Check for token in headers
-  if (req.headers.authorization?.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
-  }
-
-  if (!token) {
-    return next(new ApiError(401, 'Not authorized, no token provided'));
-  }
-
   try {
-    // 2. Verify token
+    let token;
+
+    // 1. Extract token from Authorization header
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      // Correctly split "Bearer <token>" and take the second part
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    // 2. Validate token presence
+    if (!token) {
+      throw new ApiError(401, 'Not authorized, no token provided');
+    }
+
+    // 3. Verify token authenticity
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 3. Get user from database (exclude password and ledger)
-    req.user = await User.findById(decoded.id).select('-password -ledger');
+    // 4. Get user from DB (Exclude sensitive password/large ledger)
+    // NOTE: In login we used .select('+password'), here we exclude it for safety
+    const currentUser = await User.findById(decoded.id).select('-password -ledger');
 
-    if (!req.user) {
-      return next(new ApiError(401, 'User associated with this token no longer exists'));
+    if (!currentUser) {
+      throw new ApiError(401, 'The user belonging to this token no longer exists');
     }
 
-    // 4. Production security checks
-    if (req.user.banned) {
-      return next(new ApiError(403, 'Account has been suspended. Please contact support.'));
+    // 5. Production Security: Check Banned or Inactive status
+    if (currentUser.banned) {
+      throw new ApiError(403, 'Account suspended. Please contact support.');
     }
 
-    if (req.user.isActive === false) {
-      return next(new ApiError(403, 'Account is inactive. Please verify your email.'));
+    if (!currentUser.isActive) {
+      throw new ApiError(403, 'Account is currently inactive.');
     }
 
+    // 6. Grant Access: Attach user object to request
+    req.user = currentUser;
     next();
   } catch (err) {
+    // Specialized JWT error handling for the Frontend
     if (err.name === 'TokenExpiredError') {
       return next(new ApiError(401, 'Session expired, please login again'));
     }
-    next(new ApiError(401, 'Not authorized, invalid token'));
+    if (err.name === 'JsonWebTokenError') {
+      return next(new ApiError(401, 'Invalid token, access denied'));
+    }
+    next(err);
   }
 };
 
@@ -57,3 +65,4 @@ export const admin = (req, res, next) => {
     next(new ApiError(403, 'Access denied. Admin privileges required.'));
   }
 };
+

@@ -13,10 +13,14 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const cache = new NodeCache({ stdTTL: 60 });
 
 /* ---------------- UTILITY: Generate JWT ---------------- */
-const generateToken = (id, role) =>
-  jwt.sign({ id, role }, JWT_SECRET, {
+const generateToken = (id, role) => {
+  if (!JWT_SECRET) {
+    console.error("❌ JWT_SECRET is missing from environment variables");
+  }
+  return jwt.sign({ id, role }, JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
   });
+};
 
 /* ---------------- OTP HELPERS ---------------- */
 const generateOtp = () =>
@@ -30,13 +34,18 @@ router.post('/register', async (req, res, next) => {
   try {
     const { fullName, email, password, phone } = req.body;
 
-    if (!fullName || !email || !password || !phone)
-      throw new ApiError(400, 'Full name, email, phone, and password are required');
+    // 1. Validation
+    if (!fullName || !email || !password || !phone) {
+      throw new ApiError(400, 'All fields (name, email, phone, password) are required');
+    }
 
-    const emailLower = email.toLowerCase();
+    const emailLower = email.toLowerCase().trim();
+    
+    // 2. Check existence
     const existingUser = await User.findOne({ email: emailLower });
     if (existingUser) throw new ApiError(409, 'Email already registered');
 
+    // 3. BTC Address Derivation logic
     const counterDoc = await User.findOneAndUpdate(
       { isCounter: true },
       { $inc: { btcIndexCounter: 1 } },
@@ -46,20 +55,20 @@ router.post('/register', async (req, res, next) => {
     const btcIndex = counterDoc.btcIndexCounter;
     const btcAddress = deriveBtcAddress(process.env.BITCOIN_XPUB, btcIndex);
 
+    // 4. Create User
     const newUser = await User.create({
       fullName,
       email: emailLower,
-      phone,
-      password,
+      phone: phone.trim(),
+      password, // Password hashing happens in the User Model middleware
       role: 'user',
       btcIndex,
       btcAddress,
-      balances: new Map([
-        ['BTC', 0],
-        ['EUR', 0],
-        ['USDT', 0]
-      ]),
-      ledger: [],
+      balances: {
+        BTC: 0,
+        EUR: 0,
+        USDT: 0
+      },
       plan: 'none',
       isPlanActive: false,
       isActive: true
@@ -75,7 +84,7 @@ router.post('/register', async (req, res, next) => {
         phone: newUser.phone,
         btcAddress: newUser.btcAddress,
         role: newUser.role,
-        balances: Object.fromEntries(newUser.balances)
+        balances: newUser.balances
       }
     });
   } catch (err) {
@@ -88,11 +97,22 @@ router.post('/login', async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
-    if (!user || !(await user.comparePassword(password)))
-      throw new ApiError(401, 'Invalid credentials');
+    // 1. Check for missing fields to prevent .toLowerCase() crashes
+    if (!email || !password) {
+      throw new ApiError(400, 'Please provide both email and password');
+    }
 
-    if (user.banned) throw new ApiError(403, 'Account suspended');
+    // 2. Find user & include password field
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
+    
+    // 3. Verify user and password
+    // NOTE: Requires 'comparePassword' method in your User Model
+    if (!user || !(await user.comparePassword(password))) {
+      throw new ApiError(401, 'Invalid email or password');
+    }
+
+    // 4. Check status
+    if (user.banned) throw new ApiError(403, 'Account suspended. Contact support.');
 
     res.json({
       success: true,
@@ -104,7 +124,7 @@ router.post('/login', async (req, res, next) => {
         phone: user.phone,
         role: user.role,
         btcAddress: user.btcAddress,
-        balances: Object.fromEntries(user.balances),
+        balances: user.balances instanceof Map ? Object.fromEntries(user.balances) : user.balances,
         plan: user.plan,
         isPlanActive: user.isPlanActive
       }
@@ -114,32 +134,27 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-/* ---------------- FORGOT PASSWORD (SMS OTP) ---------------- */
+/* ---------------- FORGOT PASSWORD ---------------- */
 router.post('/forgot-password', async (req, res, next) => {
   try {
     const { phone } = req.body;
-    if (!phone) throw new ApiError(400, 'Phone is required');
+    if (!phone) throw new ApiError(400, 'Phone number is required');
 
-    const user = await User.findOne({ phone });
+    const user = await User.findOne({ phone: phone.trim() });
 
+    // Privacy security: don't reveal if user exists or not
     if (!user) {
-      return res.json({
-        success: true,
-        message: 'If account exists, OTP sent'
-      });
+      return res.json({ success: true, message: 'If account exists, OTP sent' });
     }
 
     const otp = generateOtp();
-
     user.resetOtp = hashValue(otp);
     user.resetOtpExpires = Date.now() + 10 * 60 * 1000;
     user.resetOtpResendAt = Date.now() + 60 * 1000;
+    
     await user.save({ validateBeforeSave: false });
 
-    await sendSms(
-      user.phone,
-      `Your password reset OTP is ${otp}. Valid for 10 minutes.`
-    );
+    await sendSms(user.phone, `Your Trustra reset OTP is ${otp}. Valid for 10 mins.`);
 
     res.json({ success: true, message: 'OTP sent via SMS' });
   } catch (err) {
@@ -147,40 +162,7 @@ router.post('/forgot-password', async (req, res, next) => {
   }
 });
 
-/* ---------------- RESEND RESET OTP ---------------- */
-router.post('/resend-reset-otp', async (req, res, next) => {
-  try {
-    const { phone } = req.body;
-    if (!phone) throw new ApiError(400, 'Phone is required');
-
-    const user = await User.findOne({ phone });
-
-    if (!user) {
-      return res.json({
-        success: true,
-        message: 'If account exists, OTP resent'
-      });
-    }
-
-    if (user.resetOtpResendAt && user.resetOtpResendAt > Date.now())
-      throw new ApiError(429, 'Please wait before requesting another OTP');
-
-    const otp = generateOtp();
-
-    user.resetOtp = hashValue(otp);
-    user.resetOtpExpires = Date.now() + 10 * 60 * 1000;
-    user.resetOtpResendAt = Date.now() + 60 * 1000;
-    await user.save({ validateBeforeSave: false });
-
-    await sendSms(user.phone, `Your password reset OTP is ${otp}.`);
-
-    res.json({ success: true, message: 'OTP resent successfully' });
-  } catch (err) {
-    next(err);
-  }
-});
-
-/* ---------------- RESET PASSWORD (OTP + AUTO LOGIN) ---------------- */
+/* ---------------- RESET PASSWORD ---------------- */
 router.post('/reset-password-otp', async (req, res, next) => {
   try {
     const { phone, otp, password } = req.body;
@@ -189,58 +171,29 @@ router.post('/reset-password-otp', async (req, res, next) => {
       throw new ApiError(400, 'Phone, OTP, and new password are required');
 
     const user = await User.findOne({
-      phone,
+      phone: phone.trim(),
       resetOtp: hashValue(otp),
       resetOtpExpires: { $gt: Date.now() }
     });
 
     if (!user) throw new ApiError(400, 'Invalid or expired OTP');
 
+    // Update password (Model pre-save hook will hash this)
     user.password = password;
     user.resetOtp = undefined;
     user.resetOtpExpires = undefined;
     user.resetOtpResendAt = undefined;
     await user.save();
 
-    const token = generateToken(user._id, user.role);
-
     res.json({
       success: true,
-      token,
-      user: {
-        id: user._id,
-        fullName: user.fullName,
-        role: user.role
-      }
+      message: 'Password reset successful. Please login.',
+      token: generateToken(user._id, user.role) // Optional: Auto-login
     });
   } catch (err) {
     next(err);
   }
 });
 
-/* ---------------- BALANCE ---------------- */
-router.get('/balance', protect, async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const cached = cache.get(userId);
-
-    if (cached)
-      return res.json({ success: true, data: cached, source: 'cache' });
-
-    const user = await User.findById(userId).select('balances');
-    if (!user) throw new ApiError(404, 'User not found');
-
-    const balances = {
-      BTC: user.balances?.get('BTC') ?? 0,
-      EUR: user.balances?.get('EUR') ?? 0,
-      USDT: user.balances?.get('USDT') ?? 0
-    };
-
-    cache.set(userId, balances);
-    res.json({ success: true, data: balances, source: 'db' });
-  } catch (err) {
-    next(err);
-  }
-});
-
 export default router;
+
