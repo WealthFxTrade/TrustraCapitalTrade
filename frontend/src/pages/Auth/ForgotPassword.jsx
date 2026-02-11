@@ -1,152 +1,82 @@
+// src/pages/Auth/ForgotPassword.jsx
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import api from '../api/api.js'; // Use your intercepted axios instance
-import { TrendingUp, Phone, Lock, RefreshCw, KeyRound, ChevronLeft } from 'lucide-react';
+import api from '../../api/api'; // FIXED PATH
+import { Mail, RefreshCw } from 'lucide-react';
 
 export default function ForgotPassword() {
-  const [step, setStep] = useState(1); // 1: Send OTP, 2: Reset Password
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    phone: '',
-    otp: '',
-    password: '',
-  });
 
-  const navigate = useNavigate();
-
-  // Step 1: Request OTP via SMS (Matches router.post('/forgot-password') in auth.js)
-  const handleSendOtp = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.phone.trim()) return toast.error('Phone number is required');
-    
+    if (!email.trim()) return toast.error('Please enter your email');
     setLoading(true);
-    try {
-      await api.post('/auth/forgot-password', { phone: formData.phone });
-      toast.success('Security code sent to your mobile device');
-      setStep(2);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Verification failed');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  // Step 2: Submit OTP and New Password (Matches router.post('/reset-password-otp'))
-  const handleResetPassword = async (e) => {
-    e.preventDefault();
-    if (formData.otp.length < 6) return toast.error('Enter the 6-digit code');
-    
-    setLoading(true);
     try {
-      const res = await api.post('/auth/reset-password-otp', formData);
-      toast.success('Password synchronized successfully');
-      
-      // Auto-login: Store session and move to dashboard
-      localStorage.setItem('token', res.data.token);
-      localStorage.setItem('user', JSON.stringify(res.data.user));
-      navigate('/dashboard');
+      await api.post('/auth/forgot-password', { email: email.trim() });
+      toast.success('Password reset link sent to your email');
+      setEmail('');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Invalid or expired code');
+      const message = err.response?.data?.message || 'Failed to send reset link';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#05070a] flex flex-col justify-center px-6 py-12">
+    <div className="min-h-screen bg-[#05070a] flex flex-col justify-center px-6">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
-        <TrendingUp className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-        <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter">
-          Account Recovery
-        </h2>
-        <p className="text-slate-500 text-[10px] mt-2 uppercase tracking-[0.3em] font-bold">
-          Secure Trustra Node Reset
+        <Mail className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+        <h2 className="text-3xl font-black uppercase italic text-white">Forgot Password</h2>
+        <p className="text-slate-500 text-xs mt-2 uppercase tracking-widest font-bold">
+          Enter your email to reset your password
         </p>
       </div>
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-slate-900/40 p-8 rounded-[2.5rem] border border-white/10 backdrop-blur-xl shadow-2xl">
-          {step === 1 ? (
-            <form onSubmit={handleSendOtp} className="space-y-6">
-              <div className="text-center space-y-2">
-                <p className="text-slate-400 text-xs uppercase tracking-widest font-medium">Step 01: Identification</p>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Enter your registered phone number to receive a temporary authentication code.
-                </p>
-              </div>
-
-              <div className="relative">
-                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                <input
-                  type="text"
-                  placeholder="Phone Number"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-blue-500 transition-all"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
+        <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl shadow-xl">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="email"
+                placeholder="you@example.com"
+                className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 outline-none focus:border-blue-500 transition-colors duration-200 text-white"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
                 disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all"
-              >
-                {loading ? <RefreshCw className="animate-spin" size={16} /> : 'Request Reset Code'}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleResetPassword} className="space-y-6">
-              <div className="text-center space-y-2">
-                <p className="text-blue-400 text-xs uppercase tracking-widest font-bold">Step 02: Verification</p>
-                <p className="text-[11px] text-slate-500 leading-relaxed">
-                  Enter the 6-digit code and create your new secure access credentials.
-                </p>
-              </div>
+              />
+            </div>
 
-              <div className="relative">
-                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                <input
-                  type="text"
-                  placeholder="Verification Code"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-blue-500 font-mono tracking-[0.5em]"
-                  value={formData.otp}
-                  onChange={(e) => setFormData({ ...formData, otp: e.target.value })}
-                  required
-                />
-              </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-blue-600/20 transition-all duration-200 ${
+                loading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-blue-700/30'
+              }`}
+            >
+              {loading ? <RefreshCw className="animate-spin" size={18} /> : 'Send Reset Link'}
+            </button>
+          </form>
 
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                <input
-                  type="password"
-                  placeholder="New Secure Password"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-blue-500"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] transition-all"
-              >
-                {loading ? <RefreshCw className="animate-spin" size={16} /> : 'Update & Unlock Dashboard'}
-              </button>
-            </form>
-          )}
-
-          <div className="mt-8 text-center border-t border-white/5 pt-6">
-            <Link to="/login" className="text-slate-500 hover:text-white text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors">
-              <ChevronLeft size={14} /> Back to Entry Point
+          <div className="mt-6 text-center text-xs space-y-3">
+            <Link
+              to="/login"
+              className="text-blue-400 hover:text-blue-300 transition-colors block"
+            >
+              Back to Login
             </Link>
           </div>
         </div>
+
+        <p className="mt-10 text-center text-[9px] font-bold text-slate-700 uppercase tracking-widest">
+          © 2016–2026 Trustra Capital Trade • SSL Encrypted
+        </p>
       </div>
     </div>
   );
 }
-

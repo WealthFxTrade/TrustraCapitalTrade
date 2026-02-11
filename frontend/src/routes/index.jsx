@@ -1,6 +1,7 @@
 import Landing from '../pages/Landing';
-import Login from '../pages/Login';
-import Signup from '../pages/Signup';
+import Login from '../pages/Auth/Login';
+import Signup from '../pages/Auth/Signup';
+import ForgotPassword from '../pages/Auth/ForgotPassword';
 import DashboardPage from '../pages/DashboardPage';
 import KYC from '../pages/KYC';
 import InvestPage from '../pages/InvestPage';
@@ -10,6 +11,7 @@ export const publicRoutes = [
   { path: '/', element: <Landing /> },
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Signup /> },
+  { path: '/forgot-password', element: <ForgotPassword /> },
 ];
 
 export const protectedRoutes = [

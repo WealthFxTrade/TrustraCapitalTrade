@@ -1,9 +1,9 @@
-//src/pages/Login.jsx
+// src/pages/Auth/Login.jsx
 import { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { useAuth } from '../context/AuthContext.jsx';
-import api from '../api/api.js';
+import { useAuth } from '../../context/AuthContext'; // Corrected path
+import api from '../../api/api';                      // Corrected path
 import { TrendingUp, Mail, Lock, RefreshCw, ChevronRight } from 'lucide-react';
 
 export default function Login() {
@@ -17,6 +17,7 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+
     if (!email.trim() || !password) {
       return toast.error('Please enter email and password');
     }
@@ -48,7 +49,9 @@ export default function Login() {
       {/* Logo & Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
         <TrendingUp className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-        <h2 className="text-3xl font-black uppercase italic text-white">Trustra Capital Trade</h2>
+        <h2 className="text-3xl font-black uppercase italic text-white">
+          Trustra Capital Trade
+        </h2>
         <p className="text-slate-500 text-xs mt-2 uppercase tracking-widest font-bold">
           Secure Portfolio Access
         </p>
@@ -60,7 +63,10 @@ export default function Login() {
           <form onSubmit={handleLogin} className="space-y-6">
             {/* Email */}
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+              <Mail
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                size={16}
+              />
               <input
                 type="email"
                 placeholder="investor@trustra.com"
@@ -75,7 +81,10 @@ export default function Login() {
 
             {/* Password */}
             <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+              <Lock
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"
+                size={16}
+              />
               <input
                 type="password"
                 placeholder="••••••••"

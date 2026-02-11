@@ -1,8 +1,9 @@
+// src/pages/Auth/Signup.jsx
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
-import { useAuth } from '../context/AuthContext.jsx';
-import api from '../api/api.js';
+import { useAuth } from '../../context/AuthContext'; // Fixed path
+import api from '../../api/api';                     // Fixed path
 import { TrendingUp, User, Mail, Lock, Phone, RefreshCw, Zap } from 'lucide-react';
 
 export default function Signup() {
@@ -11,7 +12,6 @@ export default function Signup() {
   const { login } = useAuth();
   const fullNameRef = useRef(null);
 
-  // Capture intent from Landing Page (e.g., "Rio Basic")
   const selectedPlan = location.state?.selectedPlan || null;
 
   const [formData, setFormData] = useState({
@@ -48,7 +48,6 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      // Matches your backend auth.js router exactly
       const response = await api.post('/auth/register', {
         fullName: fullName.trim(),
         email: email.toLowerCase().trim(),
@@ -57,11 +56,9 @@ export default function Signup() {
       });
 
       const { user, token } = response.data;
-
       login(user, token);
       toast.success('Trustra Node Activated. Welcome!');
 
-      // Redirect back to dashboard (carrying the plan intent)
       navigate('/dashboard', { state: { autoOpenNode: selectedPlan }, replace: true });
     } catch (error) {
       const message = error.response?.data?.message || 'Registration failed';
@@ -94,52 +91,81 @@ export default function Signup() {
           <div className="relative">
             <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
-              type="text" name="fullName" ref={fullNameRef} placeholder="Full Name"
+              type="text"
+              name="fullName"
+              ref={fullNameRef}
+              placeholder="Full Name"
               className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white focus:border-blue-500 outline-none transition-all"
-              value={formData.fullName} onChange={handleChange} required disabled={loading}
+              value={formData.fullName}
+              onChange={handleChange}
+              required
+              disabled={loading}
             />
           </div>
 
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
-              type="email" name="email" placeholder="Email address"
+              type="email"
+              name="email"
+              placeholder="Email address"
               className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white focus:border-blue-500 outline-none transition-all"
-              value={formData.email} onChange={handleChange} required disabled={loading}
+              value={formData.email}
+              onChange={handleChange}
+              required
+              disabled={loading}
             />
           </div>
 
           <div className="relative">
             <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
-              type="text" name="phone" placeholder="Phone (with country code)"
+              type="text"
+              name="phone"
+              placeholder="Phone (with country code)"
               className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white focus:border-blue-500 outline-none transition-all"
-              value={formData.phone} onChange={handleChange} required disabled={loading}
+              value={formData.phone}
+              onChange={handleChange}
+              required
+              disabled={loading}
             />
           </div>
 
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
-              type="password" name="password" placeholder="Create Password"
+              type="password"
+              name="password"
+              placeholder="Create Password"
               className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white focus:border-blue-500 outline-none transition-all font-mono"
-              value={formData.password} onChange={handleChange} required disabled={loading}
+              value={formData.password}
+              onChange={handleChange}
+              required
+              disabled={loading}
             />
           </div>
 
           <div className="relative">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
             <input
-              type="password" name="confirmPassword" placeholder="Confirm Password"
+              type="password"
+              name="confirmPassword"
+              placeholder="Confirm Password"
               className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white focus:border-blue-500 outline-none transition-all font-mono"
-              value={formData.confirmPassword} onChange={handleChange} required disabled={loading}
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              required
+              disabled={loading}
             />
           </div>
 
           <button
-            type="submit" disabled={loading}
+            type="submit"
+            disabled={loading}
             className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 transition-all ${
-              loading ? 'bg-blue-600/50 text-slate-300' : 'bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-600/20'
+              loading
+                ? 'bg-blue-600/50 text-slate-300'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-xl shadow-blue-600/20'
             }`}
           >
             {loading ? <RefreshCw className="animate-spin" size={18} /> : 'Create Account'}
@@ -147,7 +173,10 @@ export default function Signup() {
         </form>
 
         <div className="mt-8 text-center text-slate-500 text-xs font-medium">
-          Already have an account? <Link to="/login" className="text-blue-400 font-bold hover:underline">Sign In here</Link>
+          Already have an account?{' '}
+          <Link to="/login" className="text-blue-400 font-bold hover:underline">
+            Sign In here
+          </Link>
         </div>
       </div>
 
@@ -159,4 +188,3 @@ export default function Signup() {
     </div>
   );
 }
-
