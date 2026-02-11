@@ -11,14 +11,18 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/userRoutes.js';
 import planRoutes from './routes/plan.js';
 import marketRoutes from './routes/market.js';
-import transactionRoutes from './routes/transaction.js';
+import transactionRoutes from './routes/transactions.js';
 import adminRoutes from './routes/adminRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
 import withdrawalRoutes from './routes/withdrawalRoutes.js';
+import investmentRoutes from './routes/investmentRoutes.js'; // ✅ NEW
+
+// Import cron job (runs automatically)
+import './cron/profitJob.js'; // ✅ NEW
 
 const app = express();
 
-// 1. Security & Performance Middleware
+// ───────────── SECURITY MIDDLEWARE ─────────────
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -33,41 +37,41 @@ app.use(
         ],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
-      },
+        imgSrc: ["'self'", "data:", "https:"]
+      }
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 );
 
-// CORS Config for Vercel Production
-app.use(
-  cors({
-    origin: [
-      'https://trustra-capital-trade.vercel.app',
-      'http://localhost:5173'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
+// ───────────── CORS ─────────────
+app.use(cors({
+  origin: [
+    'https://trustra-capital-trade.vercel.app',
+    'http://localhost:5173'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 app.options('*', cors());
 
+// ───────────── RATE LIMITER ─────────────
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
-  message: { success: false, message: 'Too many requests, please try again later.' },
+  message: { success: false, message: 'Too many requests, please try again later.' }
 });
-
 app.use('/api/', limiter);
+
+// ───────────── GENERAL MIDDLEWARE ─────────────
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// 2. Health & Root Endpoints
+// ───────────── HEALTH CHECK ─────────────
 app.get('/', (req, res) => res.json({
   success: true,
   message: 'Trustra Capital Trade API – Secure Gateway Active (2026)',
@@ -76,7 +80,7 @@ app.get('/', (req, res) => res.json({
 
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
-// 3. API Routes
+// ───────────── ROUTES ─────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/plans', planRoutes);
@@ -85,12 +89,11 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/investments', investmentRoutes); // ✅ NEW
 
-// 4. Error Handling
+// ───────────── ERROR HANDLERS ─────────────
 app.use(notFound);
 app.use(errorHandler);
 
-// THE CRITICAL FIX: Named export for Node.js v25 compatibility
 export { app };
 export default app;
-

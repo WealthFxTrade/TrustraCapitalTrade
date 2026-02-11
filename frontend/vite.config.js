@@ -4,19 +4,27 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
+
   server: {
     host: true,
-    port: 5173,
+    port: 5173, // dev server port
   },
+
+  preview: {
+    host: true,
+    port: 5173, // preview (production) port
+  },
+
   define: {
-    'process.env': {}, 
+    'process.env': {},
   },
-  // Add this section to fix the chunk size warning
+
   build: {
     rollupOptions: {
       output: {
@@ -30,4 +38,3 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000, // Raises the limit so the warning disappears
   },
 });
-

@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import { sendEmail } from '../utils/sendEmail.js';
 import { ApiError } from '../middleware/errorMiddleware.js';
@@ -11,53 +10,82 @@ import { ApiError } from '../middleware/errorMiddleware.js';
 export const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
 
-    // Security: Always return success to prevent email enumeration
+    if (!email) {
+      throw new ApiError(400, 'Please provide an email address');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({ email: normalizedEmail });
+
+    // 🔒 Silent success to prevent account enumeration
     if (!user) {
-      return res.json({ 
-        success: true, 
-        message: "If an account exists with this email, a reset link has been sent." 
+      return res.status(200).json({
+        success: true,
+        message: 'If an account exists, a reset link has been dispatched.'
       });
     }
 
-    // Generate plain-text reset token
-    const resetToken = crypto.randomBytes(32).toString("hex");
+    // Generate secure random token
+    const resetToken = crypto.randomBytes(32).toString('hex');
 
-    // Hash token to store in DB (2026 Security Standard)
+    // Hash token before storing
     const hashedToken = crypto
-      .createHash("sha256")
+      .createHash('sha256')
       .update(resetToken)
-      .digest("hex");
+      .digest('hex');
 
-    user.resetPasswordToken = hashedToken;
-    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000; // 15 Minute Window
+    // Store hashed token in schema fields
+    user.resetOtp = hashedToken;
+    user.resetOtpExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
+
     await user.save({ validateBeforeSave: false });
 
-    // PRODUCTION URL: Use your Vercel Frontend Domain
-    const frontendUrl = process.env.FRONTEND_URL || 'https://trustracapital.vercel.app';
+    const frontendUrl =
+      process.env.FRONTEND_URL || 'https://trustracapital.vercel.app';
+
     const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
 
-    const message = `
-      <div style="font-family: sans-serif; color: #0f172a; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px;">
-        <h2 style="color: #2563eb;">Trustra Capital Trade</h2>
-        <p>You requested a password reset. This link is valid for 15 minutes:</p>
-        <a href="${resetUrl}" style="display: inline-block; background: #2563eb; color: #fff; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset My Password</a>
-        <p style="font-size: 12px; color: #64748b; margin-top: 20px;">If you did not request this, please ignore this email.</p>
+    const htmlMessage = `
+      <div style="font-family: sans-serif; max-width:600px; margin:auto; padding:20px; background:#05070a; color:#ffffff;">
+        <h2 style="color:#3b82f6;">Trustra Capital</h2>
+        <p>Password reset requested.</p>
+        <a href="${resetUrl}" style="background:#2563eb;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">
+          Reset Password
+        </a>
+        <p style="font-size:12px;color:#94a3b8;margin-top:20px;">
+          This link expires in 15 minutes.
+        </p>
       </div>
     `;
 
-    await sendEmail({
-      email: user.email,
-      subject: "Password Reset [Trustra 2026 Audit]",
-      message
-    });
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'Password Reset Request',
+        message: htmlMessage
+      });
 
-    res.json({ success: true, message: "Reset link sent to registered email" });
+      res.status(200).json({
+        success: true,
+        message: 'Reset link sent to registered email'
+      });
+
+    } catch (emailError) {
+      // If email fails, remove reset token
+      user.resetOtp = undefined;
+      user.resetOtpExpires = undefined;
+      await user.save({ validateBeforeSave: false });
+
+      throw new ApiError(500, 'Email delivery failed. Try again later.');
+    }
+
   } catch (err) {
     next(err);
   }
 };
+
 
 /**
  * @desc    Reset Password using Token
@@ -68,32 +96,40 @@ export const resetPassword = async (req, res, next) => {
     const { token } = req.params;
     const { password } = req.body;
 
+    if (!password || password.length < 8) {
+      throw new ApiError(400, 'Password must be at least 8 characters');
+    }
+
+    // Hash the token from URL
     const hashedToken = crypto
-      .createHash("sha256")
+      .createHash('sha256')
       .update(token)
-      .digest("hex");
+      .digest('hex');
 
     const user = await User.findOne({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() }
-    });
+      resetOtp: hashedToken,
+      resetOtpExpires: { $gt: Date.now() }
+    }).select('+password');
 
-    if (!user) throw new ApiError(400, "Token is invalid or has expired");
+    if (!user) {
+      throw new ApiError(400, 'Security token is invalid or has expired');
+    }
 
-    // Pre-save hook in User model usually hashes the password, 
-    // but if not, hash it here:
-    user.password = password; 
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
+    // Set new password (hashing handled by pre-save middleware)
+    user.password = password;
+
+    // Clear reset fields
+    user.resetOtp = undefined;
+    user.resetOtpExpires = undefined;
 
     await user.save();
 
-    res.json({ 
-      success: true, 
-      message: "Password updated. You can now login with your new credentials." 
+    res.status(200).json({
+      success: true,
+      message: 'Password successfully updated. Please log in.'
     });
+
   } catch (err) {
     next(err);
   }
 };
-

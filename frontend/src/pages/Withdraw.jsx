@@ -12,25 +12,23 @@ import {
   Loader2,
   Info
 } from 'lucide-react';
-import api from '../api/apiService';
+import api from '../api/api'; // ✅ Fixed path
+import { useAuth } from '../context/AuthContext'; // ✅ Added for state management
 import toast from 'react-hot-toast';
 
 export default function Withdraw() {
   const navigate = useNavigate();
+  const { logout, user } = useAuth(); // ✅ Use centralized logout
   const [amount, setAmount] = useState('');
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Handled internally for stability
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  };
+  const availableBalance = Number(user?.mainBalance || 0);
 
   const handleWithdraw = async (e) => {
     e.preventDefault();
     if (Number(amount) < 10) return toast.error("Minimum withdrawal is €10");
+    if (Number(amount) > availableBalance) return toast.error("Insufficient balance");
 
     try {
       setLoading(true);
@@ -50,7 +48,6 @@ export default function Withdraw() {
 
   return (
     <div className="flex min-h-screen bg-[#05070a] text-white font-sans selection:bg-blue-500/30">
-      
       {/* SIDEBAR */}
       <aside className="w-64 bg-[#0a0c10] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen">
         <div className="p-8 border-b border-white/5 flex items-center gap-2">
@@ -74,7 +71,7 @@ export default function Withdraw() {
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-20 border-b border-white/5 bg-[#05070a]/80 backdrop-blur-xl flex items-center justify-end px-8 sticky top-0 z-40">
-          <button onClick={handleLogout} className="text-gray-400 hover:text-red-400 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition">
+          <button onClick={logout} className="text-gray-400 hover:text-red-400 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition">
             Logout <LogOut size={16} />
           </button>
         </header>
@@ -82,7 +79,7 @@ export default function Withdraw() {
         <main className="p-6 md:p-12 max-w-5xl w-full mx-auto space-y-10">
           <div className="space-y-2">
             <h1 className="text-3xl font-black italic uppercase tracking-tighter">Withdraw Funds</h1>
-            <p className="text-gray-500 text-sm font-medium uppercase tracking-wider">Transfer earnings from your Trustra Wallet to personal storage.</p>
+            <p className="text-gray-500 text-sm font-medium uppercase tracking-wider italic">Available: €{availableBalance.toLocaleString()}</p>
           </div>
 
           <div className="grid lg:grid-cols-5 gap-10">
@@ -129,22 +126,25 @@ export default function Withdraw() {
 
             {/* SIDE INFO */}
             <div className="lg:col-span-2 space-y-6">
-               <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-                  <div className="flex items-center gap-3 text-blue-500">
-                    <ShieldCheck size={24} />
-                    <h3 className="font-black uppercase italic text-sm">Security Verification</h3>
+              <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+                <div className="flex items-center gap-3 text-blue-500">
+                  <ShieldCheck size={24} />
+                  <h3 className="font-black uppercase italic text-sm">Security Verification</h3>
+                </div>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Withdrawals are processed manually by Trustra Nodes to ensure precision. Estimated processing time: <span className="text-white">1–6 hours</span>.
+                </p>
+                <div className="pt-4 border-t border-white/5 space-y-3">
+                  <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
+                    <span className="text-gray-600">Network Fee</span>
+                    <span className="text-blue-500">€2.50 Flat</span>
                   </div>
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    Withdrawals are processed manually by Trustra Nodes to ensure capital security. 
-                    Standard processing time: <span className="text-white font-bold">1–6 Hours</span>.
-                  </p>
-                  <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-3">
-                    <Info size={18} className="text-blue-500 shrink-0" />
-                    <p className="text-[10px] text-gray-400 leading-tight">
-                      Ensure your wallet address supports the <span className="text-white font-bold">BTC/TRC20</span> network.
-                    </p>
+                  <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
+                    <span className="text-gray-600">Protocol</span>
+                    <span className="text-emerald-500">AES-256 Enabled</span>
                   </div>
-               </div>
+                </div>
+              </div>
             </div>
           </div>
         </main>

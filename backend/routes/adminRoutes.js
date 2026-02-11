@@ -1,35 +1,39 @@
 import express from 'express';
+import { protect, admin } from '../middleware/authMiddleware.js';
 import {
   getDashboardStats,
   updateBalance,
-  getAuditLogs
+  getAuditLogs,
+  getAllUsers,
+  updateUserEntity,
+  deleteUserEntity,
 } from '../controllers/adminController.js';
 import {
   getKycRequests,
   approveKyc,
   rejectKyc
 } from '../controllers/adminKycController.js';
-import { protect, admin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-/**
- * SECURITY NODE: All routes below are restricted to
- * Administrators with valid JWT Bearer tokens.
- */
+// Protect all admin routes
 router.use(protect, admin);
 
-// --- 1. Global Intelligence ---
+// Dashboard & audit logs
 router.get('/stats', getDashboardStats);
 router.get('/audit-logs', getAuditLogs);
 
-// --- 2. Financial Management ---
+// User management
+router.get('/users', getAllUsers);
+router.put('/users/:id', updateUserEntity);
+router.delete('/users/:id', deleteUserEntity);
+
+// Financial management
 router.post('/users/update-balance', updateBalance);
 
-// --- 3. Compliance & KYC ---
+// KYC management
 router.get('/kyc', getKycRequests);
 router.patch('/kyc/:id/approve', approveKyc);
 router.patch('/kyc/:id/reject', rejectKyc);
 
 export default router;
-

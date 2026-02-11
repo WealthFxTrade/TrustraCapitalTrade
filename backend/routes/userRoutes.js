@@ -1,6 +1,4 @@
 import express from 'express';
-const router = express.Router();
-
 import {
   getUserProfile,
   updateUserProfile,
@@ -21,49 +19,36 @@ import {
 
 import { protect, admin } from '../middleware/authMiddleware.js';
 
-// ────────────────────────────────────────────────
-// User Routes (Authenticated)
-// ────────────────────────────────────────────────
+const router = express.Router();
 
-// @route   GET /api/user/dashboard
-router.get('/user/dashboard', protect, getUserDashboard);
+// ────────────── USER ROUTES ──────────────
+router.get('/dashboard', protect, getUserDashboard);
 
-// @route   GET /api/user/me
-router.route('/user/me')
+router.route('/me')
   .get(protect, getUserProfile)
   .put(protect, updateUserProfile);
 
-// @route   GET /api/user/balance
-router.get('/user/balance', protect, getUserBalances);
-
-// @route   GET /api/transactions/my
-router.get('/transactions/my', protect, getUserLedger);
+router.get('/balance', protect, getUserBalances);
+router.get('/transactions', protect, getUserLedger);
 
 // Verification
 router.post('/verify/resend', protect, resendVerificationEmail);
 router.get('/verify/:token', verifyUserEmail);
 
-// ────────────────────────────────────────────────
-// Admin Routes (Admin Only)
-// ────────────────────────────────────────────────
+// ────────────── ADMIN ROUTES ──────────────
+router.post('/approve-deposit', protect, admin, approveDeposit);
 
-// @route   POST /api/users/approve-deposit
-router.post('/users/approve-deposit', protect, admin, approveDeposit);
-
-// @route   GET /api/users
-router.route('/users')
+router.route('/')
   .get(protect, admin, getUsers);
 
-// @route   GET/PUT/DELETE /api/users/:id
-router.route('/users/:id')
+router.route('/:id')
   .get(protect, admin, getUserById)
   .put(protect, admin, updateUser)
   .delete(protect, admin, deleteUser);
 
-// Management
-router.put('/users/:id/balance', protect, admin, updateUserBalance);
-router.put('/users/:id/ban', protect, admin, banUser);
-router.put('/users/:id/unban', protect, admin, unbanUser);
+// Admin actions
+router.put('/:id/balance', protect, admin, updateUserBalance);
+router.put('/:id/ban', protect, admin, banUser);
+router.put('/:id/unban', protect, admin, unbanUser);
 
 export default router;
-

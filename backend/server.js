@@ -1,4 +1,3 @@
-// server.js
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -22,20 +21,24 @@ const startServer = async () => {
       console.log(`🚀 Trustra Backend running on port ${PORT}`);
     });
 
+    // Socket.io setup
     const io = new Server(server, {
       cors: {
-        origin: ["https://trustra-capital-trade.vercel.app", "http://localhost:5173"],
+        origin: [
+          'https://trustra-capital-trade.vercel.app',
+          'http://localhost:5173'
+        ],
         credentials: true
       },
-      transports: ["websocket"]
+      transports: ['websocket']
     });
 
     io.on('connection', (socket) => {
       console.log(`📡 Socket Connected: ${socket.id}`);
-      socket.on('disconnect', () => console.log('🔌 Socket Disconnected'));
+      socket.on('disconnect', () => console.log(`🔌 Socket Disconnected: ${socket.id}`));
     });
 
-    // Share io instance globally if needed for controllers
+    // Share io instance globally if needed
     app.set('socketio', io);
 
   } catch (err) {
@@ -45,4 +48,3 @@ const startServer = async () => {
 };
 
 startServer();
-

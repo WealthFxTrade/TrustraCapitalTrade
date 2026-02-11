@@ -1,179 +1,143 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import toast from 'react-hot-toast';
-import { RefreshCw, Trash2, Save, UserCog, ShieldCheck } from 'lucide-react';
-import api from '../api/apiService'; // Using your centralized axios instance
+import React, { useState, useEffect } from 'react';
+import { RefreshCw, Save, Trash2, DollarSign } from 'lucide-react';
+import axios from 'axios';
 
-export default function Admin() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [updatingId, setUpdatingId] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
+const Admin = () => {
+    const [users, setUsers] = useState([]);
+    const [formData, setFormData] = useState({});
+    const [loading, setLoading] = useState(true);
+    const [updatingId, setUpdatingId] = useState(null);
+    const [deletingId, setDeletingId] = useState(null);
+    const [profitId, setProfitId] = useState(null);
 
-  // Form state for each user
-  const [formData, setFormData] = useState({});
-
-  const loadUsers = useCallback(async (signal) => {
-    try {
-      setLoading(true);
-      setError(null);
-      // Endpoint matches backend: app.use('/api/admin', adminRoutes)
-      const res = await api.get('/admin/users', { signal });
-      const data = res.data?.users || [];
-      setUsers(data);
-      
-      // Initialize form data
-      const initialForm = {};
-      data.forEach((u) => {
-        initialForm[u._id] = {
-          mainBalance: u.mainBalance?.toString() || '0',
-          activePlan: u.activePlan || 'Rio Starter',
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                // Note: If accessing from your phone/network, replace 'localhost' with '172.20.10.3'
+                const res = await axios.get('http://localhost:10000/api/users');
+                setUsers(Array.isArray(res.data) ? res.data : []);
+                setLoading(false);
+            } catch (err) {
+                console.error("Error fetching users:", err);
+                setLoading(false);
+            }
         };
-      });
-      setFormData(initialForm);
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      setError('System Sync Failed. Please retry.');
-      toast.error('Could not fetch user ledger');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+        fetchUsers();
+    }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    loadUsers(controller.signal);
-    return () => controller.abort();
-  }, [loadUsers]);
+    const handleInputChange = (userId, field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            [userId]: { ...prev[userId], [field]: value }
+        }));
+    };
 
-  const handleInputChange = (userId, field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [userId]: { ...prev[userId], [field]: value },
-    }));
-  };
+    const updateUser = async (userId) => {
+        setUpdatingId(userId);
+        try {
+            const updateData = formData[userId] || {};
+            await axios.put(`http://localhost:10000/api/users/${userId}`, updateData);
+            alert("User updated successfully!");
+        } catch (err) {
+            alert("Update failed: " + (err.response?.data?.message || err.message));
+        } finally {
+            setUpdatingId(null);
+        }
+    };
 
-  const updateUser = async (userId) => {
-    const { mainBalance, activePlan } = formData[userId] || {};
-    if (isNaN(Number(mainBalance))) return toast.error('Invalid balance value');
+    const deleteUser = async (userId) => {
+        if (!window.confirm("Are you sure you want to delete this user?")) return;
+        setDeletingId(userId);
+        try {
+            await axios.delete(`http://localhost:10000/api/users/${userId}`);
+            setUsers(users.filter(u => u._id !== userId));
+        } catch (err) {
+            alert("Delete failed: " + (err.response?.data?.message || err.message));
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
-    setUpdatingId(userId);
-    try {
-      const payload = {
-        mainBalance: Number(mainBalance),
-        activePlan: activePlan.trim(),
-      };
-      // Endpoint: /api/admin/users/:id
-      await api.put(`/admin/users/${userId}`, payload);
-      toast.success('User Protocol Updated');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Update failed');
-    } finally {
-      setUpdatingId(null);
-    }
-  };
+    const distributeProfit = async (userId) => {
+        setProfitId(userId);
+        try {
+            const payload = { distributeProfit: true };
+            await axios.put(`http://localhost:10000/api/users/${userId}`, payload);
+            alert("Profit distributed successfully!");
+        } catch (err) {
+            alert("Profit distribution failed: " + (err.response?.data?.message || err.message));
+        } finally {
+            setProfitId(null);
+        }
+    };
 
-  const deleteUser = async (userId) => {
-    if (!window.confirm('PERMANENT DELETE: Proceed?')) return;
-    setDeletingId(userId);
-    try {
-      await api.delete(`/admin/users/${userId}`);
-      toast.success('User Purged');
-      setUsers((prev) => prev.filter((u) => u._id !== userId));
-    } catch (err) {
-      toast.error('Deletion protocol failed');
-    } finally {
-      setDeletingId(null);
-    }
-  };
+    if (loading) return <div className="p-10 text-white bg-black min-h-screen">Loading Admin Panel...</div>;
 
-  if (loading) {
     return (
-      <div className="min-h-screen bg-[#05070a] flex items-center justify-center">
-        <RefreshCw className="h-10 w-10 text-blue-500 animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-[#05070a] text-white p-6 md:p-12 font-sans selection:bg-blue-500/30">
-      <div className="max-w-7xl mx-auto space-y-10">
-        <header className="flex justify-between items-center border-b border-white/5 pb-8">
-          <div>
-            <h1 className="text-3xl font-black italic uppercase tracking-tighter flex items-center gap-3">
-              <ShieldCheck className="text-blue-500" /> Admin Ledger
-            </h1>
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mt-1">Audit Control v8.4.1</p>
-          </div>
-          <button onClick={() => loadUsers()} className="p-3 bg-white/5 rounded-xl hover:bg-white/10 transition">
-             <RefreshCw size={18} />
-          </button>
-        </header>
-
-        {error && <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl text-center text-xs font-black uppercase tracking-widest">{error}</div>}
-
-        <div className="bg-[#0a0c10] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-white/5">
-              <tr className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">
-                <th className="px-8 py-6">User Entity</th>
-                <th className="px-8 py-6">Main Balance (€)</th>
-                <th className="px-8 py-6">Active Node</th>
-                <th className="px-8 py-6 text-right">Operations</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {users.map((user) => (
-                <tr key={user._id} className="hover:bg-white/5 transition">
-                  <td className="px-8 py-6">
-                    <p className="font-bold text-white text-sm italic">{user.email}</p>
-                    <p className="text-[9px] text-gray-600 font-mono">{user._id}</p>
-                  </td>
-                  <td className="px-8 py-6">
-                    <input
-                      type="number"
-                      value={formData[user._id]?.mainBalance ?? '0'}
-                      onChange={(e) => handleInputChange(user._id, 'mainBalance', e.target.value)}
-                      className="w-32 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-blue-400 font-mono text-sm focus:border-blue-500 outline-none"
-                    />
-                  </td>
-                  <td className="px-8 py-6">
-                    <input
-                      type="text"
-                      value={formData[user._id]?.activePlan ?? ''}
-                      onChange={(e) => handleInputChange(user._id, 'activePlan', e.target.value)}
-                      className="w-44 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-xs font-black uppercase tracking-widest focus:border-blue-500 outline-none"
-                      placeholder="e.g. Rio Elite"
-                    />
-                  </td>
-                  <td className="px-8 py-6 text-right space-x-3">
-                    <button
-                      onClick={() => updateUser(user._id)}
-                      disabled={updatingId === user._id}
-                      className="p-3 bg-blue-600/10 text-blue-500 hover:bg-blue-600 hover:text-white rounded-xl transition disabled:opacity-50"
-                      title="Save Changes"
-                    >
-                      {updatingId === user._id ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-                    </button>
-                    <button
-                      onClick={() => deleteUser(user._id)}
-                      disabled={deletingId === user._id}
-                      className="p-3 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition disabled:opacity-50"
-                      title="Purge User"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {users.length === 0 && (
-             <div className="p-20 text-center text-[10px] font-black uppercase tracking-[0.5em] text-gray-700">No Entities Found</div>
-          )}
+        <div className="min-h-screen bg-black text-white p-8">
+            <div className="max-w-6xl mx-auto">
+                <h1 className="text-2xl font-bold mb-8 text-blue-500">Admin Protocol Dashboard</h1>
+                <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-white/10 bg-white/5">
+                                    <th className="px-8 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">User Details</th>
+                                    <th className="px-8 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">Investment Plan</th>
+                                    <th className="px-8 py-4 text-xs font-bold uppercase tracking-wider text-gray-400">Invested Amount (€)</th>
+                                    <th className="px-8 py-4 text-right text-xs font-bold uppercase tracking-wider text-gray-400">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {users.map((user) => (
+                                    <tr key={user._id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                                        <td className="px-8 py-6">
+                                            <div className="font-medium text-gray-200">{user.username || user.email}</div>
+                                            <div className="text-xs text-gray-500 font-mono">{user._id}</div>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <select
+                                                value={formData[user._id]?.activePlan ?? user.planKey ?? 'basic'}
+                                                onChange={(e) => handleInputChange(user._id, 'activePlan', e.target.value)}
+                                                className="bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-gray-300 text-xs font-bold outline-none cursor-pointer focus:border-blue-500"
+                                            >
+                                                <option value="basic">Rio Starter</option>
+                                                <option value="silver">Rio Basic</option>
+                                                <option value="gold">Rio Standard</option>
+                                                <option value="platinum">Rio Advanced</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <input
+                                                type="number"
+                                                value={formData[user._id]?.investedAmount ?? user.investedAmount ?? 0}
+                                                onChange={(e) => handleInputChange(user._id, 'investedAmount', Number(e.target.value))}
+                                                className="bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-gray-300 text-xs font-bold outline-none w-32 focus:border-blue-500"
+                                            />
+                                        </td>
+                                        <td className="px-8 py-6">
+                                            <div className="flex justify-end items-center space-x-2">
+                                                <button onClick={() => updateUser(user._id)} disabled={updatingId === user._id} className="p-3 bg-blue-600/10 text-blue-500 rounded-xl hover:bg-blue-600 hover:text-white transition-all disabled:opacity-50">
+                                                    {updatingId === user._id ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                                                </button>
+                                                <button onClick={() => distributeProfit(user._id)} disabled={profitId === user._id} className="p-3 bg-emerald-600/10 text-emerald-500 rounded-xl hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-50">
+                                                    {profitId === user._id ? <RefreshCw className="animate-spin" size={16} /> : <DollarSign size={16} />}
+                                                </button>
+                                                <button onClick={() => deleteUser(user._id)} disabled={deletingId === user._id} className="p-3 bg-red-600/10 text-red-500 rounded-xl hover:bg-red-600 hover:text-white transition-all disabled:opacity-50">
+                                                    {deletingId === user._id ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
-}
+    );
+};
+
+export default Admin;
 
