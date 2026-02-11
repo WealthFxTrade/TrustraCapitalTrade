@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import QRCode from 'qrcode.react';
+import { QRCodeSVG } from 'qrcode.react'; // Updated for better React compatibility
 import toast from 'react-hot-toast';
 import {
   LayoutDashboard,
@@ -16,16 +16,15 @@ import {
   Loader2,
   AlertCircle,
   TrendingUp,
+  ChevronLeft
 } from 'lucide-react';
-import {
-  getDepositAddress,
-  getDepositHistory,
-  createFiatDeposit,
-} from '../api';
 
-export default function Deposit({ logout }) {
+// ✅ Fixed: Importing directly from your centralized apiService
+import api from '../api/apiService';
+
+export default function Deposit() {
   const navigate = useNavigate();
-
+  
   // State
   const [method, setMethod] = useState('BTC');
   const [amount, setAmount] = useState('');
@@ -35,31 +34,36 @@ export default function Deposit({ logout }) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Logout Handler
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+  };
+
   // Load Crypto Address
-  const loadDeposit = useCallback(
-    async (fresh = false) => {
-      if (method === 'BANK') return;
-      try {
-        setLoading(true);
-        const res = await getDepositAddress(method, fresh);
-        setDeposit(res.data);
-      } catch (err) {
-        toast.error(err.response?.data?.message || 'Failed to load deposit address');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [method]
-  );
+  const loadDeposit = useCallback(async (fresh = false) => {
+    if (method === 'BANK') return;
+    try {
+      setLoading(true);
+      // ✅ Using centralized api instance
+      const res = await api.get(`/wallet/address/${method}${fresh ? '?fresh=true' : ''}`);
+      setDeposit(res.data);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load deposit address');
+    } finally {
+      setLoading(false);
+    }
+  }, [method]);
 
   // Load History
   const loadHistory = useCallback(async () => {
     try {
       setHistoryLoading(true);
-      const res = await getDepositHistory(method);
-      setHistory(res.data || []);
+      const res = await api.get(`/transactions/my?type=deposit&asset=${method}`);
+      setHistory(res.data?.transactions || []);
     } catch {
-      toast.error('Failed to load history');
+      console.error('History fetch failed');
     } finally {
       setHistoryLoading(false);
     }
@@ -70,221 +74,139 @@ export default function Deposit({ logout }) {
     loadHistory();
     const interval = setInterval(loadHistory, 60000);
     return () => clearInterval(interval);
-  }, [loadDeposit, loadHistory, method]);
+  }, [loadDeposit, loadHistory]);
 
-  // Copy address
   const copyAddress = () => {
     if (!deposit?.address) return;
     navigator.clipboard.writeText(deposit.address);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-    toast.success('Address copied!');
-  };
-
-  // Submit fiat deposit
-  const submitFiat = async (e) => {
-    e.preventDefault();
-    const value = Number(amount);
-    if (!value || value < 100) return toast.error('Minimum deposit is €100');
-    try {
-      setLoading(true);
-      await createFiatDeposit({ amount: value, method });
-      toast.success('Deposit request submitted');
-      navigate('/dashboard');
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Deposit failed');
-    } finally {
-      setLoading(false);
-    }
+    setTimeout(() => setCopied(false), 2000);
+    toast.success('Address copied to clipboard');
   };
 
   return (
-    <div className="flex min-h-screen bg-[#0a0d14] text-white font-sans">
+    <div className="flex min-h-screen bg-[#05070a] text-white font-sans selection:bg-blue-500/30">
+      
       {/* SIDEBAR */}
-      <aside className="w-64 bg-[#0f121d] border-r border-gray-800 hidden lg:flex flex-col sticky top-0 h-screen">
-        <div className="p-6 border-b border-gray-800 flex items-center gap-2">
-          <TrendingUp className="h-6 w-6 text-indigo-500" />
-          <span className="font-bold text-lg tracking-tight text-white">TrustraCapital</span>
+      <aside className="w-64 bg-[#0a0c10] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen">
+        <div className="p-8 border-b border-white/5 flex items-center gap-2">
+          <TrendingUp className="h-6 w-6 text-blue-500" />
+          <span className="font-black text-xl tracking-tighter italic uppercase text-white">Trustra</span>
         </div>
-        <nav className="flex-1 p-4 space-y-1 text-sm text-gray-400">
-          <Link
-            to="/dashboard"
-            className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] font-bold tracking-widest"
-          >
-            <LayoutDashboard size={18} /> DASHBOARD
+        <nav className="flex-1 p-6 space-y-2">
+          <Link to="/dashboard" className="flex items-center gap-3 p-3 hover:bg-white/5 text-gray-400 rounded-xl transition uppercase text-[10px] font-black tracking-widest">
+            <LayoutDashboard size={18} /> Dashboard
           </Link>
-          <div className="pt-6 pb-2 text-[10px] uppercase tracking-widest text-gray-600 px-3 font-bold">
-            Payments
-          </div>
-          <Link
-            to="/deposit"
-            className="flex items-center gap-3 p-3 bg-indigo-600/10 text-indigo-400 rounded-lg uppercase text-[11px] font-bold tracking-widest"
-          >
-            <PlusCircle size={18} /> ADD MONEY
+          <div className="pt-8 pb-2 text-[9px] uppercase tracking-[0.2em] text-gray-600 px-3 font-black">Payments</div>
+          <Link to="/deposit" className="flex items-center gap-3 p-3 bg-blue-600/10 text-blue-500 rounded-xl uppercase text-[10px] font-black tracking-widest">
+            <PlusCircle size={18} /> Add Money
           </Link>
-          <Link
-            to="/transactions"
-            className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] font-bold tracking-widest"
-          >
-            <History size={18} /> ALL TRANSACTIONS
+          <Link to="/withdraw" className="flex items-center gap-3 p-3 hover:bg-white/5 text-gray-400 rounded-xl transition uppercase text-[10px] font-black tracking-widest">
+            <Wallet size={18} /> Withdraw
           </Link>
         </nav>
       </aside>
 
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* HEADER */}
-        <header className="h-16 border-b border-gray-800 bg-[#0f121d]/80 flex items-center justify-end px-8">
-          <button
-            onClick={logout}
-            className="text-gray-400 hover:text-red-400 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
-          >
-            Logout <LogOut size={16} />
+        <header className="h-20 border-b border-white/5 bg-[#05070a]/80 backdrop-blur-xl flex items-center justify-between px-8 sticky top-0 z-40">
+          <button onClick={() => navigate('/dashboard')} className="lg:hidden text-gray-400"><ChevronLeft /></button>
+          <div className="hidden lg:block text-[10px] font-black text-gray-500 uppercase tracking-widest">Secure Gateway v8.4</div>
+          <button onClick={handleLogout} className="text-gray-400 hover:text-red-400 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition">
+            Sign Out <LogOut size={16} />
           </button>
         </header>
 
-        <main className="p-8 max-w-5xl w-full mx-auto space-y-8">
-          {/* Page Header */}
-          <div>
-            <h1 className="text-2xl font-bold">Add Money</h1>
-            <p className="text-gray-500 text-sm">Fund your Trustra Account via Crypto or Bank Transfer.</p>
-          </div>
+        <main className="p-6 md:p-12 max-w-5xl w-full mx-auto space-y-10">
+          <section className="space-y-2">
+            <h1 className="text-4xl font-black italic uppercase tracking-tighter">Add Money</h1>
+            <p className="text-gray-500 text-sm font-medium uppercase tracking-wider">Fund your Trustra Portfolio via 2026 Asset Directives.</p>
+          </section>
 
-          <div className="grid lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              {/* METHOD SELECTOR */}
-              <div className="bg-[#161b29] border border-gray-800 rounded-2xl p-6">
-                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-4">
-                  Select Gateway
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {['BTC', 'USDT', 'BANK'].map((m) => (
+          <div className="grid lg:grid-cols-3 gap-10">
+            <div className="lg:col-span-2 space-y-8">
+              {/* GATEWAY SELECTOR */}
+              <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
+                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-6">Select Asset Gateway</label>
+                <div className="flex flex-wrap gap-3">
+                  {['BTC', 'ETH', 'USDT', 'LTC'].map((coin) => (
                     <button
-                      key={m}
-                      onClick={() => setMethod(m)}
-                      className={`py-3 rounded-xl border text-xs font-bold transition-all ${
-                        method === m
-                          ? 'border-indigo-500 bg-indigo-500/10 text-white'
-                          : 'border-gray-800 bg-[#0f121d] text-gray-500'
+                      key={coin}
+                      onClick={() => setMethod(coin)}
+                      className={`px-6 py-3 rounded-2xl font-black text-[10px] tracking-widest transition-all ${
+                        method === coin ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white/5 text-gray-400 hover:bg-white/10'
                       }`}
                     >
-                      {m === 'BANK' ? 'Bank Transfer' : m}
+                      {coin}
                     </button>
                   ))}
                 </div>
-              </div>
 
-              {/* DYNAMIC PAYMENT AREA */}
-              <div className="bg-[#161b29] border border-gray-800 rounded-2xl p-8 shadow-xl">
-                {method === 'BANK' ? (
-                  <form onSubmit={submitFiat} className="space-y-6">
-                    <div>
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">
-                        Amount (€)
-                      </label>
-                      <input
-                        type="number"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        placeholder="Min €100"
-                        className="w-full bg-[#0f121d] border border-gray-800 rounded-xl p-4 text-white font-bold focus:border-indigo-500 outline-none"
-                      />
+                {/* ADDRESS DISPLAY */}
+                <div className="mt-10 space-y-6">
+                  {loading ? (
+                    <div className="flex flex-col items-center py-10 gap-4">
+                      <Loader2 className="animate-spin text-blue-500" size={32} />
+                      <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Generating Node Address...</p>
                     </div>
-                    <button
-                      disabled={loading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-bold uppercase tracking-widest text-xs transition"
-                    >
-                      {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Confirm Deposit'}
-                    </button>
-                  </form>
-                ) : (
-                  <div className="flex flex-col items-center text-center space-y-6">
-                    {loading ? (
-                      <div className="py-12">
-                        <RefreshCw className="animate-spin text-indigo-500" size={32} />
+                  ) : (
+                    <div className="space-y-8">
+                      <div className="flex justify-center bg-white p-4 rounded-3xl w-fit mx-auto border-8 border-white/5">
+                        <QRCodeSVG value={deposit?.address || 'Trustra'} size={180} level="H" />
                       </div>
-                    ) : deposit ? (
-                      <>
-                        <div className="bg-white p-3 rounded-2xl">
-                          <QRCode value={deposit.address} size={180} />
-                        </div>
-                        <div className="w-full space-y-2 text-left">
-                          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 px-1">
-                            Your Personal {method} Address
-                          </label>
-                          <div className="flex items-center gap-2 bg-[#0f121d] border border-gray-800 p-4 rounded-xl">
-                            <span className="truncate flex-1 font-mono text-xs text-indigo-400">
-                              {deposit.address}
-                            </span>
-                            <button onClick={copyAddress} className="text-gray-400 hover:text-white">
-                              {copied ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
-                            </button>
+                      
+                      <div className="space-y-3">
+                        <p className="text-center text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Personal {method} Deposit Address</p>
+                        <div className="relative group">
+                          <div className="bg-black/40 border border-white/10 rounded-2xl p-5 pr-16 font-mono text-xs text-blue-400 break-all leading-relaxed">
+                            {deposit?.address || 'Address not available'}
                           </div>
-                        </div>
-                        <div className="flex w-full gap-4">
-                          <button
-                            onClick={() => loadDeposit(true)}
-                            className="flex-1 bg-gray-800 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2"
+                          <button 
+                            onClick={copyAddress}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-500 transition-all active:scale-90"
                           >
-                            <RefreshCw size={14} /> New Address
+                            {copied ? <Check size={18} /> : <Copy size={18} />}
                           </button>
-                          <div className="flex-1 bg-indigo-500/10 border border-indigo-500/20 py-3 rounded-lg text-[10px] font-bold uppercase tracking-widest text-indigo-400 flex items-center justify-center">
-                            Status: {deposit.status}
-                          </div>
                         </div>
-                      </>
-                    ) : null}
-                  </div>
-                )}
+                      </div>
+
+                      <div className="bg-blue-500/5 border border-blue-500/10 p-5 rounded-2xl flex gap-4">
+                        <AlertCircle className="text-blue-500 shrink-0" size={20} />
+                        <p className="text-[10px] text-gray-500 leading-relaxed font-medium">
+                          Deposits sent to this address will be credited after <span className="text-white font-bold">3 network confirmations</span>. 
+                          Ensure you are using the <span className="text-blue-400 font-bold">{method} Network</span>.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* SIDEBAR INFO & HISTORY */}
+            {/* HISTORY SIDEBAR */}
             <div className="space-y-6">
-              <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6">
-                <AlertCircle className="text-indigo-500 mb-4" size={24} />
-                <h4 className="font-bold text-sm mb-2 uppercase tracking-tight">Payment Notice</h4>
-                <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Please send only <strong>{method}</strong> to this address. Sending any other coin will result in permanent loss.
-                </p>
-              </div>
-
-              <div className="bg-[#161b29] border border-gray-800 rounded-2xl overflow-hidden">
-                <div className="p-4 border-b border-gray-800 font-black text-[10px] uppercase tracking-widest text-gray-500">
-                  History
-                </div>
-                <div className="p-4 space-y-4 max-h-[300px] overflow-y-auto">
-                  {historyLoading ? (
-                    <div className="text-center py-4">
-                      <Loader2 className="animate-spin mx-auto text-gray-600" />
-                    </div>
-                  ) : history.length === 0 ? (
-                    <p className="text-[11px] text-gray-600 text-center py-4 italic">No recent deposits.</p>
-                  ) : (
-                    history.map((d) => (
-                      <div
-                        key={d._id}
-                        className="flex justify-between items-center bg-[#0f121d] p-3 rounded-xl border border-gray-800/50"
-                      >
-                        <div>
-                          <p className="text-[11px] font-bold italic">€{d.amount}</p>
-                          <p className="text-[9px] text-gray-600 uppercase tracking-tighter">
-                            {new Date(d.createdAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <span
-                          className={`text-[9px] font-black uppercase px-2 py-1 rounded ${
-                            d.status === 'completed'
-                              ? 'text-green-500 bg-green-500/10'
-                              : 'text-yellow-500 bg-yellow-500/10'
-                          }`}
-                        >
-                          {d.status}
-                        </span>
+              <h3 className="text-lg font-black uppercase italic tracking-tight flex items-center gap-2">
+                <History className="text-blue-500" size={18} /> Recent Deposits
+              </h3>
+              <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-6 space-y-4">
+                {historyLoading ? (
+                  <div className="py-10 text-center"><Loader2 className="animate-spin mx-auto text-gray-700" /></div>
+                ) : history.length > 0 ? (
+                  history.map((tx, i) => (
+                    <div key={i} className="flex justify-between items-center p-4 bg-white/5 rounded-2xl border border-white/5">
+                      <div>
+                        <p className="text-[10px] font-black text-white italic">{tx.asset || method}</p>
+                        <p className="text-[9px] text-gray-500 font-bold">{new Date(tx.createdAt).toLocaleDateString()}</p>
                       </div>
-                    ))
-                  )}
-                </div>
+                      <div className="text-right">
+                        <p className="text-xs font-black text-emerald-500">+{tx.amount}</p>
+                        <p className={`text-[8px] font-black uppercase tracking-widest ${tx.status === 'completed' ? 'text-emerald-500/50' : 'text-blue-500/50'}`}>{tx.status}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center py-10 text-[10px] font-black text-gray-700 uppercase tracking-widest">No history found</p>
+                )}
               </div>
             </div>
           </div>
@@ -293,3 +215,4 @@ export default function Deposit({ logout }) {
     </div>
   );
 }
+

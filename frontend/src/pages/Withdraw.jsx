@@ -1,18 +1,32 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  LayoutDashboard, History, PlusCircle, Wallet, 
-  ChevronRight, TrendingUp, LogOut, ArrowDownCircle, 
-  AlertCircle, Loader2, ShieldCheck 
+import {
+  LayoutDashboard,
+  PlusCircle,
+  Wallet,
+  ChevronRight,
+  TrendingUp,
+  LogOut,
+  ArrowDownCircle,
+  ShieldCheck,
+  Loader2,
+  Info
 } from 'lucide-react';
 import api from '../api/apiService';
 import toast from 'react-hot-toast';
 
-export default function Withdraw({ logout }) {
+export default function Withdraw() {
   const navigate = useNavigate();
   const [amount, setAmount] = useState('');
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Handled internally for stability
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+  };
 
   const handleWithdraw = async (e) => {
     e.preventDefault();
@@ -35,110 +49,100 @@ export default function Withdraw({ logout }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#0a0d14] text-white font-sans">
+    <div className="flex min-h-screen bg-[#05070a] text-white font-sans selection:bg-blue-500/30">
       
-      {/* SIDEBAR (Matches Trustra Dashboard) */}
-      <aside className="w-64 bg-[#0f121d] border-r border-gray-800 hidden lg:flex flex-col sticky top-0 h-screen">
-        <div className="p-6 border-b border-gray-800 flex items-center gap-2">
-          <TrendingUp className="h-6 w-6 text-indigo-500" />
-          <span className="font-bold text-lg tracking-tight text-white">TrustraCapital</span>
+      {/* SIDEBAR */}
+      <aside className="w-64 bg-[#0a0c10] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen">
+        <div className="p-8 border-b border-white/5 flex items-center gap-2">
+          <TrendingUp className="h-6 w-6 text-blue-500" />
+          <span className="font-black text-xl tracking-tighter italic uppercase">Trustra</span>
         </div>
-        <nav className="flex-1 p-4 space-y-1 text-sm text-gray-400">
-          <Link to="/dashboard" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] font-bold tracking-widest">
-            <LayoutDashboard size={18} /> DASHBOARD
+        <nav className="flex-1 p-6 space-y-2">
+          <Link to="/dashboard" className="flex items-center gap-3 p-3 hover:bg-white/5 text-gray-400 rounded-xl transition uppercase text-[10px] font-black tracking-widest">
+            <LayoutDashboard size={18} /> Dashboard
           </Link>
-          <div className="pt-6 pb-2 text-[10px] uppercase tracking-widest text-gray-600 px-3 font-bold">Payments</div>
-          <Link to="/withdraw" className="flex items-center gap-3 bg-indigo-600/10 text-indigo-400 p-3 rounded-lg uppercase text-[11px] font-bold tracking-widest">
-            <ArrowDownCircle size={18} /> WITHDRAW
+          <div className="pt-8 pb-2 text-[9px] uppercase tracking-[0.2em] text-gray-600 px-3 font-black">Finance</div>
+          <Link to="/withdraw" className="flex items-center gap-3 bg-blue-600/10 text-blue-500 p-3 rounded-xl uppercase text-[10px] font-black tracking-widest">
+            <ArrowDownCircle size={18} /> Withdraw
           </Link>
-          <Link to="/deposit" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] font-bold tracking-widest">
-            <PlusCircle size={18} /> ADD MONEY
-          </Link>
-          <div className="pt-6 pb-2 text-[10px] uppercase tracking-widest text-gray-600 px-3 font-bold">Investments</div>
-          <Link to="/plans" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] font-bold tracking-widest">
-            <ShieldCheck size={18} /> ALL SCHEMA
+          <Link to="/deposit" className="flex items-center gap-3 p-3 hover:bg-white/5 text-gray-400 rounded-xl transition uppercase text-[10px] font-black tracking-widest">
+            <PlusCircle size={18} /> Add Money
           </Link>
         </nav>
       </aside>
 
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 border-b border-gray-800 bg-[#0f121d]/80 flex items-center justify-end px-8">
-          <button onClick={logout} className="text-gray-400 hover:text-red-400 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+        <header className="h-20 border-b border-white/5 bg-[#05070a]/80 backdrop-blur-xl flex items-center justify-end px-8 sticky top-0 z-40">
+          <button onClick={handleLogout} className="text-gray-400 hover:text-red-400 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition">
             Logout <LogOut size={16} />
           </button>
         </header>
 
-        <main className="p-8 max-w-4xl w-full mx-auto space-y-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold italic">Withdraw Funds</h1>
-              <p className="text-gray-500 text-sm">Transfer earnings from your Trustra Wallet to your personal storage.</p>
-            </div>
+        <main className="p-6 md:p-12 max-w-5xl w-full mx-auto space-y-10">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-black italic uppercase tracking-tighter">Withdraw Funds</h1>
+            <p className="text-gray-500 text-sm font-medium uppercase tracking-wider">Transfer earnings from your Trustra Wallet to personal storage.</p>
           </div>
 
-          <div className="grid md:grid-cols-5 gap-8">
+          <div className="grid lg:grid-cols-5 gap-10">
             {/* WITHDRAWAL FORM */}
-            <form onSubmit={handleWithdraw} className="md:col-span-3 bg-[#161b29] border border-gray-800 rounded-3xl p-8 space-y-6 shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-5">
-                <Wallet size={80} />
+            <form onSubmit={handleWithdraw} className="lg:col-span-3 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 md:p-10 space-y-8 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-8 opacity-5">
+                <Wallet size={120} />
               </div>
 
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3 px-1">Amount to Payout (€)</label>
+              <div className="space-y-4">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Amount to Payout (€)</label>
                 <div className="relative">
-                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-indigo-400 text-sm">€</span>
-                   <input
+                  <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-blue-500 text-2xl">€</span>
+                  <input
                     type="number"
                     required
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full bg-[#0f121d] border border-gray-800 rounded-xl py-4 pl-10 pr-5 text-white font-bold focus:border-indigo-500 outline-none transition"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-6 pl-14 pr-6 text-2xl font-mono font-black focus:border-blue-500 outline-none transition"
                     placeholder="0.00"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3 px-1">Destination Address (BTC/USDT)</label>
+              <div className="space-y-4">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">Destination Address (BTC/USDT)</label>
                 <input
                   type="text"
                   required
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  className="w-full bg-[#0f121d] border border-gray-800 rounded-xl py-4 px-5 text-indigo-400 font-mono text-xs focus:border-indigo-500 outline-none transition"
+                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-6 text-blue-400 font-mono text-xs focus:border-blue-500 outline-none transition"
                   placeholder="Paste External Wallet Address"
                 />
               </div>
 
               <button
                 disabled={loading}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl font-black text-xs tracking-widest uppercase transition flex justify-center items-center gap-2 shadow-lg shadow-indigo-600/20"
+                className="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-[2rem] font-black text-xs tracking-widest uppercase transition-all flex justify-center items-center gap-3 shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50"
               >
                 {loading ? <Loader2 className="animate-spin" /> : <>Request Payout <ChevronRight size={18} /></>}
               </button>
             </form>
 
             {/* SIDE INFO */}
-            <div className="md:col-span-2 space-y-6">
-               <div className="bg-[#161b29] border border-gray-800 rounded-2xl p-6">
-                 <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Payout Policy</h4>
-                 <div className="flex gap-3">
-                   <AlertCircle className="text-indigo-500 shrink-0" size={20} />
-                   <p className="text-[11px] text-gray-400 leading-relaxed italic">
-                     Funds are deducted instantly from your balance. Requests are vetted by Trustra Compliance within 1-24 hours for security.
-                   </p>
-                 </div>
-               </div>
-
-               <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-6">
-                  <div className="flex justify-between items-center text-[11px] mb-2">
-                    <span className="text-gray-500 font-bold uppercase">Processing Fee</span>
-                    <span className="text-green-500 font-black">0.00%</span>
+            <div className="lg:col-span-2 space-y-6">
+               <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+                  <div className="flex items-center gap-3 text-blue-500">
+                    <ShieldCheck size={24} />
+                    <h3 className="font-black uppercase italic text-sm">Security Verification</h3>
                   </div>
-                  <div className="flex justify-between items-center text-[11px]">
-                    <span className="text-gray-500 font-bold uppercase">Min Limit</span>
-                    <span className="text-white font-black">€10.00</span>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Withdrawals are processed manually by Trustra Nodes to ensure capital security. 
+                    Standard processing time: <span className="text-white font-bold">1–6 Hours</span>.
+                  </p>
+                  <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-3">
+                    <Info size={18} className="text-blue-500 shrink-0" />
+                    <p className="text-[10px] text-gray-400 leading-tight">
+                      Ensure your wallet address supports the <span className="text-white font-bold">BTC/TRC20</span> network.
+                    </p>
                   </div>
                </div>
             </div>
