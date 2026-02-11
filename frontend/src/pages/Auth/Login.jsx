@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../api/api'; 
+import api from '../../api/api';
 import { TrendingUp, Mail, Lock, RefreshCw, ChevronRight } from 'lucide-react';
 
 export default function Login() {
@@ -15,17 +15,25 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // FIX: Real-time BTC Price Sync (2026 Directive)
+  // FIX: Accurate CoinGecko endpoint for BTC/EUR tracking
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        const res = await fetch('https://api.coingecko.com');
+        const res = await fetch(
+          'https://api.coingecko.com'
+        );
         const data = await res.json();
-        if (data.bitcoin) setBtcPrice(data.bitcoin.eur);
-      } catch (err) { console.error("Price oracle failed"); }
+        // Access nested data: data.bitcoin.eur
+        if (data?.bitcoin?.eur) {
+          setBtcPrice(data.bitcoin.eur);
+        }
+      } catch (err) {
+        console.error("Price oracle failed", err);
+      }
     };
+
     fetchPrice();
-    const interval = setInterval(fetchPrice, 30000);
+    const interval = setInterval(fetchPrice, 30000); // Sync every 30s
     return () => clearInterval(interval);
   }, []);
 
@@ -35,25 +43,23 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // Hits your backend routes/auth.js
-      const res = await api.post('/auth/login', { 
-        email: email.trim().toLowerCase(), 
-        password 
+      const res = await api.post('/auth/login', {
+        email: email.trim().toLowerCase(),
+        password
       });
-      
+
       const { user, token } = res.data;
 
-      // Update Context & Storage
+      // Ensure login context is updated before navigating
       await login(user, token);
       
       toast.success('Access Granted');
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
-      
     } catch (err) {
-      // FIX: Stop the "Authenticating" loop on failure
+      // FIX: Reset loading state so the user can try again
       setLoading(false);
-      const message = err.response?.data?.message || err.message || 'Invalid credentials';
+      const message = err.response?.data?.message || 'Invalid credentials';
       toast.error(message);
     }
   };
@@ -79,6 +85,7 @@ export default function Login() {
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
               <input
                 type="email"
+                name="email"
                 placeholder="investor@trustra.com"
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700"
                 value={email}
@@ -91,6 +98,7 @@ export default function Login() {
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
               <input
                 type="password"
+                name="password"
                 placeholder="••••••••"
                 className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700"
                 value={password}
