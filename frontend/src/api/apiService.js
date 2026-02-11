@@ -1,46 +1,35 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // ✅ FIXED: Appended /api to match your backend route prefix
-  baseURL: 'https://trustracapitaltrade-backend.onrender.com',
-  
-  // ✅ FIXED: Added 60s timeout for Render's Free Tier "Cold Start"
-  timeout: 60000, 
-  
+  // ✅ PRODUCTION URL: Matches your Render deployment
+  baseURL: 'https://trustracapitaltrade-backend.onrender.com', 
   headers: {
     'Content-Type': 'application/json',
   },
-  withCredentials: true
+  timeout: 30000, // 30s timeout for Render cold starts
 });
 
+// Add a request interceptor to include JWT token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // ✅ SYNCED KEY: Matches your Login/AuthContext storage
+    const userInfo = JSON.parse(localStorage.getItem('userInfo')); 
+    
+    if (userInfo?.token) {
+      config.headers.Authorization = `Bearer ${userInfo.token}`;
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
+// Optional: Add Response Interceptor to handle 401s (Expired Tokens)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Check if the error is a timeout (Render sleeping)
-    if (error.code === 'ECONNABORTED') {
-      console.error('Render server is waking up. Please wait...');
-    }
-
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      
-      // Prevent redirect loops on auth pages
-      const path = window.location.pathname;
-      if (path !== '/login' && path !== '/register' && path !== '/') {
-        window.location.href = '/login';
-      }
+    if (error.response?.status === 401) {
+      localStorage.removeItem('userInfo');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
