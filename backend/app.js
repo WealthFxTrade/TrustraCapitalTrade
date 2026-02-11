@@ -1,4 +1,3 @@
-// app.js – Full Production Logic
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -26,10 +25,11 @@ app.use(
       directives: {
         defaultSrc: ["'self'"],
         connectSrc: [
-          "'self'", 
-          "https://trustracapitaltrade-backend.onrender.com", 
-          "wss://trustracapitaltrade-backend.onrender.com", 
-          "https://api.coingecko.com" // Allows BTC Price Sync
+          "'self'",
+          "https://trustracapitaltrade-backend.onrender.com",
+          "https://trustra-capital-trade.vercel.app",
+          "wss://trustracapitaltrade-backend.onrender.com",
+          "https://api.coingecko.com"
         ],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
@@ -40,7 +40,7 @@ app.use(
   })
 );
 
-// CORS – Explicitly allowing your Vercel Frontend
+// CORS Config for Vercel Production
 app.use(
   cors({
     origin: [
@@ -53,11 +53,11 @@ app.use(
   })
 );
 
-app.options('*', cors()); // Preflight
+app.options('*', cors());
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500, // Increased for trading dashboard activity
+  max: 500,
   message: { success: false, message: 'Too many requests, please try again later.' },
 });
 
@@ -67,7 +67,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// 2. Health & Root Endpoints (Fixes "Not Found - /")
+// 2. Health & Root Endpoints
 app.get('/', (req, res) => res.json({
   success: true,
   message: 'Trustra Capital Trade API – Secure Gateway Active (2026)',
@@ -90,5 +90,7 @@ app.use('/api/admin', adminRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
+// THE CRITICAL FIX: Named export for Node.js v25 compatibility
+export { app };
 export default app;
 

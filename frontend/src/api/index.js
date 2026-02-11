@@ -1,4 +1,4 @@
-import api from './apiService'; 
+import api from './apiService';
 
 /**
  * TRUSTRA CAPITAL - CORE API (2026 PRODUCTION)
@@ -11,16 +11,20 @@ export const register = (data) => api.post('/auth/register', data);
 export const getProfile = () => api.get('/user/me');
 export const updateProfile = (data) => api.put('/user/me', data);
 
-// ─── USER & DASHBOARD (Aliases for UserContext) ───
-/** Fetches real-time EUR balances and stats */
+// ─── USER & DASHBOARD ───
 export const getUserStats = () => api.get('/user/dashboard').then(res => res.data);
-/** Fetches recent node activity/history */
 export const getUserTransactions = () => api.get('/transactions/my').then(res => res.data);
 
-// ─── WALLET & NODE OPERATIONS ───
+// ─── WALLET & KYC OPERATIONS ───
 export const generateAddress = (asset) => api.post(`/wallet/generate/${asset}`);
 export const getDepositAddress = (asset) => api.get(`/wallet/address/${asset}`);
 export const withdrawFunds = (data) => api.post('/transactions/withdraw', data);
+
+/** 
+ * KYC Submission - Required by src/pages/KYC.jsx
+ * Target: https://trustracapitaltrade-backend.onrender.com
+ */
+export const submitKyc = (data) => api.post('/user/kyc', data);
 
 // ─── ADMIN OPERATIONS ───
 export const adminStats = () => api.get('/admin/stats');
@@ -39,6 +43,7 @@ export default {
   generateAddress,
   getDepositAddress,
   withdrawFunds,
+  submitKyc,
   adminStats,
   adminKyc,
   adminApproveKyc,
