@@ -8,36 +8,38 @@ import { publicRoutes, protectedRoutes, fallbackRoute } from './routes';
 export default function App() {
   const { initialized, user } = useAuth();
 
-  if (!initialized) return <LoadingScreen message="Securing Trustra Node..." />;
+  // 1. Wait for AuthContext to verify the token/user before rendering anything
+  if (!initialized) {
+    return <LoadingScreen message="Securing Trustra Node..." />;
+  }
 
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Public routes (Login/Register/Landing) */}
       {publicRoutes.map((r) => (
         <Route
           key={r.path}
           path={r.path}
           element={
-            user && (r.path === '/login' || r.path === '/register')
-              ? <Navigate to="/dashboard" replace />
+            // Redirect logged-in users away from Auth pages to Dashboard
+            user && (r.path === '/login' || r.path === '/register') 
+              ? <Navigate to="/dashboard" replace /> 
               : r.element
           }
         />
       ))}
 
-      {/* Protected routes */}
+      {/* Protected routes (Dashboard/Nodes/Wallet) */}
+      {/* The ProtectedLayout should be the only place checking 'user' for these routes */}
       <Route element={<ProtectedLayout />}>
         {protectedRoutes.map((r) => (
-          <Route
-            key={r.path}
-            path={r.path}
-            element={user ? r.element : <Navigate to="/login" replace />}
-          />
+          <Route key={r.path} path={r.path} element={r.element} />
         ))}
       </Route>
 
-      {/* Fallback */}
-      <Route path={fallbackRoute.path} element={fallbackRoute.element} />
+      {/* Fallback (404) */}
+      <Route path="*" element={fallbackRoute.element || <Navigate to="/" replace />} />
     </Routes>
   );
 }
+

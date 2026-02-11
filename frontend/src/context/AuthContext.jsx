@@ -7,7 +7,7 @@ const initialState = {
   user: null,
   token: localStorage.getItem('token'),
   loading: true,
-  initialized: false, // Critical for App.jsx
+  initialized: false,
 };
 
 function authReducer(state, action) {
@@ -16,7 +16,7 @@ function authReducer(state, action) {
       return { ...state, user: action.payload.user, token: action.payload.token, loading: false, initialized: true };
     case 'LOGOUT':
     case 'AUTH_FAILED':
-      return { ...initialState, loading: false, initialized: true, token: null };
+      return { ...state, user: null, token: null, loading: false, initialized: true };
     default:
       return state;
   }
@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
       const token = localStorage.getItem('token');
       if (!token) return dispatch({ type: 'AUTH_FAILED' });
       try {
-        const res = await api.get('/auth/me');
+        const res = await api.get('/user/me');
         dispatch({ type: 'LOGIN', payload: { user: res.data.user || res.data, token } });
       } catch (err) {
         localStorage.removeItem('token');
@@ -40,8 +40,22 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
+  const login = async (user, token) => {
+    localStorage.setItem('token', token);
+    api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    dispatch({ type: 'LOGIN', payload: { user, token } });
+    return Promise.resolve();
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    delete api.defaults.headers.common['Authorization'];
+    dispatch({ type: 'LOGOUT' });
+    window.location.href = '/login';
+  };
+
   return (
-    <AuthContext.Provider value={{ ...state, dispatch }}>
+    <AuthContext.Provider value={{ ...state, login, logout, dispatch }}>
       {children}
     </AuthContext.Provider>
   );
