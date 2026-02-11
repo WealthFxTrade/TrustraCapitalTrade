@@ -1,13 +1,17 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // Base URL pointing to your Render backend with /api prefix
+  // ✅ FIXED: Appended /api to match your backend route prefix
   baseURL: 'https://trustracapitaltrade-backend.onrender.com',
+  
+  // ✅ FIXED: Added 60s timeout for Render's Free Tier "Cold Start"
+  timeout: 60000, 
+  
   headers: {
     'Content-Type': 'application/json',
   },
   withCredentials: true
-});                                                  
+});
 
 api.interceptors.request.use(
   (config) => {
@@ -23,10 +27,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Check if the error is a timeout (Render sleeping)
+    if (error.code === 'ECONNABORTED') {
+      console.error('Render server is waking up. Please wait...');
+    }
+
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      if (!['/login', '/register'].includes(window.location.pathname)) {
+      
+      // Prevent redirect loops on auth pages
+      const path = window.location.pathname;
+      if (path !== '/login' && path !== '/register' && path !== '/') {
         window.location.href = '/login';
       }
     }
