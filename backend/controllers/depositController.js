@@ -1,123 +1,64 @@
-// backend/controllers/depositController.js
 import Deposit from '../models/Deposit.js';
-import { confirmDeposit } from '../services/confirmDeposit.js';
 import { getOrCreateBtcDepositAddress } from '../services/addressService.js';
 import { ApiError } from '../middleware/errorMiddleware.js';
-import axios from 'axios'; // <-- for BTC → EUR conversion
+import axios from 'axios';
 
 /**
  * @desc    Initializes a new deposit record
- * @access  Private
+ * @access  Private (Authenticated)
  */
 export async function createDeposit(req, res, next) {
   try {
-    const { amount, method, currency, address, txHash } = req.body;
+    const { amount, currency, txHash } = req.body;
     const userId = req.user._id;
 
-    if (!amount || amount <= 0) {
+    // 1. Validation: Ensure positive numeric amount
+    if (!amount || Number(amount) <= 0) {
       throw new ApiError(400, 'A valid positive amount is required');
     }
 
-    if (!address || !currency) {
-      throw new ApiError(400, 'Currency and destination address are required');
+    // 2. Security: System assigns deposit address
+    const systemAddress = await getOrCreateBtcDepositAddress(userId);
+    if (!systemAddress) {
+      throw new ApiError(500, 'Internal Node Error: Could not derive deposit address');
     }
 
-    // Check for duplicate txHash
+    // 3. Oracle Price Sync
+    // Fetch BTC->EUR rate; fallback if CoinGecko unavailable
+    let amountEUR = 0;
+    try {
+      const priceRes = await axios.get('https://api.coingecko.com', { timeout: 5000 });
+      const currentBtcRate = priceRes.data.bitcoin.eur;
+      amountEUR = Number(amount) * currentBtcRate;
+    } catch (e) {
+      console.warn("Oracle Timeout: Using Feb 2026 fallback rate (€55,415)");
+      amountEUR = Number(amount) * 55415.40;
+    }
+
+    // 4. Duplicate TX Hash check
     if (txHash) {
       const existing = await Deposit.findOne({ txHash }).lean();
-      if (existing) throw new ApiError(400, 'Transaction hash already submitted');
+      if (existing) throw new ApiError(400, 'This transaction hash has already been logged');
     }
 
-    // 1️⃣ Convert BTC to EUR if needed
-    let amountEUR = null;
-    if (currency.toUpperCase() === 'BTC') {
-      const priceRes = await axios.get(
-        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur'
-      );
-      amountEUR = amount * priceRes.data.bitcoin.eur;
-    }
-
-    // 2️⃣ Create deposit
+    // 5. Create deposit record
     const deposit = await Deposit.create({
       user: userId,
-      currency: currency.toUpperCase(),
-      amount,
-      amountEUR,                 // store EUR value
-      address,
+      currency: currency?.toUpperCase() || 'BTC',
+      amount: Number(amount),
+      amountEUR: Number(amountEUR.toFixed(2)),
+      address: systemAddress,
       status: 'pending',
-      txHash,
-      method: method || 'crypto',
+      txHash: txHash || `INTERNAL_ID_${Date.now()}`,
+      method: 'crypto_gateway_v8',
     });
 
     res.status(201).json({
       success: true,
-      message: 'Deposit intent recorded successfully',
+      message: 'Deposit intent synchronized with network',
       deposit
     });
   } catch (err) {
-    next(err);
+    next(err); // Send error to centralized middleware
   }
 }
-
-/**
- * @desc    Fetch deposit history for the authenticated user
- */
-export async function getUserDeposits(req, res, next) {
-  try {
-    const deposits = await Deposit.find({ user: req.user._id })
-      .sort({ createdAt: -1 })
-      .lean(); // faster read
-
-    res.json({ success: true, deposits });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/**
- * @desc    Admin only: Fetch all deposits across the system
- */
-export async function getAllDeposits(req, res, next) {
-  try {
-    const deposits = await Deposit.find()
-      .populate('user', 'fullName email')
-      .sort({ createdAt: -1 })
-      .lean();
-
-    res.json({ success: true, count: deposits.length, deposits });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/**
- * @desc    Admin only: Manually trigger the confirmation service
- */
-export async function manualConfirmDeposit(req, res, next) {
-  try {
-    const { depositId } = req.params;
-    await confirmDeposit(depositId); // handles wallet update
-
-    res.json({ success: true, message: 'Deposit confirmed and balance updated' });
-  } catch (err) {
-    next(err);
-  }
-}
-
-/**
- * @desc    Get or derive a BTC SegWit address
- */
-export async function getOrCreateBtcDepositAddressController(req, res, next) {
-  try {
-    const userId = req.user._id;
-    const fresh = req.query.fresh === 'true';
-    const address = await getOrCreateBtcDepositAddress(userId, fresh);
-
-    res.json({ success: true, address });
-  } catch (err) {
-    next(err);
-  }
-}
-
-// Alias for routing consistency
-export const getDepositHistory = getUserDeposits;

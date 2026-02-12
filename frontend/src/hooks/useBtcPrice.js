@@ -1,30 +1,53 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-export const useBtcPrice = (updateInterval = 300000) => {  // Default: 5 mins to avoid rate limits
+export const useBtcPrice = (updateInterval = 60000) => {
   const [price, setPrice] = useState(null);
+  const [rawPrice, setRawPrice] = useState(102345); // fallback baseline
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchPrice = async () => {
     try {
-      // Don't set loading to true on background refreshes to avoid UI flickering
       const response = await axios.get(
-        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd'
+        'https://api.coingecko.com/api/v3/simple/price',
+        {
+          params: {
+            ids: 'bitcoin',
+            vs_currencies: 'eur'
+          }
+        }
       );
-      
-      const btcUsd = response.data.bitcoin.usd;
-      setPrice(btcUsd.toLocaleString('en-US', { style: 'currency', currency: 'USD' }));
+
+      const btcEur = response.data.bitcoin.eur;
+
+      setRawPrice(btcEur);
+      setPrice(
+        btcEur.toLocaleString('en-IE', {
+          style: 'currency',
+          currency: 'EUR',
+          maximumFractionDigits: 0
+        })
+      );
+
       setError(null);
     } catch (err) {
-      console.warn('BTC Fetch failed. Using Feb 2026 fallback.');
-      
-      // Fallback price for Feb 2, 2026
-      const fallback = 77494;
-      setPrice(fallback.toLocaleString('en-US', { style: 'currency', currency: 'USD' }));
-      
-      // Only set error if we have no price at all
-      if (!price) setError('Market data delayed');
+      console.warn('CoinGecko fetch failed. Using fallback price.');
+
+      const fallback = 102450;
+
+      setRawPrice(fallback);
+      setPrice(
+        fallback.toLocaleString('en-IE', {
+          style: 'currency',
+          currency: 'EUR',
+          maximumFractionDigits: 0
+        })
+      );
+
+      if (!price) {
+        setError('Live feed reconnecting...');
+      }
     } finally {
       setLoading(false);
     }
@@ -32,11 +55,9 @@ export const useBtcPrice = (updateInterval = 300000) => {  // Default: 5 mins to
 
   useEffect(() => {
     fetchPrice();
-
     const intervalId = setInterval(fetchPrice, updateInterval);
     return () => clearInterval(intervalId);
   }, [updateInterval]);
 
-  return { price, loading, error };
+  return { price, rawPrice, loading, error };
 };
-

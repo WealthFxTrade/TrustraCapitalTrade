@@ -5,52 +5,49 @@ import { ApiError } from '../middleware/errorMiddleware.js';
 /**
  * Get or create BTC deposit address for a user using XPUB derivation
  * @param {string} userId
- * @param {boolean} fresh - If true, derives the next available address in the sequence
+ * @param {boolean} fresh - If true, increments index to generate a NEW address
  */
 export async function getOrCreateBtcDepositAddress(userId, fresh = false) {
-  // 1. Fetch user
-  const user = await User.findById(userId);
-  if (!user) throw new ApiError(404, 'User not found');
-
   const xpub = process.env.BITCOIN_XPUB;
+  
   if (!xpub) {
-    throw new ApiError(500, 'Server configuration error: BITCOIN_XPUB missing');
+    throw new ApiError(500, 'Secure Vault Error: BITCOIN_XPUB not configured');
   }
 
-  // 2. Return existing address if available and no fresh address is requested
+  // 1. Fetch user data
+  const user = await User.findById(userId).select('btcAddress btcIndex').lean();
+  if (!user) throw new ApiError(404, 'User not found in Trustra database');
+
+  // 2. Return existing if not asking for a fresh one
   if (user.btcAddress && !fresh) {
     return user.btcAddress;
   }
 
   try {
-    /**
-     * 3. Address Derivation Logic
-     * If 'fresh' is true, we increment the global index for this user.
-     * This ensures the user gets a unique address for every new deposit request,
-     * which is standard for privacy in 2026.
-     */
-    const nextIndex = fresh ? (user.btcIndex + 1) : user.btcIndex;
-    
-    // deriveAddressFromXpub handles the cryptographic path (m/0/index)
-    const newAddress = deriveAddressFromXpub(xpub, nextIndex);
-
-    // 4. Update User Model
-    // We use findByIdAndUpdate to avoid potential version conflicts (optimistic locking)
+    // 3. ATOMIC UPDATE: Increment index safely to prevent race conditions
+    // If 'fresh' is true, we move to the next index in the HD wallet path
     const updatedUser = await User.findByIdAndUpdate(
       userId,
-      {
-        $set: { 
-          btcAddress: newAddress,
-          btcIndex: nextIndex 
-        }
-      },
-      { new: true, runValidators: true }
-    );
+      { $inc: { btcIndex: fresh ? 1 : 0 } }, // Increment only if fresh requested
+      { new: true, upsert: true }
+    ).select('btcIndex');
 
-    return updatedUser.btcAddress;
+    /**
+     * 4. Derivation Logic (m/0/index)
+     * Standard SegWit (P2WPKH) derivation for 2026.
+     * Ensure your bitcoinUtils.js uses the 'mainnet' network constant.
+     */
+    const newAddress = deriveAddressFromXpub(xpub, updatedUser.btcIndex);
+
+    // 5. Save the generated address back to the user
+    await User.findByIdAndUpdate(userId, { 
+      $set: { btcAddress: newAddress } 
+    });
+
+    return newAddress;
   } catch (err) {
-    console.error(`[ADDRESS_SERVICE_ERROR] User: ${userId}`, err.message);
-    throw new ApiError(500, 'Failed to derive secure Bitcoin address');
+    console.error(`[CRITICAL_ADDRESS_ERROR] ${userId}:`, err.message);
+    throw new ApiError(500, 'Cryptographic Derivation Failed: Check XPUB format');
   }
 }
 

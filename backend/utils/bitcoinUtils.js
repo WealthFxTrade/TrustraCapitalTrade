@@ -5,19 +5,19 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// ✅ Correct ESM Initialization for BIP32
+// Initialize BIP32 with ECC
 const bip32 = BIP32Factory(ecc);
 const NETWORK = bitcoin.networks.bitcoin;
 const BTC_XPUB = process.env.BITCOIN_XPUB;
 
+if (!BTC_XPUB) throw new Error('BITCOIN_XPUB not set in environment variables');
+
 /**
- * Derive Native Segwit (bc1...) address from XPUB and index
- * Logic: m/0/index (Standard Receive Chain)
+ * Derive Native SegWit (bech32, bc1...) address from XPUB and index
+ * Path: m/0/index (external chain)
  */
-export const deriveBtcAddress = (index) => {
-  if (!BTC_XPUB) throw new Error('BITCOIN_XPUB not set in env');
-  const node = bip32.fromBase58(BTC_XPUB, NETWORK);
-  // Standard derivation: external chain (0), then index
+export const deriveAddressFromXpub = (xpub, index) => {
+  const node = bip32.fromBase58(xpub, NETWORK);
   const child = node.derive(0).derive(index);
   const { address } = bitcoin.payments.p2wpkh({
     pubkey: child.publicKey,
@@ -26,18 +26,18 @@ export const deriveBtcAddress = (index) => {
   return address;
 };
 
+// ✅ Alias for backward compatibility
+export const deriveBtcAddress = deriveAddressFromXpub;
+
 /**
- * Fetch BTC balance from Blockchain API
+ * Get BTC balance from Blockchain.info API
  */
 export const getBtcBalance = async (address) => {
   try {
-    // FIX: Added /rawaddr/ endpoint and correct interpolation
-    const response = await fetch(`https://blockchain.info{address}`);
+    const response = await fetch(`https://blockchain.info/rawaddr/${address}?cors=true`);
     if (!response.ok) throw new Error(`API Error: ${response.status}`);
     const data = await response.json();
-    
-    // final_balance is in Satoshis. 1 BTC = 100,000,000 Satoshis
-    return data.final_balance / 100000000;
+    return (data.final_balance / 1e8); // Convert Satoshis to BTC
   } catch (error) {
     console.error(`[BTC Utils] Balance error for ${address}:`, error.message);
     return 0;
@@ -45,25 +45,22 @@ export const getBtcBalance = async (address) => {
 };
 
 /**
- * Fetch Confirmations for a transaction
+ * Get confirmations of a BTC transaction
  */
 export const getBtcTxConfirmations = async (txid) => {
   try {
-    // FIX: Added /rawtx/ endpoint
-    const response = await fetch(`https://blockchain.info{txid}`);
+    const response = await fetch(`https://blockchain.info/rawtx/${txid}?cors=true`);
     if (!response.ok) return 0;
     const data = await response.json();
-    
     if (!data.block_height) return 0; // Unconfirmed
 
-    // Get latest block height to calculate confirmations
-    const latestRes = await fetch('https://blockchain.info');
+    const latestRes = await fetch('https://blockchain.info/q/getblockcount?cors=true');
+    if (!latestRes.ok) return 0;
     const latestHeight = await latestRes.text();
-    
+
     return parseInt(latestHeight) - data.block_height + 1;
   } catch (error) {
-    console.error(`[BTC Utils] TX error:`, error.message);
+    console.error(`[BTC Utils] TX error for ${txid}:`, error.message);
     return 0;
   }
 };
-

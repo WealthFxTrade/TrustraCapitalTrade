@@ -16,41 +16,41 @@ import adminRoutes from './routes/adminRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
 import withdrawalRoutes from './routes/withdrawalRoutes.js';
 import investmentRoutes from './routes/investmentRoutes.js';
-import reviewRoutes from './routes/reviews.js'; // ✅ FIXED: Added missing import
-import bitcoinRoutes from './routes/bitcoin.js'; // ✅ ADDED: From your file list
+import reviewRoutes from './routes/reviews.js';
+import bitcoinRoutes from './routes/bitcoin.js';
 
-// Import cron job
+// Import background workers
+import './workers/depositScanner.js'; // Ensure this matches your folder name
 import './cron/profitJob.js';
 
 const app = express();
 
 // ───────────── SECURITY MIDDLEWARE ─────────────
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        connectSrc: [
-          "'self'",
-          "https://trustracapitaltrade-backend.onrender.com",
-          "https://trustra-capital-trade.vercel.app",
-          "wss://trustracapitaltrade-backend.onrender.com",
-          "https://api.coingecko.com"
-        ],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "https:"]
-      }
-    },
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-  })
-);
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: [
+        "'self'",
+        "https://trustracapitaltrade-backend.onrender.com",
+        "https://trustra-capital-trade.vercel.app",
+        "https://api.coingecko.com",
+        "https://eth.drpc.org" // Added your RPC for frontend checks
+      ],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"]
+    }
+  },
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
-// ───────────── CORS ─────────────
+// ───────────── CORS CONFIGURATION ─────────────
 app.use(cors({
   origin: [
     'https://trustra-capital-trade.vercel.app',
-    'http://localhost:5173'
+    'http://localhost:5173',
+    'https://trustracapitaltrade-backend.onrender.com'
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -63,35 +63,37 @@ app.options('*', cors());
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
-  message: { success: false, message: 'Too many requests, please try again later.' }
+  message: { success: false, message: 'Node Traffic High: Try again in 15 mins.' }
 });
 app.use('/api/', limiter);
 
 // ───────────── GENERAL MIDDLEWARE ─────────────
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '5mb' })); // Reduced to 5mb for better performance
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
 // ───────────── HEALTH CHECK ─────────────
 app.get('/', (req, res) => res.json({
   success: true,
-  message: 'Trustra Capital Trade API – Secure Gateway Active (2026)',
+  node: 'Trustra_Secure_Gateway_v8.4.1',
+  status: 'Online',
   timestamp: new Date().toISOString()
 }));
 
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
-
-// ───────────── ROUTES ─────────────
+// ───────────── ROUTES MAPPING ─────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
-app.use('/api/plans', planRoutes);       // If frontend calls /api/plan, change this to 'plan'
-app.use('/api/reviews', reviewRoutes);   // ✅ FIXED: Registered reviews route
+app.use('/api/plans', planRoutes);
+app.use('/api/reviews', reviewRoutes);
 app.use('/api/market', marketRoutes);
-app.use('/api/bitcoin', bitcoinRoutes); // ✅ ADDED: Linked the bitcoin logic
+app.use('/api/bitcoin', bitcoinRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/wallet', walletRoutes);
-app.use('/api/withdrawals', withdrawalRoutes);
+
+// ✅ ALIGNED: Changed to match frontend '/withdraw/request'
+app.use('/api/withdraw', withdrawalRoutes); 
+
 app.use('/api/admin', adminRoutes);
 app.use('/api/investments', investmentRoutes);
 
