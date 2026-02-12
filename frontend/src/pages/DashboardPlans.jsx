@@ -1,153 +1,181 @@
-import React from 'react';
+// src/pages/DashboardPlans.jsx
+import React, { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { 
-  TrendingUp, LayoutDashboard, History, ShieldCheck, 
-  Zap, LogOut, Star, Award, Diamond, Crown, CheckCircle2 
-} from 'lucide-react';
+import { TrendingUp, LayoutDashboard, History, ShieldCheck, LogOut } from 'lucide-react';
 
-const plans = [
-  {
-    name: 'Starter',
-    min: 100,
-    max: 999,
-    roiDaily: 0.8,
-    duration: 30,
-    icon: <Zap size={24} className="text-cyan-400" />,
-    color: 'border-cyan-500/30 bg-cyan-500/5',
-  },
-  {
-    name: 'Silver',
-    min: 1000,
-    max: 4999,
-    roiDaily: 1.2,
-    duration: 45,
-    icon: <Star size={24} className="text-blue-400" />,
-    color: 'border-blue-500/30 bg-blue-500/5',
-  },
-  {
-    name: 'Gold',
-    min: 5000,
-    max: 19999,
-    roiDaily: 1.8,
-    duration: 60,
-    icon: <Award size={24} className="text-purple-400" />,
-    color: 'border-purple-500/30 bg-purple-500/5',
-  },
-  {
-    name: 'Platinum',
-    min: 20000,
-    max: 99999,
-    roiDaily: 2.5,
-    duration: 90,
-    icon: <Crown size={24} className="text-amber-400" />,
-    color: 'border-amber-500/30 bg-amber-500/5',
-  },
-  {
-    name: 'Diamond',
-    min: 100000,
-    max: Infinity,
-    roiDaily: 3.5,
-    duration: 120,
-    icon: <Diamond size={24} className="text-rose-400" />,
-    color: 'border-rose-500/30 bg-rose-500/5',
-  },
-];
+// Custom components
+import PlanCard from './Dashboard/PlanCard';
+import InvestModal from './Dashboard/InvestModal';
+
+// Externalized plan data
+import { plans } from '../data/plans';
 
 export default function DashboardPlans({ logout }) {
   const navigate = useNavigate();
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [investAmount, setInvestAmount] = useState('');
 
-  const handleInvest = (planName) => {
-    // Navigate to a payment confirmation or investment execution page
-    navigate(`/invest/confirm?plan=${planName}`);
+  // Calculate total potential (exclude Infinity)
+  const totalPotential = useMemo(
+    () =>
+      plans.reduce(
+        (sum, p) => sum + (p.max === Infinity ? p.min * 2 : p.max),
+        0
+      ),
+    []
+  );
+
+  const handleInvestClick = (plan) => {
+    setSelectedPlan(plan);
+    setInvestAmount(plan.min); // auto-fill minimum amount
+  };
+
+  const confirmInvest = () => {
+    const amount = parseFloat(investAmount);
+
+    if (
+      amount < selectedPlan.min ||
+      (selectedPlan.max !== Infinity && amount > selectedPlan.max)
+    ) {
+      alert(
+        `Invalid amount. Enter between €${selectedPlan.min.toLocaleString()} and ${
+          selectedPlan.max === Infinity ? 'Unlimited' : `€${selectedPlan.max.toLocaleString()}`
+        }`
+      );
+      return;
+    }
+
+    navigate('/invest/confirm', {
+      state: {
+        planId: selectedPlan.id,
+        name: selectedPlan.name,
+        amount,
+        roiDaily: selectedPlan.roiDaily,
+        duration: selectedPlan.duration,
+        timestamp: Date.now(),
+      },
+    });
+
+    setSelectedPlan(null);
   };
 
   return (
-    <div className="flex min-h-screen bg-[#0a0d14] text-white font-sans">
-      
-      {/* SIDEBAR (Matches Dashboard) */}
-      <aside className="w-64 bg-[#0f121d] border-r border-gray-800 hidden lg:flex flex-col sticky top-0 h-screen">
-        <div className="p-6 border-b border-gray-800 flex items-center gap-2">
-          <TrendingUp className="h-6 w-6 text-indigo-500" />
-          <span className="font-bold text-lg tracking-tight">TrustraCapital</span>
+    <div className="flex min-h-screen bg-[#0a0d14] text-white font-sans selection:bg-indigo-500">
+      {/* Sidebar */}
+      <aside className="w-64 bg-[#0f121d] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen shadow-2xl">
+        <div className="p-6 border-b border-white/5 flex items-center gap-2">
+          <div className="bg-indigo-600 p-1.5 rounded-lg shadow-lg shadow-indigo-600/20">
+            <TrendingUp className="h-5 w-5 text-white" />
+          </div>
+          <span className="font-black text-lg tracking-tight uppercase italic">Trustra</span>
         </div>
-        <nav className="flex-1 p-4 space-y-1 text-sm text-gray-400">
-          <Link to="/dashboard" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] font-bold tracking-widest">
+
+        <nav className="flex-1 p-4 space-y-2">
+          <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest px-3 mb-2">
+            Main Menu
+          </p>
+          <Link
+            to="/dashboard"
+            className="flex items-center gap-3 p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition text-[11px] font-black tracking-widest"
+          >
             <LayoutDashboard size={18} /> DASHBOARD
           </Link>
-          <div className="pt-6 pb-2 text-[10px] uppercase tracking-widest text-gray-600 px-3 font-bold">Investments</div>
-          <Link to="/plans" className="flex items-center gap-3 bg-indigo-600/10 text-indigo-400 p-3 rounded-lg uppercase text-[11px] font-bold tracking-widest">
-            <ShieldCheck size={18} /> ALL SCHEMA
+
+          <div className="pt-6 pb-2 text-[10px] uppercase tracking-widest text-gray-600 px-3 font-black">
+            Investments
+          </div>
+          <Link
+            to="/plans"
+            className="flex items-center gap-3 bg-indigo-600/10 text-indigo-400 p-3 rounded-xl uppercase text-[11px] font-black tracking-widest border border-indigo-600/20 shadow-inner"
+          >
+            <ShieldCheck size={18} /> ALL SCHEMAS
           </Link>
-          <Link to="/logs" className="flex items-center gap-3 p-3 hover:bg-gray-800 rounded-lg transition uppercase text-[11px] font-bold tracking-widest">
+          <Link
+            to="/logs"
+            className="flex items-center gap-3 p-3 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl transition text-[11px] font-black tracking-widest"
+          >
             <History size={18} /> SCHEMA LOGS
           </Link>
         </nav>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 border-b border-gray-800 bg-[#0f121d]/80 flex items-center justify-end px-8">
-          <button onClick={logout} className="text-gray-400 hover:text-red-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <header className="h-16 border-b border-white/5 bg-[#0f121d]/80 backdrop-blur-xl sticky top-0 z-30 flex items-center justify-end px-8">
+          <button
+            onClick={logout}
+            className="text-gray-500 hover:text-red-400 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 transition-colors"
+          >
             Logout <LogOut size={16} />
           </button>
         </header>
 
-        <main className="p-8 max-w-7xl w-full mx-auto space-y-8">
+        <main className="p-8 max-w-7xl w-full mx-auto space-y-10">
+          {/* Page Header */}
           <div>
-            <h1 className="text-2xl font-bold">Investment Schema</h1>
-            <p className="text-gray-500 text-sm">Choose a TrustraCapitalTrade plan to grow your wealth.</p>
+            <h1 className="text-3xl font-black tracking-tighter">Investment Schemas</h1>
+            <p className="text-gray-500 text-sm mt-1 font-medium italic">
+              Execute smart-contract based growth cycles on verified nodes.
+            </p>
           </div>
 
-          {/* PLANS GRID */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {plans.map((plan) => (
-              <div 
-                key={plan.name} 
-                className={`border ${plan.color} rounded-3xl p-8 flex flex-col transition-all hover:translate-y-[-5px]`}
-              >
-                <div className="flex justify-between items-start mb-6">
-                  <div className="p-3 bg-white/5 rounded-2xl">
-                    {plan.icon}
-                  </div>
-                  <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase tracking-widest">
-                    {plan.duration} Days
-                  </span>
-                </div>
-
-                <h3 className="text-2xl font-bold mb-1">{plan.name}</h3>
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-black text-white">{plan.roiDaily}%</span>
-                  <span className="text-gray-500 font-bold text-xs uppercase">Daily ROI</span>
-                </div>
-
-                <div className="space-y-4 mb-8 flex-1">
-                  <div className="flex justify-between text-sm py-2 border-b border-white/5">
-                    <span className="text-gray-500 font-medium">Minimum</span>
-                    <span className="font-bold">€{plan.min.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm py-2 border-b border-white/5">
-                    <span className="text-gray-500 font-medium">Maximum</span>
-                    <span className="font-bold">
-                      {plan.max === Infinity ? 'No Limit' : `€${plan.max.toLocaleString()}`}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] text-green-400 font-black uppercase tracking-widest">
-                    <CheckCircle2 size={14} /> Capital Back Included
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => handleInvest(plan.name)}
-                  className="w-full bg-white text-black hover:bg-gray-200 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition"
-                >
-                  Invest In {plan.name}
-                </button>
+          {/* Stats Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-[#0f121d] border border-white/5 p-8 rounded-[2rem] flex justify-between items-center shadow-2xl relative overflow-hidden group">
+              <div className="relative z-10">
+                <h3 className="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em] mb-1">
+                  Ecosystem Potential
+                </h3>
+                <p className="text-white font-black text-3xl tracking-tighter">
+                  €{totalPotential.toLocaleString()}
+                </p>
               </div>
+              <div className="bg-emerald-500/10 p-4 rounded-2xl text-emerald-400 group-hover:scale-110 transition-transform duration-500">
+                <TrendingUp size={28} />
+              </div>
+              <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-indigo-600/10 rounded-full blur-[80px]" />
+            </div>
+
+            <div className="bg-[#0f121d] border border-white/5 p-8 rounded-[2rem] flex justify-between items-center shadow-2xl">
+              <div>
+                <h3 className="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em] mb-1">
+                  Network Status
+                </h3>
+                <p className="text-white font-black text-3xl tracking-tighter">
+                  Secure <span className="text-indigo-500 animate-pulse">●</span>
+                </p>
+              </div>
+              <ShieldCheck size={28} className="text-indigo-500" />
+            </div>
+          </div>
+
+          {/* Plans Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 pb-20">
+            {plans.map((plan) => (
+              <PlanCard
+                key={plan.id}
+                name={plan.name}
+                range={`€${plan.min.toLocaleString()} - ${plan.max === Infinity ? '∞' : `€${plan.max.toLocaleString()}`}`}
+                yieldTarget={`${plan.roiDaily}%`}
+                color={plan.color || 'blue'}
+                link="#"
+                onInvest={() => handleInvestClick(plan)}
+              />
             ))}
           </div>
         </main>
       </div>
+
+      {/* Invest Modal */}
+      {selectedPlan && (
+        <InvestModal
+          plan={selectedPlan}
+          amount={investAmount}
+          setAmount={setInvestAmount}
+          onClose={() => setSelectedPlan(null)}
+          onConfirm={confirmInvest}
+        />
+      )}
     </div>
   );
 }
-
