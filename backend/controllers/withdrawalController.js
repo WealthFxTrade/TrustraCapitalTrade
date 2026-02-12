@@ -4,45 +4,45 @@ import User from '../models/User.js';
 
 /**
  * Trustra Capital Trade - Withdrawal Controller (Rio Series 2026)
- * Handles secure fund deduction and admin review queuing.
+ * Upgraded to support Profit vs. Main wallet selection.
  */
 
-// @desc    Request a new withdrawal
-// @route   POST /api/withdrawals
-// @access  Private
 export const requestWithdrawal = async (req, res) => {
   const session = await mongoose.startSession();
-  
+
   try {
     session.startTransaction();
 
-    const { amount, asset, address } = req.body;
+    const { amount, asset, address, walletType } = req.body; // walletType: 'main' or 'profit'
     const userId = req.user._id;
 
-    // 1. Validation
-    if (!amount || amount <= 0) throw new Error('Invalid withdrawal amount');
-    if (!['BTC', 'ETH', 'USDT'].includes(asset)) throw new Error('Unsupported asset');
+    // 1. Validation Logic
+    if (!amount || Number(amount) < 50) throw new Error('Minimum withdrawal is €50.00');
+    if (!['BTC', 'ETH', 'USDT', 'EUR'].includes(asset)) throw new Error('Unsupported asset gateway');
+    if (!address || address.length < 20) throw new Error('Invalid destination address');
 
     const user = await User.findById(userId).session(session);
     if (!user) throw new Error('User Node not found');
 
-    const currentBalance = user.balances.get(asset) || 0;
+    // ✅ FIX: Determine which balance key to check (EUR vs EUR_PROFIT)
+    const balanceKey = (walletType === 'profit') ? 'EUR_PROFIT' : 'EUR';
+    const currentBalance = user.balances.get(balanceKey) || 0;
 
-    // 2. Anti-Fraud: Check for sufficient funds
-    if (currentBalance < amount) {
-      throw new Error(`Insufficient ${asset} balance. Required: ${amount}, Available: ${currentBalance}`);
+    // 2. Anti-Fraud: Liquidity Check
+    if (currentBalance < Number(amount)) {
+      throw new Error(`Insufficient funds in ${walletType} wallet. Available: €${currentBalance}`);
     }
 
-    // 3. Atomic Deduction: Subtract from balance immediately
-    user.balances.set(asset, currentBalance - amount);
-    
-    // 4. Update Ledger: Mark as pending withdrawal
+    // 3. Atomic Deduction
+    user.balances.set(balanceKey, currentBalance - Number(amount));
+
+    // 4. Update Ledger (2026 Audit Format)
     user.ledger.push({
-      amount: -amount, // Negative to show deduction
-      currency: asset,
+      amount: -Number(amount),
+      currency: 'EUR',
       type: 'withdrawal',
       status: 'pending',
-      description: `Withdrawal request to ${address.slice(0, 8)}...`,
+      description: `Withdrawal from ${walletType} to ${address.slice(0, 8)}...`,
       createdAt: new Date()
     });
 
@@ -50,14 +50,14 @@ export const requestWithdrawal = async (req, res) => {
     user.markModified('ledger');
     await user.save({ session });
 
-    // 5. Create Withdrawal Record
+    // 5. Create Detailed Withdrawal Record
     const withdrawal = await Withdrawal.create([{
       user: userId,
-      asset,
+      asset: asset, // Gateway used (e.g. BTC)
+      walletSource: walletType, // Source (e.g. profit)
       address,
-      amount,
-      status: 'pending',
-      fee: 0 // Logic for fees can be added here
+      amount: Number(amount),
+      status: 'pending'
     }], { session });
 
     await session.commitTransaction();
@@ -77,9 +77,6 @@ export const requestWithdrawal = async (req, res) => {
   }
 };
 
-// @desc    Get user withdrawal history
-// @route   GET /api/withdrawals/my
-// @access  Private
 export const getUserWithdrawals = async (req, res) => {
   try {
     const withdrawals = await Withdrawal.find({ user: req.user._id })
@@ -91,8 +88,6 @@ export const getUserWithdrawals = async (req, res) => {
   }
 };
 
-// @desc    Admin: Approve or Reject Withdrawal
-// @route   PATCH /api/withdrawals/:id/status (Admin Only)
 export const adminUpdateWithdrawal = async (req, res) => {
   try {
     const { id } = req.params;
@@ -100,21 +95,22 @@ export const adminUpdateWithdrawal = async (req, res) => {
 
     const withdrawal = await Withdrawal.findById(id);
     if (!withdrawal) return res.status(404).json({ success: false, message: 'Record not found' });
-    
+
     if (withdrawal.status !== 'pending') {
       return res.status(400).json({ success: false, message: 'Request already processed' });
     }
 
     if (status === 'rejected') {
-      // Revert funds to user balance
       const user = await User.findById(withdrawal.user);
-      const current = user.balances.get(withdrawal.asset) || 0;
-      user.balances.set(withdrawal.asset, current + withdrawal.amount);
-      
+      // ✅ FIX: Refund specifically to the source wallet it came from
+      const balanceKey = (withdrawal.walletSource === 'profit') ? 'EUR_PROFIT' : 'EUR';
+      const current = user.balances.get(balanceKey) || 0;
+      user.balances.set(balanceKey, current + withdrawal.amount);
+
       user.ledger.push({
         amount: withdrawal.amount,
-        currency: withdrawal.asset,
-        type: 'deposit', // Re-crediting as a deposit type
+        currency: 'EUR',
+        type: 'deposit',
         status: 'completed',
         description: `Refund: Rejected Withdrawal #${id.slice(-6)}`
       });

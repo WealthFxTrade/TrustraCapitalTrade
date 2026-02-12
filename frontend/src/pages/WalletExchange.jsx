@@ -1,174 +1,118 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  ArrowRightLeft, Wallet, TrendingUp, AlertCircle, 
-  RefreshCw, ShieldCheck, ArrowDown, CheckCircle 
-} from 'lucide-react';
-import api from '../api/apiService';
+import React, { useState } from 'react';
+import { ArrowRightLeft, Wallet, RefreshCw, TrendingUp, ChevronDown, ShieldCheck } from 'lucide-react';
+import api from '../api/apiService'; // Verify if your path is ../api/api or apiService
+import toast from 'react-hot-toast';
 
 export default function WalletExchange() {
-  const [balances, setBalances] = useState({ EUR: 0, totalProfit: 0 });
-  const [fromWallet, setFromWallet] = useState('profit'); // Default: Profit to Main
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState({ type: '', message: '' });
-
-  // Sync balances on mount
-  useEffect(() => {
-    const fetchBalances = async () => {
-      try {
-        const { data } = await api.get('/user/dashboard');
-        if (data.success) {
-          setBalances({
-            EUR: data.stats.mainBalance || 0,
-            totalProfit: data.stats.totalProfit || 0
-          });
-        }
-      } catch (err) {
-        console.error("Balance sync failed");
-      }
-    };
-    fetchBalances();
-  }, []);
-
-  const handleSwapDirection = () => {
-    setFromWallet(prev => prev === 'profit' ? 'main' : 'profit');
-    setAmount('');
-    setStatus({ type: '', message: '' });
-  };
 
   const handleExchange = async (e) => {
     e.preventDefault();
-    setStatus({ type: '', message: '' });
+    if (!amount || amount <= 0) return toast.error("Enter a valid amount");
     
-    const val = Number(amount);
-    const sourceBalance = fromWallet === 'profit' ? balances.totalProfit : balances.EUR;
-
-    if (val <= 0) return setStatus({ type: 'error', message: 'Enter a valid amount' });
-    if (val > sourceBalance) return setStatus({ type: 'error', message: 'Insufficient funds in source wallet' });
-
     setLoading(true);
     try {
-      // Endpoint logic: /api/transactions/reinvest (Profit -> Main) 
-      // or a general /api/transactions/exchange endpoint
-      const endpoint = fromWallet === 'profit' ? '/transactions/reinvest' : '/transactions/exchange';
-      const res = await api.post(endpoint, { amount: val });
-      
-      if (res.data.success) {
-        setStatus({ type: 'success', message: 'Exchange completed successfully' });
-        setAmount('');
-        // Refresh local balances
-        const refresh = await api.get('/user/dashboard');
-        setBalances({ EUR: refresh.data.stats.mainBalance, totalProfit: refresh.data.stats.totalProfit });
-      }
+      // Changed to match your backend reinvest logic
+      await api.post('/transactions/reinvest', { amount: Number(amount) });
+      toast.success("Funds Transferred to Main Wallet");
+      setAmount('');
     } catch (err) {
-      setStatus({ type: 'error', message: err.response?.data?.message || 'Exchange failed' });
+      toast.error(err.response?.data?.message || "Exchange Sync Failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-[#05070a] min-h-screen text-white pt-32 pb-20 px-6">
-      <div className="max-w-xl mx-auto">
+    <div className="min-h-screen bg-[#05070a] text-white p-6 md:p-12 flex items-center justify-center">
+      <div className="w-full max-w-xl bg-[#0f1218] border border-white/5 rounded-[2.5rem] p-8 md:p-12 shadow-2xl relative overflow-hidden">
         
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-black uppercase italic tracking-tighter mb-2">Wallet Exchange</h1>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.3em]">Internal Asset Reallocation • 2026 Audit Standard</p>
-        </div>
+        {/* Background Glow */}
+        <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl" />
+        
+        <header className="relative mb-10 text-center">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-4">
+            <ShieldCheck size={12} className="text-indigo-400" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400">Internal Ledger Sync</span>
+          </div>
+          <h2 className="text-3xl font-black italic uppercase tracking-tighter">
+            Wallet <span className="text-indigo-500">Exchange</span>
+          </h2>
+          <p className="text-gray-500 text-xs font-medium mt-2">Move profits to main liquidity for reinvestment.</p>
+        </header>
 
-        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-2xl shadow-2xl relative overflow-hidden">
-          {/* Decorative Background */}
-          <div className="absolute -right-20 -top-20 w-64 h-64 bg-blue-600/10 rounded-full blur-3xl" />
+        {/* --- EXCHANGE INTERFACE --- */}
+        <div className="space-y-2 relative">
           
-          <form onSubmit={handleExchange} className="space-y-4 relative z-10">
-            
-            {/* FROM WALLET */}
-            <div className="bg-black/40 border border-white/5 p-6 rounded-3xl">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">From</span>
-                <span className="text-[10px] font-bold text-slate-400">
-                  Balance: €{(fromWallet === 'profit' ? balances.totalProfit : balances.EUR).toLocaleString('de-DE')}
-                </span>
+          {/* From Card */}
+          <div className="bg-black/40 border border-white/5 p-6 rounded-[1.5rem] group hover:border-white/10 transition-all">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">From Source</span>
+              <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">Profit Wallet</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <TrendingUp size={24} className="text-emerald-500" />
+                <span className="text-2xl font-black tracking-tight italic">EUR</span>
               </div>
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-2xl ${fromWallet === 'profit' ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                  {fromWallet === 'profit' ? <TrendingUp size={24}/> : <Wallet size={24}/>}
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-black uppercase italic text-sm">{fromWallet === 'profit' ? 'Profit Wallet' : 'Main Wallet'}</h4>
-                  <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">Source Account</p>
-                </div>
+              <div className="text-right">
+                <p className="text-[9px] font-black text-gray-600 uppercase">Available</p>
+                <p className="font-mono font-bold text-gray-300">Balance Syncing...</p>
               </div>
             </div>
+          </div>
 
-            {/* SWAP ICON */}
-            <div className="flex justify-center -my-6 relative z-20">
-              <button 
-                type="button"
-                onClick={handleSwapDirection}
-                className="h-12 w-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-600/40 hover:scale-110 active:rotate-180 transition-all duration-500 border-4 border-[#05070a]"
-              >
-                <ArrowDown size={20} />
-              </button>
+          {/* Center Switch Icon */}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
+            <div className="bg-indigo-600 p-3 rounded-xl border-4 border-[#0f1218] shadow-lg text-white">
+              <ArrowRightLeft size={20} />
             </div>
+          </div>
 
-            {/* TO WALLET */}
-            <div className="bg-black/40 border border-white/5 p-6 rounded-3xl">
-              <div className="flex justify-between items-center mb-4">
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">To</span>
-                <span className="text-[10px] font-bold text-slate-400">
-                  Balance: €{(fromWallet === 'profit' ? balances.EUR : balances.totalProfit).toLocaleString('de-DE')}
-                </span>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-2xl ${fromWallet === 'profit' ? 'bg-blue-500/10 text-blue-400' : 'bg-green-500/10 text-green-400'}`}>
-                  {fromWallet === 'profit' ? <Wallet size={24}/> : <TrendingUp size={24}/>}
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-black uppercase italic text-sm">{fromWallet === 'profit' ? 'Main Wallet' : 'Profit Wallet'}</h4>
-                  <p className="text-[9px] text-slate-500 uppercase font-bold tracking-tighter">Destination Account</p>
-                </div>
-              </div>
+          {/* To Card */}
+          <div className="bg-black/40 border border-white/5 p-6 rounded-[1.5rem] group hover:border-white/10 transition-all pt-8">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">To Destination</span>
+              <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded">Main Wallet</span>
             </div>
-
-            {/* AMOUNT INPUT */}
-            <div className="pt-4">
-              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 px-2">Amount to Exchange (EUR)</label>
-              <div className="relative">
-                <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-blue-500 text-xl">€</span>
-                <input 
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full bg-[#05070a] border border-white/10 rounded-2xl py-5 px-12 text-2xl font-mono font-black focus:border-blue-500 outline-none transition"
-                />
-              </div>
+            <div className="flex items-center gap-3">
+              <Wallet size={24} className="text-indigo-500" />
+              <span className="text-2xl font-black tracking-tight italic">EUR</span>
             </div>
+          </div>
+        </div>
 
-            {status.message && (
-              <div className={`flex items-center gap-3 p-4 rounded-2xl text-[11px] font-bold uppercase tracking-tight border ${
-                status.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-red-500/10 border-red-500/20 text-red-500'
-              }`}>
-                {status.type === 'success' ? <CheckCircle size={16}/> : <AlertCircle size={16}/>}
-                {status.message}
-              </div>
+        {/* --- FORM --- */}
+        <form onSubmit={handleExchange} className="mt-8 space-y-6">
+          <div className="relative">
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              className="w-full bg-black/60 border border-white/5 p-6 rounded-2xl font-mono text-3xl font-black text-white focus:border-indigo-500/50 outline-none transition-all placeholder:text-gray-800"
+            />
+            <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 font-black text-xl italic">€</div>
+          </div>
+
+          <button 
+            disabled={loading} 
+            className="w-full bg-white text-black hover:bg-indigo-500 hover:text-white py-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] transition-all shadow-xl active:scale-95 disabled:opacity-50"
+          >
+            {loading ? (
+              <RefreshCw className="animate-spin mx-auto" />
+            ) : (
+              "Authorize Transfer"
             )}
+          </button>
+        </form>
 
-            <button 
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-2xl font-black text-xs uppercase tracking-[0.2em] transition shadow-2xl shadow-blue-600/30 flex items-center justify-center gap-3 disabled:opacity-50"
-            >
-              {loading ? <RefreshCw className="animate-spin" size={18} /> : <>Confirm Exchange <ArrowRightLeft size={18} /></>}
-            </button>
-
-          </form>
-        </div>
-
-        <div className="mt-8 flex justify-center items-center gap-2 text-slate-600">
-          <ShieldCheck className="w-4 h-4" />
-          <span className="text-[10px] uppercase tracking-[0.3em] font-black">Secure Internal Ledger Protocol</span>
-        </div>
+        <footer className="mt-10 text-center">
+          <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.3em]">
+            Trustra Secure Exchange • 2026 Protocol
+          </p>
+        </footer>
       </div>
     </div>
   );

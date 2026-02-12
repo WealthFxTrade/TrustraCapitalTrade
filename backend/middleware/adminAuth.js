@@ -1,6 +1,5 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import { ApiError } from './errorMiddleware.js'; // Assuming you have this for consistency
 
 /**
  * @desc    Middleware to protect Trustra Administrative routes
@@ -20,10 +19,12 @@ export const adminAuth = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     // 2. Verify JWT
+    // Ensure JWT_SECRET is defined in your .env file
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     // 3. Find User & Validate Admin Status
-    const user = await User.findById(decoded.id).select('-password');
+    // ✅ Note: Using decoded.id or decoded._id based on your login controller
+    const user = await User.findById(decoded.id || decoded._id).select('-password');
 
     if (!user) {
       return res.status(401).json({
@@ -32,7 +33,8 @@ export const adminAuth = async (req, res, next) => {
       });
     }
 
-    if (user.role !== 'admin') {
+    // ✅ Explicit Role Check
+    if (user.role !== 'admin' || user.banned) {
       return res.status(403).json({
         success: false,
         message: 'Access Denied: Trustra Administrative rights required'
@@ -44,10 +46,10 @@ export const adminAuth = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('Admin Auth Error:', error.message);
-    
+
     // Specific handling for expired tokens
-    const message = error.name === 'TokenExpiredError' 
-      ? 'Session expired. Please re-login to Admin Panel.' 
+    const message = error.name === 'TokenExpiredError'
+      ? 'Session expired. Please re-login to Admin Panel.'
       : 'Trustra Security: Invalid or tampered token.';
 
     return res.status(401).json({

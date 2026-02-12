@@ -1,16 +1,22 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { PLAN_DATA } from '../config/plans.js'; // Ensure path is correct
+// ✅ Note: Ensure this file exports an object where keys match your user.plan strings
+import { PLAN_DATA } from '../config/plans.js'; 
 
 const ledgerSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   currency: { type: String, default: 'EUR' },
   type: {
     type: String,
-    enum: ['deposit', 'withdrawal', 'investment', 'roi_profit', 'bonus'],
+    // ✅ ADDED: 'profit' and 'exchange' for the 2026 wallet logic
+    enum: ['deposit', 'withdrawal', 'investment', 'profit', 'roi_profit', 'bonus', 'exchange'],
     required: true
   },
-  status: { type: String, enum: ['pending', 'completed', 'failed', 'cancelled'], default: 'pending' },
+  status: { 
+    type: String, 
+    enum: ['pending', 'completed', 'failed', 'cancelled'], 
+    default: 'completed' 
+  },
   description: { type: String, default: '' },
   createdAt: { type: Date, default: Date.now }
 });
@@ -23,16 +29,26 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
 
   // 📈 RIO INVESTMENT TRACKING
-  plan: { type: String, default: 'none' }, // Store keys like 'rioStarter', 'rioBasic'
+  plan: { type: String, default: 'none' }, 
   isPlanActive: { type: Boolean, default: false },
   investedAmount: { type: Number, default: 0 },
-  dailyRoiRate: { type: Number, default: 0 }, // Automatically synced from PLAN_DATA
+  dailyRoiRate: { type: Number, default: 0 }, 
   lastProfitDate: { type: Date },
+  
+  // ✅ NEW: Track plan duration to auto-stop cron jobs
+  planDaysServed: { type: Number, default: 0 },
+  planDuration: { type: Number, default: 30 },
 
   balances: {
     type: Map,
     of: Number,
-    default: () => new Map([['BTC', 0], ['EUR', 0], ['USDT', 0]])
+    // ✅ FIXED: Added EUR_PROFIT to the default map
+    default: () => new Map([
+      ['BTC', 0], 
+      ['EUR', 0], 
+      ['EUR_PROFIT', 0], // The "Profit Wallet"
+      ['USDT', 0]
+    ])
   },
   btcIndex: { type: Number, default: 0 },
   btcAddress: { type: String },
@@ -51,8 +67,7 @@ const userSchema = new mongoose.Schema({
 });
 
 /**
- * ⚡ AUTO-SYNC PLAN DATA
- * Sets dailyRoiRate based on the selected Rio plan key
+ * ⚡ AUTO-SYNC PLAN DATA & PASSWORD HASHING
  */
 userSchema.pre('save', async function (next) {
   // 1. Handle Password Hashing
@@ -62,14 +77,17 @@ userSchema.pre('save', async function (next) {
   }
 
   // 2. Handle Rio Plan Logic
-  if (this.isModified('plan')) {
+  if (this.isModified('plan') || this.isModified('investedAmount')) {
     const planInfo = PLAN_DATA[this.plan];
     if (planInfo) {
       this.dailyRoiRate = planInfo.dailyROI;
+      this.planDuration = planInfo.duration || 30;
+      // Plan activates only if invested amount meets the minimum
       this.isPlanActive = this.investedAmount >= planInfo.min;
     } else if (this.plan === 'none') {
       this.dailyRoiRate = 0;
       this.isPlanActive = false;
+      this.investedAmount = 0;
     }
   }
 

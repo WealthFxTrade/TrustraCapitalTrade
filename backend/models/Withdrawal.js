@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 /**
  * Trustra Capital Trade - Withdrawal Schema (Rio Series 2026)
- * Multi-asset support with on-chain address validation.
+ * Multi-asset support with on-chain address validation & Wallet Source tracking.
  */
 const withdrawalSchema = new mongoose.Schema(
   {
@@ -14,9 +14,16 @@ const withdrawalSchema = new mongoose.Schema(
     },
     asset: {
       type: String,
-      enum: ['BTC', 'ETH', 'USDT'],
+      enum: ['BTC', 'ETH', 'USDT', 'EUR'], // Added EUR for internal ledger tracking
       required: [true, 'Asset type is required'],
       default: 'BTC'
+    },
+    // ✅ NEW: Tracks if funds came from 'main' or 'profit' for 2026 Audit Integrity
+    walletSource: {
+      type: String,
+      enum: ['main', 'profit'],
+      required: [true, 'Source wallet (main/profit) is required'],
+      default: 'main'
     },
     address: {
       type: String,
@@ -28,7 +35,9 @@ const withdrawalSchema = new mongoose.Schema(
           const btcRegex = /^(1|3|bc1q|bc1p)[a-zA-Z0-9]{25,62}$/;
           // ETH & USDT (ERC-20): 0x followed by 40 hex chars
           const ethRegex = /^0x[a-fA-F0-9]{40}$/;
-          
+          // If asset is EUR (internal), skip regex or return true
+          if (this.asset === 'EUR') return true;
+
           return this.asset === 'BTC' ? btcRegex.test(v) : ethRegex.test(v);
         },
         message: props => `Format error: ${props.value} is not a valid address for the selected network.`
@@ -37,7 +46,7 @@ const withdrawalSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: [true, 'Withdrawal amount is required'],
-      min: [0.00001, 'Minimum node depth not reached (0.00001 min)'],
+      min: [50, 'Minimum withdrawal depth: €50.00'], // Updated to your project minimum
     },
     status: {
       type: String,
@@ -45,25 +54,25 @@ const withdrawalSchema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
-    txHash: { 
-      type: String, 
-      trim: true, 
-      sparse: true, 
-      index: true 
+    txHash: {
+      type: String,
+      trim: true,
+      sparse: true,
+      index: true
     },
-    adminNote: { 
-      type: String, 
-      trim: true, 
-      maxlength: 500 
+    adminNote: {
+      type: String,
+      trim: true,
+      maxlength: 500
     },
-    fee: { 
-      type: Number, 
-      default: 0, 
-      min: 0 
+    fee: {
+      type: Number,
+      default: 0,
+      min: 0
     },
-    netAmount: { 
-      type: Number, 
-      min: 0 
+    netAmount: {
+      type: Number,
+      min: 0
     },
   },
   {
@@ -92,7 +101,7 @@ withdrawalSchema.pre('save', function (next) {
   next();
 });
 
-// Optimized Multi-key Index for fast history lookups
+// Optimized Indexing
 withdrawalSchema.index({ user: 1, createdAt: -1 });
 
 const Withdrawal = mongoose.models.Withdrawal || mongoose.model('Withdrawal', withdrawalSchema);
