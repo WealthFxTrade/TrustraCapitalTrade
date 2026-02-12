@@ -15,10 +15,12 @@ import transactionRoutes from './routes/transactions.js';
 import adminRoutes from './routes/adminRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
 import withdrawalRoutes from './routes/withdrawalRoutes.js';
-import investmentRoutes from './routes/investmentRoutes.js'; // ✅ NEW
+import investmentRoutes from './routes/investmentRoutes.js';
+import reviewRoutes from './routes/reviews.js'; // ✅ FIXED: Added missing import
+import bitcoinRoutes from './routes/bitcoin.js'; // ✅ ADDED: From your file list
 
-// Import cron job (runs automatically)
-import './cron/profitJob.js'; // ✅ NEW
+// Import cron job
+import './cron/profitJob.js';
 
 const app = express();
 
@@ -83,13 +85,15 @@ app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 // ───────────── ROUTES ─────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
-app.use('/api/plans', planRoutes);
+app.use('/api/plans', planRoutes);       // If frontend calls /api/plan, change this to 'plan'
+app.use('/api/reviews', reviewRoutes);   // ✅ FIXED: Registered reviews route
 app.use('/api/market', marketRoutes);
+app.use('/api/bitcoin', bitcoinRoutes); // ✅ ADDED: Linked the bitcoin logic
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/investments', investmentRoutes); // ✅ NEW
+app.use('/api/investments', investmentRoutes);
 
 // ───────────── ERROR HANDLERS ─────────────
 app.use(notFound);
@@ -97,3 +101,4 @@ app.use(errorHandler);
 
 export { app };
 export default app;
+

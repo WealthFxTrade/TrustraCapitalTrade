@@ -1,15 +1,14 @@
-// src/pages/Plans.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-// Using the specialized EUR component for 2026 consistency
-import BtcPriceEUR from '@/components/BtcPriceEUR'; 
+// ✅ FIXED: Changed from @/components/BtcPriceEUR to the actual file path that exists
+import BtcPriceEUR from '../components/BtcPrice.jsx';
 
 const plans = [
   {
     name: 'Rio Starter',
     min: 100,
     max: 999,
-    roiDaily: 0.25, // Adjusted to match your cron job (~7.5% mo)
+    roiDaily: 0.25, 
     duration: 30,
     desc: 'Automated entry-level trading with daily Euro credits.',
     color: 'from-cyan-600 to-cyan-400',
@@ -18,7 +17,7 @@ const plans = [
     name: 'Rio Basic',
     min: 1000,
     max: 4999,
-    roiDaily: 0.35, // ~10.5% Monthly
+    roiDaily: 0.35, 
     duration: 45,
     desc: 'Balanced growth for mid-tier capital allocation.',
     color: 'from-blue-600 to-blue-400',
@@ -27,7 +26,7 @@ const plans = [
     name: 'Rio Standard',
     min: 5000,
     max: 14999,
-    roiDaily: 0.46, // ~14% Monthly
+    roiDaily: 0.46, 
     duration: 60,
     desc: 'Institutional-grade ROI for serious portfolio growth.',
     color: 'from-purple-600 to-purple-400',
@@ -36,7 +35,7 @@ const plans = [
     name: 'Rio Advanced',
     min: 15000,
     max: 49999,
-    roiDaily: 0.60, // ~18% Monthly
+    roiDaily: 0.60, 
     duration: 90,
     desc: 'Premium yields with prioritized 2026 audit security.',
     color: 'from-amber-600 to-amber-400',
@@ -45,7 +44,7 @@ const plans = [
     name: 'Rio Elite',
     min: 50000,
     max: Infinity,
-    roiDaily: 0.75, // ~22.5% Monthly
+    roiDaily: 0.75, 
     duration: 120,
     desc: 'Maximum performance tier for high-net-worth investors.',
     color: 'from-rose-600 to-rose-400',
@@ -65,21 +64,21 @@ export default function Plans() {
         </p>
         <div className="flex flex-col sm:flex-row gap-6 justify-center">
           <Link
-            to="/signup"
-            className="bg-blue-600 hover:bg-blue-500 text-white font-black py-5 px-14 rounded-2xl text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/30 transition transform hover:-translate-y-1 active:scale-95"
+            to="/register"
+            className="bg-blue-600 hover:bg-blue-500 text-white font-black py-5 px-14 rounded-2xl text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/30 transition transform hover:-translate-y-1 active:scale-95 text-center"
           >
             Open Investment Account
           </Link>
           <Link
             to="/login"
-            className="bg-white/5 border border-white/10 text-white hover:bg-white/10 font-black py-5 px-14 rounded-2xl text-xs uppercase tracking-[0.2em] transition"
+            className="bg-white/5 border border-white/10 text-white hover:bg-white/10 font-black py-5 px-14 rounded-2xl text-xs uppercase tracking-[0.2em] transition text-center"
           >
             Access Dashboard
           </Link>
         </div>
       </section>
 
-      {/* BTC Price Section (Standardized to EUR for 2026) */}
+      {/* BTC Price Section */}
       <section className="py-20 px-6 bg-white/[0.02] border-y border-white/5 backdrop-blur-md">
         <div className="max-w-5xl mx-auto text-center">
           <p className="text-cyan-500 font-black text-[10px] uppercase tracking-[0.3em] mb-4">Live Market Feed</p>
@@ -106,14 +105,13 @@ export default function Plans() {
               key={plan.name}
               className={`bg-gradient-to-br ${plan.color} bg-opacity-5 border border-white/10 rounded-[2.5rem] p-8 hover:border-white/30 transition-all duration-500 flex flex-col group relative overflow-hidden`}
             >
-              {/* Decorative background element */}
               <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
-              
+
               <h3 className="text-2xl font-black mb-2 text-white italic tracking-tight">{plan.name}</h3>
               <p className="text-gray-200/60 text-xs font-bold leading-relaxed mb-6 h-12 uppercase tracking-tighter">
                 {plan.desc}
               </p>
-              
+
               <div className="mb-8">
                 <p className="text-5xl font-black text-white tracking-tighter">
                   {plan.roiDaily}%
@@ -139,7 +137,7 @@ export default function Plans() {
               </div>
 
               <Link
-                to="/signup"
+                to="/register"
                 className="mt-auto bg-white text-black font-black py-4 px-8 rounded-2xl text-center text-[10px] uppercase tracking-[0.2em] hover:bg-cyan-400 transition shadow-xl"
               >
                 Invest Now
