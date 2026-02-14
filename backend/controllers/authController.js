@@ -1,134 +1,120 @@
-import crypto from 'crypto';
 import User from '../models/User.js';
-import { sendEmail } from '../utils/sendEmail.js';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs'; // Better for Termux than 'bcrypt'
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * @desc    Request Password Reset Link
- * @route   POST /api/auth/forgot-password
+ * @desc    Generate JWT Token
  */
-export const forgotPassword = async (req, res, next) => {
+const generateToken = (id, isAdmin) => {
+  return jwt.sign(
+    { id, isAdmin }, 
+    process.env.JWT_SECRET || 'rio_2026_secret_key', 
+    { expiresIn: '30d' }
+  );
+};
+
+/**
+ * @desc    Login User & Get Token
+ * @route   POST /api/auth/login
+ */
+export const login = async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const { email, password } = req.body;
 
-    if (!email) {
-      throw new ApiError(400, 'Please provide an email address');
+    // 1. Validation
+    if (!email || !password) {
+      throw new ApiError(400, 'Please provide email and password');
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    // 2. Find User (Include password field which is hidden by default in Schema)
+    const user = await User.findOne({ 
+      email: email.toLowerCase().trim() 
+    }).select('+password');
 
-    const user = await User.findOne({ email: normalizedEmail });
-
-    // 🔒 Silent success to prevent account enumeration
     if (!user) {
-      return res.status(200).json({
-        success: true,
-        message: 'If an account exists, a reset link has been dispatched.'
-      });
+      // 🔒 Generic message to prevent user enumeration
+      throw new ApiError(401, 'Invalid credentials');
     }
 
-    // Generate secure random token
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    // 3. Verify Password using the method in your User model
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      throw new ApiError(401, 'Invalid credentials');
+    }
 
-    // Hash token before storing
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(resetToken)
-      .digest('hex');
-
-    // Store hashed token in schema fields
-    user.resetOtp = hashedToken;
-    user.resetOtpExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
-
+    // 4. Update last login (optional but recommended for Admin Audit)
+    user.lastLogin = Date.now();
     await user.save({ validateBeforeSave: false });
 
-    const frontendUrl =
-      process.env.FRONTEND_URL || 'https://trustracapital.vercel.app';
-
-    const resetUrl = `${frontendUrl}/reset-password/${resetToken}`;
-
-    const htmlMessage = `
-      <div style="font-family: sans-serif; max-width:600px; margin:auto; padding:20px; background:#05070a; color:#ffffff;">
-        <h2 style="color:#3b82f6;">Trustra Capital</h2>
-        <p>Password reset requested.</p>
-        <a href="${resetUrl}" style="background:#2563eb;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;">
-          Reset Password
-        </a>
-        <p style="font-size:12px;color:#94a3b8;margin-top:20px;">
-          This link expires in 15 minutes.
-        </p>
-      </div>
-    `;
-
-    try {
-      await sendEmail({
+    // 5. Send Success Response
+    res.status(200).json({
+      success: true,
+      token: generateToken(user._id, user.isAdmin),
+      user: {
+        id: user._id,
         email: user.email,
-        subject: 'Password Reset Request',
-        message: htmlMessage
-      });
+        isAdmin: user.isAdmin,
+        role: user.role,
+        name: user.name
+      }
+    });
 
-      res.status(200).json({
-        success: true,
-        message: 'Reset link sent to registered email'
-      });
+  } catch (err) {
+    next(err); // Handled by global error middleware
+  }
+};
 
-    } catch (emailError) {
-      // If email fails, remove reset token
-      user.resetOtp = undefined;
-      user.resetOtpExpires = undefined;
-      await user.save({ validateBeforeSave: false });
+/**
+ * @desc    Register New User
+ * @route   POST /api/auth/register
+ */
+export const register = async (req, res, next) => {
+  try {
+    const { name, email, password } = req.body;
 
-      throw new ApiError(500, 'Email delivery failed. Try again later.');
+    // 1. Check if user already exists
+    const userExists = await User.findOne({ email: email.toLowerCase() });
+    if (userExists) {
+      throw new ApiError(400, 'User with this email already exists');
     }
 
+    // 2. Create User (password hashing is handled by pre-save in User.js)
+    const user = await User.create({
+      name,
+      email: email.toLowerCase().trim(),
+      password,
+    });
+
+    if (user) {
+      res.status(201).json({
+        success: true,
+        token: generateToken(user._id, user.isAdmin),
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          isAdmin: user.isAdmin
+        }
+      });
+    }
   } catch (err) {
     next(err);
   }
 };
 
-
 /**
- * @desc    Reset Password using Token
- * @route   PUT /api/auth/reset-password/:token
+ * @desc    Get Current Logged-in User Profile
+ * @route   GET /api/auth/profile
+ * @access  Private
  */
-export const resetPassword = async (req, res, next) => {
+export const getProfile = async (req, res, next) => {
   try {
-    const { token } = req.params;
-    const { password } = req.body;
-
-    if (!password || password.length < 8) {
-      throw new ApiError(400, 'Password must be at least 8 characters');
-    }
-
-    // Hash the token from URL
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-
-    const user = await User.findOne({
-      resetOtp: hashedToken,
-      resetOtpExpires: { $gt: Date.now() }
-    }).select('+password');
-
+    const user = await User.findById(req.user.id);
     if (!user) {
-      throw new ApiError(400, 'Security token is invalid or has expired');
+      throw new ApiError(404, 'User not found');
     }
-
-    // Set new password (hashing handled by pre-save middleware)
-    user.password = password;
-
-    // Clear reset fields
-    user.resetOtp = undefined;
-    user.resetOtpExpires = undefined;
-
-    await user.save();
-
-    res.status(200).json({
-      success: true,
-      message: 'Password successfully updated. Please log in.'
-    });
-
+    res.status(200).json({ success: true, user });
   } catch (err) {
     next(err);
   }

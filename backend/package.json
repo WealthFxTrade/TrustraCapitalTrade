@@ -4,7 +4,7 @@
   "type": "module",
   "main": "server.js",
   "engines": {
-    "node": ">=20.0.0" 
+    "node": ">=20.0.0"
   },
   "scripts": {
     "start": "node server.js",
@@ -43,4 +43,3 @@
     "nodemon": "^3.1.0"
   }
 }
-
