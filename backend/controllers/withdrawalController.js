@@ -7,7 +7,6 @@ import User from '../models/User.js';
  */
 export const requestWithdrawal = async (req, res) => {
   const session = await mongoose.startSession();
-
   try {
     session.startTransaction();
 
@@ -16,6 +15,7 @@ export const requestWithdrawal = async (req, res) => {
 
     // 1️⃣ Validation
     if (!amount || Number(amount) < 50) throw new Error('Minimum withdrawal is €50.00');
+    // Ensure the asset is valid for your gateway
     if (!['BTC', 'ETH', 'USDT', 'EUR'].includes(asset)) throw new Error('Unsupported asset gateway');
     if (!address || address.length < 20) throw new Error('Invalid destination address');
 
@@ -31,7 +31,7 @@ export const requestWithdrawal = async (req, res) => {
       throw new Error(`Insufficient funds in ${walletType} wallet. Available: €${currentBalance.toLocaleString()}`);
     }
 
-    // 4️⃣ Deduct balance atomically
+    // 4️⃣ Deduct balance atomically (Escrow hold)
     user.balances.set(balanceKey, currentBalance - Number(amount));
 
     // 5️⃣ Append to ledger
@@ -44,12 +44,12 @@ export const requestWithdrawal = async (req, res) => {
       createdAt: new Date()
     });
 
-    // Mark modified for Mongoose
     user.markModified('balances');
     user.markModified('ledger');
     await user.save({ session });
 
     // 6️⃣ Create withdrawal record
+    // Note: create() returns an array when used with session
     const [withdrawal] = await Withdrawal.create([{
       user: userId,
       asset,
@@ -68,7 +68,7 @@ export const requestWithdrawal = async (req, res) => {
     });
 
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) await session.abortTransaction();
     console.error(`[WITHDRAWAL_ERROR]: ${error.message}`);
     res.status(400).json({ success: false, message: error.message });
   } finally {
@@ -80,17 +80,23 @@ export const requestWithdrawal = async (req, res) => {
  * Admin withdrawal update (approve, reject, complete)
  */
 export const adminUpdateWithdrawal = async (req, res) => {
+  const session = await mongoose.startSession();
   try {
+    session.startTransaction();
     const { id } = req.params;
     const { status, adminNote, txHash } = req.body;
 
-    const withdrawal = await Withdrawal.findById(id);
-    if (!withdrawal) return res.status(404).json({ success: false, message: 'Record not found' });
-    if (withdrawal.status !== 'pending') return res.status(400).json({ success: false, message: 'Request already processed' });
+    const withdrawal = await Withdrawal.findById(id).session(session);
+    if (!withdrawal) throw new Error('Record not found');
+    
+    // Prevent re-processing
+    if (withdrawal.status !== 'pending') throw new Error('Request already processed');
 
-    // Refund if rejected
+    const user = await User.findById(withdrawal.user).session(session);
+    if (!user) throw new Error('User associated with this withdrawal no longer exists');
+
+    // 1️⃣ Handle Rejection (Refund Logic)
     if (status === 'rejected') {
-      const user = await User.findById(withdrawal.user);
       const balanceKey = withdrawal.walletSource === 'profit' ? 'EUR_PROFIT' : 'EUR';
       const current = user.balances.get(balanceKey) || 0;
 
@@ -105,17 +111,37 @@ export const adminUpdateWithdrawal = async (req, res) => {
 
       user.markModified('balances');
       user.markModified('ledger');
-      await user.save();
+      await user.save({ session });
+    } 
+    
+    // 2️⃣ Handle Completion (Update ledger status if necessary)
+    if (status === 'completed') {
+       // Optional: Update the specific pending ledger entry to 'completed'
+       // This keeps the user's history accurate
+       const ledgerEntry = user.ledger.find(entry => 
+         entry.type === 'withdrawal' && 
+         entry.status === 'pending' && 
+         Math.abs(entry.amount) === withdrawal.amount
+       );
+       if (ledgerEntry) ledgerEntry.status = 'completed';
+       user.markModified('ledger');
+       await user.save({ session });
     }
 
+    // 3️⃣ Update Withdrawal Record
     withdrawal.status = status;
     withdrawal.adminNote = adminNote;
     withdrawal.txHash = txHash || withdrawal.txHash;
-    await withdrawal.save();
+    await withdrawal.save({ session });
 
+    await session.commitTransaction();
     res.json({ success: true, message: `Withdrawal status updated to: ${status}` });
+
   } catch (error) {
+    if (session.inTransaction()) await session.abortTransaction();
     console.error(`[ADMIN_WITHDRAWAL_ERROR]: ${error.message}`);
     res.status(500).json({ success: false, message: error.message });
+  } finally {
+    session.endSession();
   }
 };

@@ -12,22 +12,30 @@ export async function createDeposit(req, res, next) {
     const { amount, currency, txHash } = req.body;
     const userId = req.user._id;
 
-    // 1. Validation: Ensure positive numeric amount
+    // 1. Validation
     if (!amount || Number(amount) <= 0) {
       throw new ApiError(400, 'A valid positive amount is required');
     }
 
-    // 2. Security: System assigns deposit address
+    // 2. Security: Assign/Fetch the system-generated deposit address
     const systemAddress = await getOrCreateBtcDepositAddress(userId);
     if (!systemAddress) {
       throw new ApiError(500, 'Internal Node Error: Could not derive deposit address');
     }
 
-    // 3. Oracle Price Sync
-    // Fetch BTC->EUR rate; fallback if CoinGecko unavailable
+    // 3. Oracle Price Sync (Corrected CoinGecko Logic)
     let amountEUR = 0;
     try {
-      const priceRes = await axios.get('https://api.coingecko.com', { timeout: 5000 });
+      // FIX: Added correct endpoint and query parameters
+      const priceRes = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+        params: {
+          ids: 'bitcoin',
+          vs_currencies: 'eur'
+        },
+        timeout: 5000 
+      });
+      
+      // FIX: Data structure is res.data.bitcoin.eur
       const currentBtcRate = priceRes.data.bitcoin.eur;
       amountEUR = Number(amount) * currentBtcRate;
     } catch (e) {
@@ -59,6 +67,6 @@ export async function createDeposit(req, res, next) {
       deposit
     });
   } catch (err) {
-    next(err); // Send error to centralized middleware
+    next(err); // Passes to your error handling middleware
   }
 }

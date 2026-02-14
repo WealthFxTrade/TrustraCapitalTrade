@@ -6,7 +6,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { notFound, errorHandler } from './middleware/error.js';
 
-// ───────────── ROUTE IMPORTS ─────────────
+// Route Imports
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/userRoutes.js';
 import planRoutes from './routes/plan.js';
@@ -19,13 +19,13 @@ import investmentRoutes from './routes/investmentRoutes.js';
 import reviewRoutes from './routes/reviews.js';
 import bitcoinRoutes from './routes/bitcoin.js';
 
-// ───────────── BACKGROUND WORKERS ─────────────
+// Background Workers
 import './workers/depositScanner.js';
 import './cron/profitJob.js';
 
 const app = express();
 
-// ───────────── SECURITY MIDDLEWARE ─────────────
+// ─── SECURITY & CSP ───
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -43,40 +43,51 @@ app.use(
         imgSrc: ["'self'", "data:", "https:"]
       }
     },
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginResourcePolicy: { policy: 'cross-origin' }
   })
 );
 
-// ───────────── CORS CONFIGURATION ─────────────
+// ─── FULLY CORRECTED CORS ───
+const allowedOrigins = [
+  'https://trustra-capital-trade.vercel.app',
+  'http://localhost:5173',
+  'https://trustracapitaltrade-backend.onrender.com'
+];
+
 app.use(
   cors({
-    origin: [
-      'https://trustra-capital-trade.vercel.app',
-      'http://localhost:5173',
-      'https://trustracapitaltrade-backend.onrender.com'
-    ],
-    credentials: true,
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        return callback(new Error('CORS blocked: Origin not allowed'), false);
+      }
+      return callback(null, true);
+    },
+    credentials: true, // Required for Refresh Token Cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
   })
 );
+
+// Handle pre-flight for all routes
 app.options('*', cors());
 
-// ───────────── RATE LIMITER ─────────────
+// ─── RATE LIMITING ───
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 500,
   message: { success: false, message: 'Node Traffic High: Try again in 15 mins.' }
 });
 app.use('/api/', limiter);
 
-// ───────────── GENERAL MIDDLEWARE ─────────────
+// ─── GENERAL MIDDLEWARE ───
 app.use(compression());
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// ───────────── HEALTH CHECK ─────────────
+// ─── HEALTH CHECK ───
 app.get('/', (req, res) =>
   res.json({
     success: true,
@@ -86,7 +97,8 @@ app.get('/', (req, res) =>
   })
 );
 
-// ───────────── ROUTES MAPPING ─────────────
+// ─── ROUTE MAPPING ───
+// These prefixes must match your frontend api.jsx calls exactly
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/plans', planRoutes);
@@ -95,14 +107,11 @@ app.use('/api/market', marketRoutes);
 app.use('/api/bitcoin', bitcoinRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/wallet', walletRoutes);
-
-// ✅ Corrected route alignment for frontend
 app.use('/api/withdraw', withdrawalRoutes);
-
 app.use('/api/admin', adminRoutes);
 app.use('/api/investments', investmentRoutes);
 
-// ───────────── ERROR HANDLERS ─────────────
+// ─── ERROR HANDLERS ───
 app.use(notFound);
 app.use(errorHandler);
 
