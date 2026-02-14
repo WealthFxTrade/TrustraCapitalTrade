@@ -20,7 +20,6 @@ export default function Landing() {
   const { user } = useAuth();
   const [btcPrice, setBtcPrice] = useState(null);
 
-  // Real-time BTC Price Sync (EUR)
   useEffect(() => {
     const fetchBTC = async () => {
       try {
@@ -41,7 +40,9 @@ export default function Landing() {
     if (user) {
       navigate("/dashboard", { state: { autoOpenNode: node.name } });
     } else {
-      navigate("/register", { state: { selectedPlan: node.name, minAmount: node.min } });
+      navigate("/register", {
+        state: { selectedPlan: node.name, minAmount: node.min },
+      });
     }
   };
 
@@ -58,39 +59,47 @@ export default function Landing() {
       name: "Marco Vieri",
       country: "Italy",
       flag: "🇮🇹",
-      text: "The Rio Elite node has maintained a consistent 22% ROI. The automated risk management is unlike anything I've seen in Milan.",
+      text:
+        "The Rio Elite node has maintained a consistent 22% ROI. The automated risk management is unlike anything I've seen in Milan.",
     },
     {
       name: "Yuki Tanaka",
       country: "Japan",
       flag: "🇯🇵",
-      text: "Precision-grade execution. Trustra's 2026 Directives make international capital movement seamless for Tokyo investors.",
+      text:
+        "Precision-grade execution. Trustra's 2026 Directives make international capital movement seamless for Tokyo investors.",
     },
     {
       name: "Lars Sørensen",
       country: "Denmark",
       flag: "🇩🇰",
-      text: "Security is my priority. Knowing the automated system mitigates human error gives me the confidence to deploy higher tiers.",
+      text:
+        "Security is my priority. Knowing the automated system mitigates human error gives me the confidence to deploy higher tiers.",
     },
     {
       name: "Oliver Bennett",
       country: "UK",
       flag: "🇬🇧",
-      text: "Exceptional platform. The automated balancing ensures that market dips don't affect my principal capital. Very hard to see a loss.",
+      text:
+        "Exceptional platform. The automated balancing ensures that market dips don't affect my principal capital. Very hard to see a loss.",
     },
     {
       name: "Sebastian Müller",
       country: "Germany",
       flag: "🇩🇪",
-      text: "The automated node handled market volatility perfectly. Zero manual intervention needed. True hands-off wealth management.",
+      text:
+        "The automated node handled market volatility perfectly. Zero manual intervention needed. True hands-off wealth management.",
     },
   ];
 
   return (
     <div className="min-h-screen bg-[#05070a] text-slate-300 selection:bg-blue-500/30">
-      {/* Navigation Header */}
+      {/* Header */}
       <header className="px-6 lg:px-20 py-8 flex flex-col md:flex-row items-center justify-between gap-6 border-b border-white/5 backdrop-blur-xl sticky top-0 z-50 bg-[#05070a]/80">
-        <div className="flex items-center gap-3 group cursor-pointer" onClick={() => navigate("/")}>
+        <div
+          className="flex items-center gap-3 group cursor-pointer"
+          onClick={() => navigate("/")}
+        >
           <TrendingUp className="h-10 w-10 text-blue-500 group-hover:scale-110 transition-transform" />
           <h1 className="text-3xl font-black text-white italic uppercase tracking-tighter flex items-center gap-2">
             Trustra <VerifiedBadge />
@@ -124,13 +133,14 @@ export default function Landing() {
       </header>
 
       <main className="px-6 lg:px-20 py-16 space-y-32 max-w-7xl mx-auto">
-        {/* Hero Section */}
+        {/* Hero */}
         <section className="text-center space-y-8">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-black uppercase tracking-[0.3em]">
             <Zap size={14} /> Global Precision Asset Management (2026)
           </div>
           <h2 className="text-5xl md:text-7xl font-black text-white italic uppercase tracking-tighter leading-[0.9]">
-            Invest Smart.<br />Trade Confident.
+            Invest Smart.<br />
+            Trade Confident.
           </h2>
           <p className="text-slate-500 max-w-2xl mx-auto text-lg font-medium">
             Access proprietary automated trading nodes with real-time profit tracking.
@@ -138,7 +148,9 @@ export default function Landing() {
           </p>
           <div className="inline-block p-1 rounded-[2.5rem] bg-gradient-to-b from-white/10 to-transparent">
             <div className="bg-[#0a0d14] px-10 py-6 rounded-[2.3rem] border border-white/5 shadow-2xl">
-              <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-2">Live BTC Price (EUR)</h3>
+              <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] mb-2">
+                Live BTC Price (EUR)
+              </h3>
               <p className="text-4xl font-mono font-black text-blue-500 tracking-tighter">
                 {btcPrice ? `€${btcPrice.toLocaleString()}` : "SYNCING..."}
               </p>
@@ -146,7 +158,7 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* Yield Protocol Nodes */}
+        {/* Nodes */}
         <section className="space-y-12">
           <div className="text-center">
             <h3 className="text-3xl font-black text-white italic uppercase tracking-tight">Yield Protocol Nodes</h3>
@@ -161,7 +173,7 @@ export default function Landing() {
                 <div className="space-y-4">
                   <h4 className="font-black text-white uppercase italic tracking-tighter text-lg">{node.name}</h4>
                   <p className="text-white font-mono font-bold text-sm">
-                    €{node.min.toLocaleString()} – {node.max === Infinity ? '∞' : `€${node.max.toLocaleString()}`}
+                    €{node.min.toLocaleString()} – {node.max === Infinity ? "∞" : `€${node.max.toLocaleString()}`}
                   </p>
                   <div className="py-4 px-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
                     <p className="text-emerald-500 font-black text-xl tracking-tighter">{node.rate}</p>
@@ -179,7 +191,7 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* Global Feedback Section */}
+        {/* Reviews */}
         <section className="space-y-12">
           <div className="text-center">
             <h3 className="text-3xl font-black text-white italic uppercase tracking-tight">Global Trust Index</h3>
@@ -206,7 +218,7 @@ export default function Landing() {
           </div>
         </section>
 
-        {/* Global Expansion Section */}
+        {/* Global Expansion */}
         <section className="py-20 border-y border-white/5">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div className="space-y-6">
@@ -252,15 +264,13 @@ export default function Landing() {
               <TrendingUp className="h-8 w-8 text-blue-500" />
               <h1 className="text-2xl font-black text-white italic uppercase tracking-tighter">Trustra</h1>
             </div>
-
-            {/* AUTOMATED RISK DISCLAIMER */}
             <div className="bg-red-500/5 border border-red-500/10 p-6 rounded-3xl">
               <div className="flex items-start gap-3">
                 <AlertCircle className="text-red-500 shrink-0" size={20} />
                 <div className="space-y-3">
                   <p className="text-red-500 font-black uppercase italic text-[10px] tracking-widest">Risk & Automation Protocol</p>
                   <p className="text-gray-500 text-[10px] leading-relaxed">
-                    Trustra utilizes an <span className="text-white">Audit-Certified Automated Trading System</span> designed to mitigate market exposure. This high-frequency model is engineered to make it difficult for investors to experience capital loss [1.1].
+                    Trustra utilizes an <span className="text-white">Audit-Certified Automated Trading System</span> designed to mitigate market exposure. High-frequency model, capital loss mitigation [1.1].
                   </p>
                   <p className="text-gray-600 text-[9px] leading-relaxed italic">
                     Digital asset management involves market volatility. Automated preservation protocols help mitigate, but do not eliminate, inherent risk.
@@ -274,14 +284,8 @@ export default function Landing() {
             <h5 className="text-white font-black text-xs uppercase tracking-widest">Global HQ</h5>
             <ul className="space-y-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">
               <li className="flex items-center gap-2"><MapPin size={14} className="text-blue-500" /> USA Operations Center</li>
-              <li className="flex items-center gap-2">
-                <Mail size={14} className="text-blue-500" />
-                <a href="mailto:www.infocare@gmail.com" className="hover:text-blue-500 transition-colors">www.infocare@gmail.com</a>
-              </li>
-              <li className="flex items-center gap-2">
-                <Phone size={14} className="text-blue-500" />
-                <a href="tel:+18782241625" className="hover:text-blue-500 transition-colors">+1 (878) 224-1625</a>
-              </li>
+              <li className="flex items-center gap-2"><Mail size={14} className="text-blue-500" /> <a href="mailto:www.infocare@gmail.com" className="hover:text-blue-500 transition-colors">www.infocare@gmail.com</a></li>
+              <li className="flex items-center gap-2"><Phone size={14} className="text-blue-500" /> <a href="tel:+18782241625" className="hover:text-blue-500 transition-colors">+1 (878) 224-1625</a></li>
             </ul>
           </div>
 
