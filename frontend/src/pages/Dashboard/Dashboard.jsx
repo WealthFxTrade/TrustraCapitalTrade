@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useContext } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { UserContext } from "../../context/UserContext";
 import axios from "axios";
 
 // Components
@@ -11,29 +12,24 @@ import RecentActivity from "../../components/RecentActivity";
 import StatCard from "../../components/StatCard";
 import BtcPrice from "../../components/BtcPrice";
 
-import api from "../../api/api";
-
 export default function Dashboard() {
   const { user } = useAuth();
+  const { stats, transactions, loading: contextLoading, fetchStats } = useContext(UserContext);
   const navigate = useNavigate();
   const location = useLocation();
 
   const [btcPrice, setBtcPrice] = useState(null);
-  const [stats, setStats] = useState({ balance: 0, profit: 0 });
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [autoOpenNode, setAutoOpenNode] = useState(null);
 
-  // Redirect unauthenticated users
+  // 1. Auth & Route State Guard
   useEffect(() => {
     if (!user) navigate("/login");
 
-    if (location.state?.autoOpenNode) {
-      setAutoOpenNode(location.state.autoOpenNode);
-    }
+    const autoNode = location.state?.autoOpenNode;
+    if (autoNode) setAutoOpenNode(autoNode);
   }, [user, navigate, location.state]);
 
-  // Fetch BTC price (EUR)
+  // 2. BTC Price Fetch
   const fetchBTCPrice = async () => {
     try {
       const res = await axios.get(
@@ -42,68 +38,67 @@ export default function Dashboard() {
       setBtcPrice(res.data.bitcoin.eur);
     } catch (err) {
       console.error("BTC Sync Error:", err);
-    }
-  };
-
-  // Fetch dashboard stats & transactions
-  const fetchDashboard = async () => {
-    try {
-      const statsRes = await api.get("/user/dashboard-stats");
-      setStats(statsRes.data || { balance: 0, profit: 0 });
-
-      const txRes = await api.get("/transactions");
-      setTransactions(txRes.data || []);
-    } catch (err) {
-      console.error("Dashboard Fetch Error:", err);
-    } finally {
-      setLoading(false);
+      setBtcPrice(null);
     }
   };
 
   useEffect(() => {
     fetchBTCPrice();
-    fetchDashboard();
+    fetchStats();
+
     const interval = setInterval(() => {
       fetchBTCPrice();
-      fetchDashboard();
-    }, 60000); // Refresh every 60s
-    return () => clearInterval(interval);
-  }, []);
+      fetchStats();
+    }, 60000);
 
-  if (loading) {
+    return () => clearInterval(interval);
+  }, [fetchStats]);
+
+  // 3. Loading UI
+  if (contextLoading || !stats) {
     return (
-      <div className="p-8 bg-[#05070a] min-h-screen">
-        <p className="text-white font-black text-center text-xl">
-          Loading Dashboard...
-        </p>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-[#05070a] text-blue-500">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+        <p className="font-black uppercase tracking-widest text-[10px]">Initializing Secure Node...</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-[#05070a] text-slate-300 selection:bg-blue-500/30">
-      {/* Header with BTC price & User Info */}
-      <DashboardHeader user={user} btcPrice={btcPrice} />
+      {/* Header */}
+      <DashboardHeader btcPrice={btcPrice} />
 
-      {/* Main Content */}
       <main className="px-6 lg:px-20 py-12 space-y-16 max-w-7xl mx-auto">
-        {/* BTC & Account Summary */}
+        {/* Top Summary Row */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <BtcPrice price={btcPrice} />
           <AccountSummary user={user} stats={stats} autoOpenNode={autoOpenNode} />
         </section>
 
-        {/* Stats Cards */}
+        {/* Global Statistics Grid */}
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <StatCard title="Total Balance" value={`€${stats.balance.toLocaleString()}`} />
-          <StatCard title="Total Profit" value={`€${stats.profit.toLocaleString()}`} />
-          <StatCard title="Active Nodes" value={user?.activeNodes || 0} />
-          <StatCard title="Daily ROI" value={`€${stats.dailyROI?.toLocaleString() || 0}`} />
+          <StatCard 
+            title="Total Balance" 
+            value={`€${(stats.mainBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} 
+          />
+          <StatCard 
+            title="Total Profit" 
+            value={`€${(stats.profit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} 
+          />
+          <StatCard 
+            title="Active Nodes" 
+            value={stats.activeNodes || 0} 
+          />
+          <StatCard 
+            title="Daily ROI" 
+            value={`€${(stats.dailyROI || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} 
+          />
         </section>
 
-        {/* Wallets & Recent Activity */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <WalletDashboard user={user} />
+        {/* Secondary Modules */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-20">
+          <WalletDashboard user={user} stats={stats} />
           <RecentActivity transactions={transactions} />
         </section>
       </main>

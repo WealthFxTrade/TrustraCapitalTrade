@@ -1,7 +1,6 @@
 import React, { createContext, useState, useEffect, useCallback } from "react";
-import { getUserStats, getUserTransactions } from "../api";
+import api from "../api/api"; // Use your central API instance
 import { useAuth } from "./AuthContext";
-import { connectSocket, disconnectSocket } from "../services/socket";
 
 export const UserContext = createContext();
 
@@ -9,121 +8,64 @@ const EMPTY_STATS = {
   mainBalance: 0,
   btcBalance: 0,
   usdtBalance: 0,
-  activePlan: "Basic Node",
-  dailyRate: 0,
+  activePlan: "Standard Node",
+  dailyRate: 0.46,
 };
 
 export const UserProvider = ({ children }) => {
   const { token, isAuthenticated } = useAuth();
-
   const [stats, setStats] = useState(EMPTY_STATS);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ─── SANITY GUARD ───────────────────────────────────────────
+  // ─── DATA NORMALIZER (Fixed to match your Backend app.js) ───
   const normalizeStats = (data = {}) => ({
-    mainBalance:
-      Number(data?.mainBalance ?? data?.balances?.EUR ?? data?.balance ?? 0),
-    btcBalance:
-      Number(data?.btcBalance ?? data?.balances?.BTC ?? 0),
-    usdtBalance:
-      Number(data?.usdtBalance ?? data?.balances?.USDT ?? 0),
-    activePlan:
-      data?.activePlan ?? data?.plan ?? "Starter",
-    dailyRate:
-      Number(data?.dailyRate ?? 0.46),
+    mainBalance: Number(data?.balance ?? data?.mainBalance ?? 0),
+    btcBalance: Number(data?.btcBalance ?? 0),
+    usdtBalance: Number(data?.usdtBalance ?? 0),
+    activePlan: data?.activePlan ?? "Standard Node",
+    dailyRate: Number(data?.dailyRate ?? 0.46),
   });
 
-  // ─── API FALLBACK SYNC ──────────────────────────────────────
+  // ─── API SYNC ───
   const fetchStats = useCallback(async () => {
+    // If no token, stop loading and clear data
     if (!token || !isAuthenticated) {
       setLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
-      const [statsData, txData] = await Promise.all([
-        getUserStats(),
-        getUserTransactions(),
+      // Synchronize with your backend app.use('/api/user', userRoutes)
+      const [statsRes, txRes] = await Promise.all([
+        api.get("/user/dashboard"),
+        api.get("/transactions")
       ]);
 
-      setStats(normalizeStats(statsData));
-      setTransactions(
-        Array.isArray(txData)
-          ? txData
-          : txData?.transactions || []
-      );
+      setStats(normalizeStats(statsRes.data));
+      setTransactions(Array.isArray(txRes.data) ? txRes.data : txRes.data?.transactions || []);
     } catch (err) {
-      console.error("UserContext API sync failed:", err);
+      console.error("UserContext Sync Error:", err);
     } finally {
-      setLoading(false);
+      setLoading(false); // CRITICAL: This prevents the infinite black screen
     }
   }, [token, isAuthenticated]);
 
-  // ─── WEBSOCKET LIVE PUSH ────────────────────────────────────
-  useEffect(() => {
-    if (!isAuthenticated || !token) return;
-
-    const socket = connectSocket(token);
-
-    socket.on("balance:update", (payload) => {
-      setStats((prev) => ({
-        ...prev,
-        ...normalizeStats(payload),
-      }));
-    });
-
-    socket.on("transaction:new", (tx) => {
-      if (!tx?._id) return;
-      setTransactions((prev) => [tx, ...prev]);
-    });
-
-    return () => {
-      socket.off("balance:update");
-      socket.off("transaction:new");
-    };
-  }, [token, isAuthenticated]);
-
-  // ─── SESSION LIFECYCLE ──────────────────────────────────────
+  // ─── LIFECYCLE MANAGEMENT ───
   useEffect(() => {
     if (!isAuthenticated) {
       setStats(EMPTY_STATS);
       setTransactions([]);
       setLoading(false);
-      disconnectSocket();
       return;
     }
 
     fetchStats();
-    const interval = setInterval(fetchStats, 30000);
-
+    
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
   }, [isAuthenticated, fetchStats]);
-
-  // ─── OPTIMISTIC UPDATE + HARD SYNC ──────────────────────────
-  const addTransaction = (tx) => {
-    if (!tx?.amount) return;
-
-    setTransactions((prev) => [tx, ...prev]);
-
-    setStats((prev) => {
-      const keyMap = {
-        BTC: "btcBalance",
-        USDT: "usdtBalance",
-        BANK: "mainBalance",
-      };
-      const key = keyMap[tx.method] || "mainBalance";
-
-      return {
-        ...prev,
-        [key]: Number(prev[key]) + Number(tx.amount),
-      };
-    });
-
-    // Ensure truth
-    setTimeout(fetchStats, 1500);
-  };
 
   return (
     <UserContext.Provider
@@ -132,10 +74,14 @@ export const UserProvider = ({ children }) => {
         transactions,
         loading,
         fetchStats,
-        addTransaction,
+        addTransaction: (tx) => {
+          setTransactions((prev) => [tx, ...prev]);
+          setTimeout(fetchStats, 2000); // Re-sync with server after local update
+        },
       }}
     >
       {children}
     </UserContext.Provider>
   );
 };
+
