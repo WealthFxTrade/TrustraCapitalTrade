@@ -1,9 +1,31 @@
+import { useState, useEffect } from 'react';
+
 export default function BtcPrice({ className = '' }) {
-  // Mock for now – add real CoinGecko fetch later
+  const [btcPrice, setBtcPrice] = useState(null);
+
+  const fetchBtcPrice = async () => {
+    try {
+      const res = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur'
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.bitcoin?.eur) setBtcPrice(data.bitcoin.eur);
+      }
+    } catch (err) {
+      console.error('BTC Fetch Error:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchBtcPrice();
+    const interval = setInterval(fetchBtcPrice, 60000); // refresh every 60s
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <div className={`text-5xl md:text-7xl font-bold text-cyan-400 tracking-tight ${className}`}>
-      $102,345.67
-      <span className="text-2xl md:text-3xl text-green-400 ml-4">+3.2% (24h)</span>
-    </div>
-  )
+    <span className={className}>
+      {btcPrice ? `€${btcPrice.toLocaleString()}` : '---'}
+    </span>
+  );
 }
