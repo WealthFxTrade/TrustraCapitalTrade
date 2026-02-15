@@ -1,391 +1,171 @@
-// src/components/BtcDeposit.jsx
 import React, { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
-import QRCode from 'qrcode.react';
+import api from '../api'; // Use your fixed axios instance with interceptors
+import { QRCodeSVG } from 'qrcode.react'; // Standard for 2026 React apps
 import { FaSyncAlt, FaCopy, FaCheck } from 'react-icons/fa';
 
 const BtcDeposit = () => {
-  const [deposit, setDeposit] = useState(null);
+  const [address, setAddress] = useState('');
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Memoized fetch functions
-  const fetchDeposit = useCallback(async (fresh = false) => {
+  // 1. Fetch Unique BTC Address (Unified with addressService.js)
+  const fetchAddress = useCallback(async (fresh = false) => {
     try {
       setLoading(true);
       setError('');
 
-      const url = `/api/deposits/btc${fresh ? '?fresh=true' : ''}`;
-      const { data } = await axios.get(url, { withCredentials: true });
+      // Points to the fixed route: app.use('/api/bitcoin', bitcoinRoutes)
+      // Pass fresh=true if the user wants a new index from the HD wallet
+      const { data } = await api.get(`/bitcoin/deposit${fresh ? '?fresh=true' : ''}`);
 
       if (data.success) {
-        setDeposit(data.data);
+        setAddress(data.btcAddress);
       } else {
-        throw new Error(data.message || 'Invalid response');
+        throw new Error(data.message || 'Secure Node Handshake Failed');
       }
     } catch (err) {
-      console.error('Deposit fetch error:', err);
-      setError(err.response?.data?.message || 'Failed to load deposit address');
+      console.error('BTC Sync Error:', err);
+      setError(err.response?.data?.message || 'Failed to synchronize deposit node');
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // 2. Fetch Deposit Ledger
   const fetchHistory = useCallback(async () => {
     try {
       setHistoryLoading(true);
-      setError('');
-
-      const { data } = await axios.get('/api/deposits/btc/history', {
-        withCredentials: true,
-      });
-
+      const { data } = await api.get('/transactions/history?type=deposit&currency=BTC');
       if (data.success) {
-        setHistory(data.data || []);
-      } else {
-        throw new Error(data.message || 'Invalid response');
+        setHistory(data.transactions || []);
       }
     } catch (err) {
-      console.error('History fetch error:', err);
-      setError(err.response?.data?.message || 'Failed to load deposit history');
+      console.error('History Sync Error:', err);
     } finally {
       setHistoryLoading(false);
     }
   }, []);
 
-  // Initial load + auto-refresh history every 60s
   useEffect(() => {
-    fetchDeposit();
+    fetchAddress();
     fetchHistory();
-
-    const interval = setInterval(fetchHistory, 60000);
+    const interval = setInterval(fetchHistory, 30000); // Polling every 30s
     return () => clearInterval(interval);
-  }, [fetchDeposit, fetchHistory]);
+  }, [fetchAddress, fetchHistory]);
 
-  // Copy address to clipboard
-  const copyAddress = () => {
-    if (deposit?.address) {
-      navigator.clipboard.writeText(deposit.address);
+  const copyToClipboard = () => {
+    if (address) {
+      navigator.clipboard.writeText(address);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
   };
 
   return (
-    <div className="btc-deposit-container">
-      <h2 className="section-title">BTC Deposit</h2>
+    <div className="max-w-4xl mx-auto p-6 bg-[#020617] text-white rounded-3xl border border-white/5 shadow-2xl">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">BTC Deposit Node</h2>
+          <p className="text-xs text-white/40 uppercase tracking-widest mt-1">Direct Chain Injection</p>
+        </div>
+        <div className="px-3 py-1 bg-yellow-500/10 border border-yellow-500/20 rounded-full flex items-center gap-2">
+          <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse" />
+          <span className="text-[10px] font-bold text-yellow-500 uppercase">Network Active</span>
+        </div>
+      </div>
 
       {error && (
-        <div className="error-message">
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-sm flex justify-between items-center">
           <span>{error}</span>
-          <button onClick={() => { setError(''); fetchDeposit(); }} className="retry-btn">
-            Retry
-          </button>
+          <button onClick={() => fetchAddress()} className="underline font-bold">Retry</button>
         </div>
       )}
 
-      {/* Deposit Address Card */}
-      <div className="deposit-card">
-        <h3>Deposit Address</h3>
+      {/* --- Main Deposit Card --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 bg-white/[0.02] p-8 rounded-[2rem] border border-white/5 mb-12">
+        <div className="flex flex-col items-center justify-center space-y-6">
+          <div className="p-4 bg-white rounded-2xl shadow-xl shadow-white/5">
+            {loading ? (
+              <div className="w-[180px] h-[180px] flex items-center justify-center text-black font-bold animate-pulse">SYNCING...</div>
+            ) : (
+              <QRCodeSVG value={address || 'TRUSTRA'} size={180} />
+            )}
+          </div>
+          <button 
+            onClick={() => fetchAddress(true)}
+            className="flex items-center gap-2 text-[10px] font-bold text-white/40 hover:text-yellow-500 transition-colors uppercase tracking-widest"
+          >
+            <FaSyncAlt className={loading ? 'animate-spin' : ''} /> Generate New Address
+          </button>
+        </div>
 
-        {loading ? (
-          <div className="loading">Loading address...</div>
-        ) : deposit ? (
-          <div className="address-content">
-            <div className="qr-and-address">
-              <div className="qr-wrapper">
-                <QRCode
-                  value={deposit.address}
-                  size={180}
-                  level="H" // high error correction
-                  fgColor="#000"
-                  bgColor="#fff"
-                />
-              </div>
-
-              <div className="address-block">
-                <div className="address-text">
-                  <code>{deposit.address}</code>
-                  <button
-                    onClick={copyAddress}
-                    className="copy-btn"
-                    title="Copy address"
-                    aria-label="Copy deposit address"
-                  >
-                    {copied ? <FaCheck color="#4caf50" /> : <FaCopy />}
-                  </button>
-                </div>
-
-                {copied && <span className="copied-tooltip">Copied!</span>}
-
-                <p className="status">
-                  Status: <strong className={deposit.status === 'confirmed' ? 'confirmed' : 'pending'}>
-                    {deposit.status.toUpperCase()}
-                  </strong>
-                </p>
-
-                <p className="created">
-                  Created: {new Date(deposit.createdAt).toLocaleString()}
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => fetchDeposit(true)}
-              className="refresh-btn"
-              disabled={loading}
-            >
-              <FaSyncAlt /> Generate New Address
+        <div className="flex flex-col justify-center">
+          <label className="text-[10px] font-bold text-white/30 uppercase tracking-widest mb-3">Your Unique Deposit Address</label>
+          <div className="flex items-center gap-3 p-4 bg-black/40 rounded-xl border border-white/5 mb-6 group">
+            <code className="text-sm font-mono text-yellow-500 truncate">{address || 'Initializing Secure Vault...'}</code>
+            <button onClick={copyToClipboard} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+              {copied ? <FaCheck className="text-green-500" /> : <FaCopy className="text-white/40" />}
             </button>
+          </div>
 
-            <p className="info">
-              Send only <strong>BTC</strong> to this address. Minimum confirmations required: 3.
+          <div className="space-y-4 text-xs text-white/40 leading-relaxed">
+            <p className="flex items-center gap-2 italic">
+              <span className="w-1 h-1 bg-yellow-500 rounded-full" />
+              Minimum Deposit: 0.0001 BTC
+            </p>
+            <p className="flex items-center gap-2 italic">
+              <span className="w-1 h-1 bg-yellow-500 rounded-full" />
+              Confirmation Time: ~10-30 Minutes (3 confirmations)
+            </p>
+            <p className="p-3 bg-yellow-500/5 border border-yellow-500/10 rounded-lg text-yellow-600 font-medium">
+              Important: Send only BTC to this Native SegWit address. Assets sent to incorrect protocols cannot be recovered.
             </p>
           </div>
-        ) : (
-          <p className="no-data">No deposit address available</p>
-        )}
+        </div>
       </div>
 
-      {/* Deposit History */}
-      <div className="history-section">
-        <h3>Deposit History</h3>
-
-        {historyLoading ? (
-          <div className="loading">Loading history...</div>
-        ) : history.length === 0 ? (
-          <p className="no-data">No deposit history yet.</p>
-        ) : (
-          <div className="table-wrapper">
-            <table className="history-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Address</th>
-                  <th>Amount (BTC)</th>
-                  <th>Received</th>
-                  <th>Status</th>
-                  <th>Confirmations</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((dep) => (
-                  <tr key={dep._id}>
-                    <td title={dep._id}>{dep._id.slice(0, 8)}...</td>
-                    <td title={dep.address}>
-                      {dep.address.slice(0, 8)}...{dep.address.slice(-6)}
+      {/* --- History Table --- */}
+      <div className="overflow-hidden">
+        <h3 className="text-sm font-bold text-white/60 mb-6 uppercase tracking-widest">Recent Node Activity</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="text-white/20 border-b border-white/5 uppercase tracking-tighter">
+                <th className="pb-4 font-bold">Transaction ID</th>
+                <th className="pb-4 font-bold">Volume</th>
+                <th className="pb-4 font-bold">Status</th>
+                <th className="pb-4 font-bold">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody className="text-white/60">
+              {historyLoading && history.length === 0 ? (
+                <tr><td colSpan="4" className="py-8 text-center animate-pulse tracking-widest font-bold">SCANNING BLOCKCHAIN...</td></tr>
+              ) : history.length === 0 ? (
+                <tr><td colSpan="4" className="py-8 text-center text-white/20 italic">No incoming data detected on this node.</td></tr>
+              ) : (
+                history.map((tx) => (
+                  <tr key={tx._id} className="border-b border-white/5 hover:bg-white/[0.01] transition-colors">
+                    <td className="py-4 font-mono text-yellow-500/80">{tx.description?.split(': ')[1]?.slice(0, 12) || tx._id.slice(0, 12)}...</td>
+                    <td className="py-4 font-bold">{tx.amount} BTC</td>
+                    <td className="py-4">
+                      <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase ${tx.status === 'completed' ? 'bg-green-500/10 text-green-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                        {tx.status}
+                      </span>
                     </td>
-                    <td>{Number(dep.amount || 0).toFixed(8)}</td>
-                    <td>{Number(dep.receivedAmount || 0).toFixed(8)}</td>
-                    <td className={`status ${dep.status}`}>
-                      {dep.status.toUpperCase()}
-                    </td>
-                    <td>{dep.confirmations || 0}</td>
-                    <td>{new Date(dep.createdAt).toLocaleString()}</td>
+                    <td className="py-4 text-white/30">{new Date(tx.createdAt).toLocaleDateString()}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-
-      {/* Scoped styles */}
-      <style jsx>{`
-        .btc-deposit-container {
-          max-width: 900px;
-          margin: 0 auto;
-          padding: 24px 16px;
-        }
-
-        .section-title {
-          font-size: 1.8rem;
-          margin-bottom: 24px;
-          color: #333;
-        }
-
-        .deposit-card {
-          background: white;
-          border-radius: 12px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-          padding: 24px;
-          margin-bottom: 32px;
-        }
-
-        .deposit-card h3 {
-          margin-top: 0;
-          color: #1a1a1a;
-        }
-
-        .address-content {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-
-        .qr-and-address {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 32px;
-          justify-content: center;
-          margin-bottom: 24px;
-        }
-
-        .qr-wrapper {
-          background: white;
-          padding: 16px;
-          border-radius: 12px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .address-block {
-          flex: 1;
-          min-width: 280px;
-        }
-
-        .address-text {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          margin-bottom: 12px;
-          background: #f5f5f5;
-          padding: 12px;
-          border-radius: 8px;
-          font-family: monospace;
-          word-break: break-all;
-        }
-
-        .copy-btn {
-          background: none;
-          border: none;
-          cursor: pointer;
-          font-size: 1.2rem;
-          padding: 4px;
-        }
-
-        .copied-tooltip {
-          font-size: 0.8rem;
-          color: #4caf50;
-          margin-left: 8px;
-        }
-
-        .status {
-          font-weight: 600;
-        }
-
-        .status.confirmed {
-          color: #4caf50;
-        }
-
-        .status.pending {
-          color: #f59e0b;
-        }
-
-        .refresh-btn {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 20px;
-          background: #3b82f6;
-          color: white;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          font-weight: 500;
-          transition: background 0.2s;
-        }
-
-        .refresh-btn:hover {
-          background: #2563eb;
-        }
-
-        .refresh-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .info {
-          margin-top: 16px;
-          color: #666;
-          font-size: 0.9rem;
-          text-align: center;
-        }
-
-        .history-section h3 {
-          margin: 32px 0 16px;
-        }
-
-        .table-wrapper {
-          overflow-x: auto;
-          border: 1px solid #e0e0e0;
-          border-radius: 8px;
-        }
-
-        .history-table {
-          width: 100%;
-          border-collapse: collapse;
-          min-width: 600px;
-        }
-
-        .history-table th,
-        .history-table td {
-          padding: 12px;
-          text-align: left;
-          border-bottom: 1px solid #eee;
-        }
-
-        .history-table th {
-          background: #f8f9fa;
-          font-weight: 600;
-          color: #444;
-        }
-
-        .status.pending { color: #f59e0b; font-weight: bold; }
-        .status.confirmed { color: #4caf50; font-weight: bold; }
-        .status.error,
-        .status.rejected { color: #ef4444; font-weight: bold; }
-
-        .error-message {
-          background: #fee2e2;
-          color: #b91c1c;
-          padding: 16px;
-          border-radius: 8px;
-          margin-bottom: 24px;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .retry-btn {
-          background: #ef4444;
-          color: white;
-          border: none;
-          padding: 8px 16px;
-          border-radius: 6px;
-          cursor: pointer;
-        }
-
-        .no-data,
-        .loading {
-          color: #666;
-          text-align: center;
-          padding: 40px 0;
-          font-size: 1.1rem;
-        }
-
-        @media (max-width: 768px) {
-          .qr-and-address {
-            flex-direction: column;
-            align-items: center;
-          }
-        }
-      `}</style>
     </div>
   );
 };
 
 export default BtcDeposit;
+

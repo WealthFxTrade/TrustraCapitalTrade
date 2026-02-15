@@ -1,18 +1,11 @@
-import { useState, useRef } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../api/api'; 
-import { TrendingUp, User, Mail, Lock, Phone, RefreshCw, Zap, ChevronRight } from 'lucide-react';
+import api from '../../api'; // Your fixed axios instance
+import { TrendingUp, Mail, Lock, User, Phone, RefreshCw, ChevronRight, ShieldCheck } from 'lucide-react';
 
 export default function Signup() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { login } = useAuth();
-  const fullNameRef = useRef(null);
-
-  const selectedPlan = location.state?.selectedPlan || null;
-
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -20,144 +13,192 @@ export default function Signup() {
     password: '',
     confirmPassword: ''
   });
-
   const [loading, setLoading] = useState(false);
+  const [btcPrice, setBtcPrice] = useState(null);
+
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  // 📈 LIVE PRICE ORACLE
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const res = await fetch(
+          'https://api.coingecko.com'
+        );
+        const data = await res.json();
+        if (data?.bitcoin?.eur) setBtcPrice(data.bitcoin.eur);
+      } catch (err) {
+        console.error("Market oracle sync failed");
+      }
+    };
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
-    const { fullName, email, phone, password, confirmPassword } = formData;
-
-    if (password !== confirmPassword) return toast.error('Passwords do not match');
-    if (password.length < 8) return toast.error('Password too short (Min 8)');
+    
+    // 1. Validation Handshake
+    if (formData.password !== formData.confirmPassword) {
+      return toast.error('Cryptography mismatch: Passwords do not match');
+    }
+    if (formData.password.length < 8) {
+      return toast.error('Security Protocol: Password must be at least 8 characters');
+    }
 
     setLoading(true);
     try {
+      // 2. Submit to Fixed Backend Route (/api/auth/register)
+      // This triggers: isCounter increment -> btcAddress derivation -> User creation
       const res = await api.post('/auth/register', {
-        fullName: fullName.trim(),
-        email: email.toLowerCase().trim(),
-        phone: phone.trim(),
-        password
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim(),
+        password: formData.password
       });
 
       const { user, token } = res.data;
-      
-      // Update Context & Storage
+
+      // 3. Commit to AuthContext
       await login(user, token);
+
+      toast.success('Node Synchronized: Welcome to Trustra', {
+        style: { background: '#0f172a', color: '#fff', border: '1px solid #eab308' }
+      });
       
-      toast.success('Trustra Node Activated');
-      navigate('/dashboard', { state: { autoOpenNode: selectedPlan }, replace: true });
+      // Navigate to Dashboard to see newly derived BTC address
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setLoading(false);
-      const message = err.response?.data?.message || err.message || 'Registration failed';
+      const message = err.response?.data?.message || 'Registration Protocol Failed';
       toast.error(message);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#05070a] flex flex-col items-center justify-center px-4 py-12">
-      <Link to="/" className="flex items-center gap-2 mb-8 group">
-        <TrendingUp className="h-10 w-10 text-blue-500 group-hover:scale-110 transition-transform" />
-        <span className="text-2xl font-black text-white tracking-tighter italic uppercase">Trustra</span>
-      </Link>
-
-      <div className="w-full max-w-md bg-white/5 border border-white/10 rounded-[2.5rem] p-8 shadow-2xl backdrop-blur-xl">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-black text-white mb-2 uppercase italic tracking-tight">Register</h2>
-          <p className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.3em]">Join the 2026 Audit Protocol</p>
+    <div className="min-h-screen bg-[#020617] flex flex-col justify-center py-12 px-6 selection:bg-yellow-500/30">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
+        <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-2xl flex items-center justify-center font-black text-black text-2xl mx-auto mb-6 shadow-2xl shadow-yellow-500/20">
+          T
         </div>
+        <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter">Initialize Node</h2>
+        <p className="text-slate-500 text-[9px] uppercase tracking-[0.4em] font-bold mt-3">
+          Market Status: {btcPrice ? (
+            <span className="text-yellow-500 font-mono">BTC @ €{btcPrice.toLocaleString()}</span>
+          ) : (
+            <span className="animate-pulse text-slate-700">SYNCHRONIZING...</span>
+          )}
+        </p>
+      </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-            <input
-              type="text"
-              name="fullName"
-              placeholder="Full Name"
-              className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700"
-              value={formData.fullName}
-              onChange={handleChange}
-              required
-              disabled={loading}
-            />
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white/[0.02] p-10 rounded-[2.5rem] border border-white/5 backdrop-blur-2xl shadow-3xl">
+          <form onSubmit={handleRegister} className="space-y-4">
+            
+            {/* Full Name */}
+            <div className="relative">
+              <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              <input
+                type="text"
+                name="fullName"
+                placeholder="Full Legal Name"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600 transition-all placeholder:text-slate-700 text-sm"
+                value={formData.fullName}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            {/* Email */}
+            <div className="relative">
+              <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              <input
+                type="email"
+                name="email"
+                placeholder="investor@email.com"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600 transition-all placeholder:text-slate-700 text-sm"
+                value={formData.email}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            {/* Phone */}
+            <div className="relative">
+              <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              <input
+                type="text"
+                name="phone"
+                placeholder="+1 (555) 000-0000"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600 transition-all placeholder:text-slate-700 text-sm"
+                value={formData.phone}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            {/* Password */}
+            <div className="relative">
+              <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              <input
+                type="password"
+                name="password"
+                placeholder="Create Secure Password"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600 transition-all placeholder:text-slate-700 text-sm"
+                value={formData.password}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            {/* Confirm Password */}
+            <div className="relative">
+              <ShieldCheck className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+              <input
+                type="password"
+                name="confirmPassword"
+                placeholder="Confirm Password"
+                className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600 transition-all placeholder:text-slate-700 text-sm"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                required
+              />
+            </div>
+            
+            <div className="pt-4">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-white text-black hover:bg-yellow-500 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 disabled:opacity-50"
+              >
+                {loading ? (
+                  <><RefreshCw className="animate-spin" size={18} /> Initializing Node...</>
+                ) : (
+                  <>Create Account <ChevronRight size={16} /></>
+                )}
+              </button>
+            </div>
+          </form>
+          
+          <div className="mt-8 text-center border-t border-white/5 pt-8">
+            <div className="flex items-center justify-center gap-2 text-xs">
+              <span className="text-white/20">Already verified?</span>
+              <Link to="/login" className="text-yellow-600 font-black hover:text-yellow-500 transition-colors underline underline-offset-4">
+                Sign In
+              </Link>
+            </div>
           </div>
-
-          <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-            <input
-              type="email"
-              name="email"
-              placeholder="Email address"
-              className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="relative">
-            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-            <input
-              type="text"
-              name="phone"
-              placeholder="Phone (with country code)"
-              className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700"
-              value={formData.phone}
-              onChange={handleChange}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-            <input
-              type="password"
-              name="password"
-              placeholder="Create Password"
-              className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700 font-mono"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
-            <input
-              type="password"
-              name="confirmPassword"
-              placeholder="Confirm Password"
-              className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white outline-none focus:border-blue-500 transition-all placeholder:text-slate-700 font-mono"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] text-white flex items-center justify-center gap-2 transition-all shadow-xl shadow-blue-600/20"
-          >
-            {loading ? (
-              <><RefreshCw className="animate-spin" size={18} /> Activating Node...</>
-            ) : (
-              <>Register <ChevronRight size={16} /></>
-            )}
-          </button>
-        </form>
-
-        <div className="mt-8 text-center">
-          <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold">
-            Already registered? <Link to="/login" className="text-white hover:text-blue-400 transition-colors underline">Login</Link>
+        </div>
+        
+        <div className="mt-12 text-center">
+          <p className="text-[9px] text-white/20 uppercase tracking-[0.4em] font-bold">
+            Asset Security Directive v8.4.1
           </p>
         </div>
       </div>

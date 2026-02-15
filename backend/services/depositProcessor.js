@@ -1,56 +1,66 @@
-import mongoose from 'mongoose';
-import Deposit from '../models/Deposit.js';
-import { creditUser } from './ledgerService.js';
-
-const CONFIRMATIONS_REQUIRED = 3;
+import User from '../models/User.js';
+import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * Confirm a BTC deposit and credit the user atomically.
- * @param {string} depositId - ID of the deposit to confirm
+ * 💰 PROCESS DEPOSIT
+ * Atomically credits a user's account and updates the ledger.
  */
-export async function confirmDeposit(depositId) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
+export async function processBtcDeposit(userId, amount, txid, session = null) {
   try {
-    const deposit = await Deposit.findById(depositId).session(session);
+    // 1. Fetch user (excluding system counter)
+    // We use the provided session to ensure this is part of the atomic transaction
+    const user = await User.findOne({ 
+      _id: userId, 
+      isCounter: { $ne: true } 
+    }).session(session);
 
-    if (!deposit) throw new Error('Deposit not found');
+    if (!user) throw new Error('User not found in Trustra database');
 
-    // Already confirmed, nothing to do
-    if (deposit.status === 'confirmed') {
-      await session.commitTransaction();
-      return;
+    // 2. Prevent Duplicate Processing
+    // Check user's ledger for this specific TXID to avoid double-crediting
+    const alreadyProcessed = user.ledger.some(entry => entry.description.includes(txid));
+    if (alreadyProcessed) {
+      console.log(`⚠️ TXID ${txid} already processed for user ${userId}`);
+      return { success: false, message: 'Transaction already credited' };
     }
 
-    // Not enough confirmations yet
-    if (deposit.confirmations < CONFIRMATIONS_REQUIRED) {
-      deposit.status = 'confirming';
-      await deposit.save({ session });
-      await session.commitTransaction();
-      return;
-    }
+    // 3. Update Balance (Handling Mongoose Map)
+    // You MUST use .get() and .set() for Mongoose Maps to trigger change tracking
+    const currentBtcBalance = user.balances.get('BTC') || 0;
+    const newBtcBalance = currentBtcBalance + amount;
+    user.balances.set('BTC', newBtcBalance);
 
-    // Enough confirmations — mark confirmed and credit user
-    deposit.status = 'confirmed';
-    await deposit.save({ session });
-
-    await creditUser({
-      userId: deposit.user,
-      amount: deposit.amountSat, // satoshis
+    // 4. Create Ledger Entry
+    user.ledger.push({
+      amount: amount,
       currency: 'BTC',
-      source: 'deposit',
-      referenceId: deposit._id,
-      description: 'BTC deposit confirmed',
-      session, // ensures atomicity
+      type: 'deposit',
+      status: 'completed',
+      description: `Bitcoin Deposit Confirmed | TXID: ${txid}`,
+      createdAt: new Date()
     });
 
-    await session.commitTransaction();
+    // 5. Save User (with session if provided)
+    // This triggers the pre-save hooks in User.js (e.g., ROI Engine sync)
+    await user.save({ session });
+
+    // 6. Real-time Notification
+    // Access the Socket.io instance attached to the app
+    const io = user.constructor.model('User').db.base.models.User.socketio;
+    if (io) {
+      io.to(userId.toString()).emit('balance_update', {
+        currency: 'BTC',
+        newBalance: newBtcBalance,
+        message: `Successfully credited ${amount} BTC`
+      });
+    }
+
+    console.log(`✅ Credited ${amount} BTC to User ${userId} [TX: ${txid}]`);
+    return { success: true, newBalance: newBtcBalance };
+
   } catch (err) {
-    await session.abortTransaction();
-    console.error('Error confirming deposit:', err);
-    throw err;
-  } finally {
-    session.endSession();
+    console.error(`[DEPOSIT_PROCESSOR_ERROR] ${txid}:`, err.message);
+    throw new ApiError(500, 'Failed to credit user deposit');
   }
 }
+

@@ -1,4 +1,3 @@
-
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import User from '../models/User.js';
@@ -11,6 +10,7 @@ export const protect = async (req, res, next) => {
   try {
     let token;
 
+    // 1. Extract Token
     if (req.headers.authorization?.startsWith("Bearer ")) {
       token = req.headers.authorization.split(" ")[1];
     }
@@ -22,10 +22,10 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // Verify token
+    // 2. Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Validate payload
+    // 3. Validate payload
     if (!decoded?.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
       return res.status(401).json({
         success: false,
@@ -33,8 +33,12 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    // Fetch user from DB
-    const user = await User.findById(decoded.id).select("-password");
+    // 4. Fetch user and EXCLUDE the system counter document
+    const user = await User.findOne({ 
+      _id: decoded.id, 
+      isCounter: { $ne: true } // Ensures system documents aren't treated as users
+    }).select("-password");
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -42,6 +46,7 @@ export const protect = async (req, res, next) => {
       });
     }
 
+    // 5. Check account status
     if (user.banned || !user.isActive) {
       return res.status(403).json({
         success: false,
@@ -49,13 +54,20 @@ export const protect = async (req, res, next) => {
       });
     }
 
-    req.user = user; // Attach user to request
+    // 6. Attach user to request
+    req.user = user; 
     next();
   } catch (error) {
     console.error("AUTH MIDDLEWARE ERROR:", error.message);
+    
+    // Explicit feedback for expired sessions
+    const message = error.name === 'TokenExpiredError' 
+      ? "Session expired. Please login again." 
+      : "Invalid or expired token";
+
     return res.status(401).json({
       success: false,
-      message: "Invalid or expired token",
+      message,
     });
   }
 };
@@ -65,7 +77,8 @@ export const protect = async (req, res, next) => {
  * Restrict access to users with admin role
  */
 export const adminOnly = (req, res, next) => {
-  if (req.user?.role === 'admin') {
+  // Check both 'role' string and the 'isAdmin' boolean we synced in the model
+  if (req.user?.role === 'admin' || req.user?.isAdmin) {
     return next();
   }
 
@@ -77,7 +90,6 @@ export const adminOnly = (req, res, next) => {
 
 /**
  * 🛡️ AUTHORIZE FLEXIBLE ROLES
- * Accepts multiple roles for granular permission control
  */
 export const authorize = (...roles) => {
   return (req, res, next) => {
@@ -90,3 +102,4 @@ export const authorize = (...roles) => {
     next();
   };
 };
+
