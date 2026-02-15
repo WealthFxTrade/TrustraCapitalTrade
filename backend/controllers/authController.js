@@ -1,120 +1,90 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs'; // Better for Termux than 'bcrypt'
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * @desc    Generate JWT Token
- */
-const generateToken = (id, isAdmin) => {
-  return jwt.sign(
-    { id, isAdmin }, 
-    process.env.JWT_SECRET || 'rio_2026_secret_key', 
-    { expiresIn: '30d' }
-  );
-};
-
-/**
- * @desc    Login User & Get Token
- * @route   POST /api/auth/login
+ * 🔵 LOGIN USER (Fintech-Grade Secure Node Handshake)
  */
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Validation
+    // 1️⃣ Basic Input Validation
     if (!email || !password) {
       throw new ApiError(400, 'Please provide email and password');
     }
 
-    // 2. Find User (Include password field which is hidden by default in Schema)
-    const user = await User.findOne({ 
-      email: email.toLowerCase().trim() 
+    const emailLower = email.toLowerCase().trim();
+
+    // 2️⃣ Find User (Exclude System Counter Documents)
+    const user = await User.findOne({
+      email: emailLower,
+      isCounter: { $ne: true }
     }).select('+password');
 
+    // 3️⃣ Timing Normalization to Prevent Enumeration
     if (!user) {
-      // 🔒 Generic message to prevent user enumeration
+      await new Promise(r => setTimeout(r, 300));
       throw new ApiError(401, 'Invalid credentials');
     }
 
-    // 3. Verify Password using the method in your User model
+    // 4️⃣ Check Banned / Inactive
+    if (user.banned || user.isActive === false) {
+      throw new ApiError(403, 'Account suspended. Contact Trustra Support.');
+    }
+
+    // 5️⃣ Brute-Force Lock Check
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+      const remaining = Math.ceil((user.lockUntil - Date.now()) / 60000);
+      throw new ApiError(403, `Account locked. Retry in ${remaining} minutes.`);
+    }
+
+    // 6️⃣ Verify Password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+
+      if (user.failedLoginAttempts >= 5) {
+        user.lockUntil = Date.now() + 15 * 60 * 1000; // 15-minute lock
+      }
+
+      await user.save({ validateBeforeSave: false });
       throw new ApiError(401, 'Invalid credentials');
     }
 
-    // 4. Update last login (optional but recommended for Admin Audit)
+    // 7️⃣ Reset Security Flags on Successful Login
+    user.failedLoginAttempts = 0;
+    user.lockUntil = undefined;
     user.lastLogin = Date.now();
+
     await user.save({ validateBeforeSave: false });
 
-    // 5. Send Success Response
+    // 8️⃣ JWT Token Generation
+    if (!process.env.JWT_SECRET) {
+      throw new Error('SECURE_VAULT_ERROR: JWT_SECRET missing');
+    }
+
+    const token = jwt.sign(
+      { id: user._id, role: user.role }, // Compatible with middleware
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+    );
+
+    // 9️⃣ Return Normalized User Response
     res.status(200).json({
       success: true,
-      token: generateToken(user._id, user.isAdmin),
+      token,
       user: {
         id: user._id,
+        fullName: user.fullName,
         email: user.email,
-        isAdmin: user.isAdmin,
         role: user.role,
-        name: user.name
+        isAdmin: user.isAdmin,
+        btcAddress: user.btcAddress || null,
+        balances: Object.fromEntries(user.balances || new Map())
       }
     });
 
-  } catch (err) {
-    next(err); // Handled by global error middleware
-  }
-};
-
-/**
- * @desc    Register New User
- * @route   POST /api/auth/register
- */
-export const register = async (req, res, next) => {
-  try {
-    const { name, email, password } = req.body;
-
-    // 1. Check if user already exists
-    const userExists = await User.findOne({ email: email.toLowerCase() });
-    if (userExists) {
-      throw new ApiError(400, 'User with this email already exists');
-    }
-
-    // 2. Create User (password hashing is handled by pre-save in User.js)
-    const user = await User.create({
-      name,
-      email: email.toLowerCase().trim(),
-      password,
-    });
-
-    if (user) {
-      res.status(201).json({
-        success: true,
-        token: generateToken(user._id, user.isAdmin),
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          isAdmin: user.isAdmin
-        }
-      });
-    }
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
- * @desc    Get Current Logged-in User Profile
- * @route   GET /api/auth/profile
- * @access  Private
- */
-export const getProfile = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      throw new ApiError(404, 'User not found');
-    }
-    res.status(200).json({ success: true, user });
   } catch (err) {
     next(err);
   }
