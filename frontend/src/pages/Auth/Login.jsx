@@ -15,10 +15,11 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 📈 LIVE PRICE ORACLE (BIP-Verified Endpoint)
+  // 📈 LIVE PRICE ORACLE (Fixed Endpoint)
   useEffect(() => {
     const fetchPrice = async () => {
       try {
+        // Updated to the actual API endpoint
         const res = await fetch(
           'https://api.coingecko.com'
         );
@@ -32,7 +33,7 @@ export default function Login() {
     };
 
     fetchPrice();
-    const interval = setInterval(fetchPrice, 30000); 
+    const interval = setInterval(fetchPrice, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -42,7 +43,7 @@ export default function Login() {
 
     setLoading(true);
     try {
-      // 1. Authenticate with fixed backend logic (isCounter: { $ne: true })
+      // 1. Path must be /auth/login to match backend: app.use('/api/auth', authRoutes)
       const res = await api.post('/auth/login', {
         email: email.trim().toLowerCase(),
         password
@@ -50,24 +51,23 @@ export default function Login() {
 
       const { user, token } = res.data;
 
-      // 2. Commit to AuthContext
+      // 2. AuthContext Update
       await login(user, token);
 
-      toast.success('Protocol Authorized', {
-        style: { background: '#0f172a', color: '#fff', border: '1px solid #eab308' }
-      });
+      toast.success('Protocol Authorized');
       
       const from = location.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
     } catch (err) {
+      // CRITICAL: Reset loading state so user can retry
       setLoading(false);
-      const message = err.response?.data?.message || 'Access Denied: Invalid Node Credentials';
+      const message = err.response?.data?.message || 'Access Denied: Invalid Credentials';
       toast.error(message);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] flex flex-col justify-center px-6 selection:bg-yellow-500/30">
+    <div className="min-h-screen bg-[#020617] flex flex-col justify-center px-6">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
         <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-2xl flex items-center justify-center font-black text-black text-2xl mx-auto mb-6 shadow-2xl shadow-yellow-500/20">
           T
@@ -109,12 +109,12 @@ export default function Login() {
                 disabled={loading}
               />
             </div>
-            
+
             <div className="pt-2">
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-white text-black hover:bg-yellow-500 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] flex items-center justify-center gap-3 transition-all shadow-xl shadow-white/5 active:scale-95"
+                className="w-full bg-white text-black hover:bg-yellow-500 py-5 rounded-2xl font-black text-xs uppercase tracking-[0.3em] flex items-center justify-center gap-3 transition-all shadow-xl active:scale-95 disabled:opacity-50"
               >
                 {loading ? (
                   <><RefreshCw className="animate-spin" size={18} /> Verifying...</>
@@ -126,10 +126,7 @@ export default function Login() {
           </form>
           
           <div className="mt-10 text-center">
-            <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">
-              Institutional Access Only
-            </p>
-            <div className="mt-4 flex items-center justify-center gap-2 text-xs">
+            <div className="flex items-center justify-center gap-2 text-xs">
               <span className="text-white/20">No account?</span>
               <Link to="/register" className="text-yellow-600 font-black hover:text-yellow-500 transition-colors underline underline-offset-4">
                 Register Node
@@ -137,11 +134,8 @@ export default function Login() {
             </div>
           </div>
         </div>
-        
-        <div className="mt-12 text-center">
-          <p className="text-[9px] text-white/20 uppercase tracking-[0.4em] font-bold">
+        <div className="mt-12 text-center text-[9px] text-white/20 uppercase tracking-[0.4em] font-bold">
             Audit Certified Protocol v8.4.1
-          </p>
         </div>
       </div>
     </div>

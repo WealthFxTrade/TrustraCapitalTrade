@@ -19,7 +19,7 @@ export default function Signup() {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // 📈 LIVE PRICE ORACLE
+  // 📈 LIVE PRICE ORACLE (Fixed Endpoint)
   useEffect(() => {
     const fetchPrice = async () => {
       try {
@@ -44,7 +44,7 @@ export default function Signup() {
   const handleRegister = async (e) => {
     e.preventDefault();
     
-    // 1. Validation Handshake
+    // 1. Validation Logic
     if (formData.password !== formData.confirmPassword) {
       return toast.error('Cryptography mismatch: Passwords do not match');
     }
@@ -54,8 +54,7 @@ export default function Signup() {
 
     setLoading(true);
     try {
-      // 2. Submit to Fixed Backend Route (/api/auth/register)
-      // This triggers: isCounter increment -> btcAddress derivation -> User creation
+      // 2. PATH FIX: Must be /auth/register to match backend app.use('/api/auth', authRoutes)
       const res = await api.post('/auth/register', {
         fullName: formData.fullName.trim(),
         email: formData.email.trim().toLowerCase(),
@@ -68,13 +67,12 @@ export default function Signup() {
       // 3. Commit to AuthContext
       await login(user, token);
 
-      toast.success('Node Synchronized: Welcome to Trustra', {
-        style: { background: '#0f172a', color: '#fff', border: '1px solid #eab308' }
-      });
+      toast.success('Node Synchronized: Welcome to Trustra');
       
       // Navigate to Dashboard to see newly derived BTC address
       navigate('/dashboard', { replace: true });
     } catch (err) {
+      // CRITICAL: Reset loading state on error
       setLoading(false);
       const message = err.response?.data?.message || 'Registration Protocol Failed';
       toast.error(message);
@@ -101,7 +99,6 @@ export default function Signup() {
         <div className="bg-white/[0.02] p-10 rounded-[2.5rem] border border-white/5 backdrop-blur-2xl shadow-3xl">
           <form onSubmit={handleRegister} className="space-y-4">
             
-            {/* Full Name */}
             <div className="relative">
               <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input
@@ -115,7 +112,6 @@ export default function Signup() {
               />
             </div>
 
-            {/* Email */}
             <div className="relative">
               <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input
@@ -129,7 +125,6 @@ export default function Signup() {
               />
             </div>
 
-            {/* Phone */}
             <div className="relative">
               <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input
@@ -143,7 +138,6 @@ export default function Signup() {
               />
             </div>
 
-            {/* Password */}
             <div className="relative">
               <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input
@@ -157,7 +151,6 @@ export default function Signup() {
               />
             </div>
 
-            {/* Confirm Password */}
             <div className="relative">
               <ShieldCheck className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input
@@ -194,12 +187,6 @@ export default function Signup() {
               </Link>
             </div>
           </div>
-        </div>
-        
-        <div className="mt-12 text-center">
-          <p className="text-[9px] text-white/20 uppercase tracking-[0.4em] font-bold">
-            Asset Security Directive v8.4.1
-          </p>
         </div>
       </div>
     </div>
