@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { UserProvider } from './context/UserContext';
 import LoadingScreen from './components/LoadingScreen';
@@ -8,15 +8,16 @@ import AdminLayout from './layouts/AdminLayout';
 import { publicRoutes, protectedRoutes, adminRoutes } from './routes';
 
 export default function App() {
-  const { initialized, user } = useAuth();
+  const { initialized, user, loading } = useAuth();
+  const location = useLocation();
 
-  // 1. Initial Handshake with Backend
-  if (!initialized) {
+  // 1. BLOCKING INITIALIZATION: 
+  // Stay on the loading screen until AuthProvider finishes its profile check/refresh logic.
+  if (!initialized || loading) {
     return <LoadingScreen message="Securing Trustra Node..." />;
   }
 
-  // 2. Global Ban Check
-  // If user is banned, force them to Login regardless of where they try to go
+  // 2. GLOBAL SECURITY: Banned User Check
   if (user?.banned) {
     return (
       <Routes>
@@ -24,6 +25,8 @@ export default function App() {
       </Routes>
     );
   }
+
+  const isAdmin = user?.isAdmin || user?.role === 'admin';
 
   return (
     <Routes>
@@ -33,6 +36,7 @@ export default function App() {
           key={r.path}
           path={r.path}
           element={
+            // If logged in, don't let them go back to login/register
             user && (r.path === '/login' || r.path === '/register')
               ? <Navigate to="/dashboard" replace />
               : r.element
@@ -41,7 +45,6 @@ export default function App() {
       ))}
 
       {/* ─── USER PROTECTED ROUTES ─── */}
-      {/* UserProvider handles the real-time balance/ROI sync fixed in backend */}
       <Route
         element={
           user ? (
@@ -49,7 +52,8 @@ export default function App() {
               <ProtectedLayout />
             </UserProvider>
           ) : (
-            <Navigate to="/login" replace />
+            // Crucial: Pass 'from' state so login knows where to return the user
+            <Navigate to="/login" state={{ from: location }} replace />
           )
         }
       >
@@ -59,10 +63,9 @@ export default function App() {
       </Route>
 
       {/* ─── ADMIN PROTECTED ROUTES ─── */}
-      {/* Checks the fixed isAdmin boolean from our User.js model */}
       <Route
         element={
-          user?.isAdmin || user?.role === 'admin' ? (
+          isAdmin ? (
             <AdminLayout />
           ) : (
             <Navigate to="/dashboard" replace />

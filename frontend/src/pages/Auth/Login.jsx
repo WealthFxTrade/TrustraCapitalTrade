@@ -30,7 +30,7 @@ export default function Login() {
     };
 
     fetchPrice();
-    const interval = setInterval(fetchPrice, 30000); // Refresh every 30s
+    const interval = setInterval(fetchPrice, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -47,12 +47,25 @@ export default function Login() {
       });
 
       const { user, token } = res.data;
+
+      // 1. Update Global Auth State
       await login(user, token);
 
+      // 2. Success Feedback
       toast.success('Access Granted');
-      const from = location.state?.from?.pathname || '/dashboard';
-      navigate(from, { replace: true });
+
+      // 3. Strategic Redirection
+      // We grab the path the user was TRYING to reach (e.g., /dashboard/withdraw)
+      const destination = location.state?.from?.pathname || '/dashboard';
+      
+      // Small timeout ensures the AuthProvider's Reducer has finished 
+      // flipping 'initialized' to true before the Router hits the Guard.
+      setTimeout(() => {
+        navigate(destination, { replace: true });
+      }, 100);
+
     } catch (err) {
+      console.error("Login Error:", err);
       const message = err.response?.data?.message || 'Invalid Credentials';
       toast.error(message);
     } finally {
@@ -62,6 +75,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-[#020617] flex flex-col justify-center px-6">
+      {/* ... (Keep your existing UI JSX exactly as is) ... */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
         <div className="w-16 h-16 bg-yellow-600 rounded-2xl flex items-center justify-center font-black text-black text-2xl mx-auto mb-6 shadow-xl shadow-yellow-500/20">
           T
@@ -137,3 +151,4 @@ export default function Login() {
     </div>
   );
 }
+

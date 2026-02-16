@@ -3,15 +3,13 @@ import api, { setAccessToken } from '../api/api';
 
 const AuthContext = createContext(null);
 
-// 🔹 Initial State
 const initialState = {
   user: null,
   token: localStorage.getItem('token') || null,
   loading: true,
-  initialized: false,
+  initialized: false, // 🔑 The "Shield" against early redirects
 };
 
-// 🔹 Reducer
 function authReducer(state, action) {
   switch (action.type) {
     case 'LOGIN':
@@ -22,8 +20,8 @@ function authReducer(state, action) {
         loading: false,
         initialized: true,
       };
-    case 'LOGOUT':
     case 'AUTH_FAILED':
+    case 'LOGOUT':
       return {
         ...state,
         user: null,
@@ -31,61 +29,70 @@ function authReducer(state, action) {
         loading: false,
         initialized: true,
       };
-    case 'SET_LOADING':
-      return { ...state, loading: action.payload };
     default:
       return state;
   }
 }
 
-// 🔹 Provider
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  // 🌟 Initialize Auth on mount
-  useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setAccessToken(null);
-        return dispatch({ type: 'AUTH_FAILED' });
-      }
+  const initAuth = useCallback(async () => {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      setAccessToken(null);
+      return dispatch({ type: 'AUTH_FAILED' });
+    }
 
-      setAccessToken(token);
-      try {
-        // Endpoint returning the current user
-        const res = await api.get('/auth/profile'); 
-        const userData = res.data.user || res.data;
-        dispatch({ type: 'LOGIN', payload: { user: userData, token } });
-      } catch (err) {
-        console.error('Auth initialization failed:', err);
+    // Set token immediately so the first request has it
+    setAccessToken(token);
+
+    try {
+      /** 
+       * 💡 NOTE: Your api.jsx interceptor will handle token refresh 
+       * automatically if this call returns a 401. 
+       */
+      const res = await api.get('/auth/profile');
+      const userData = res.data.user || res.data;
+      
+      // Get the LATEST token (in case the interceptor refreshed it during the call)
+      const currentToken = localStorage.getItem('token');
+      
+      dispatch({ type: 'LOGIN', payload: { user: userData, token: currentToken } });
+    } catch (err) {
+      console.error('Auth initialization failed:', err);
+      // Only clear if it's a genuine auth error, not a network timeout
+      if (err.response?.status === 401 || err.response?.status === 403) {
         localStorage.removeItem('token');
         setAccessToken(null);
-        dispatch({ type: 'AUTH_FAILED' });
       }
-    };
-
-    initAuth();
+      dispatch({ type: 'AUTH_FAILED' });
+    }
   }, []);
 
-  // 🔑 Login function
-  const login = useCallback(async (user, token) => {
+  useEffect(() => {
+    initAuth();
+  }, [initAuth]);
+
+  const login = useCallback((user, token) => {
     localStorage.setItem('token', token);
     setAccessToken(token);
     dispatch({ type: 'LOGIN', payload: { user, token } });
   }, []);
 
-  // 🔒 Logout function
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     setAccessToken(null);
     dispatch({ type: 'LOGOUT' });
-    window.location.href = '/login';
+    // Use replace to prevent "back button" returning to dashboard
+    window.location.replace('/login');
   }, []);
 
   return (
     <AuthContext.Provider value={{ ...state, login, logout }}>
-      {state.loading ? (
+      {/* 🛡️ Critical: Do not render children until initialization is complete */}
+      {!state.initialized ? (
         <div className="flex items-center justify-center min-h-screen bg-[#020617]">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-500"></div>
         </div>
@@ -96,5 +103,5 @@ export function AuthProvider({ children }) {
   );
 }
 
-// 🔗 Hook to use auth anywhere
 export const useAuth = () => useContext(AuthContext);
+
