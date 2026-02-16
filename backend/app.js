@@ -1,3 +1,4 @@
+// backend/app.js
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -6,7 +7,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { notFound, errorHandler } from './middleware/error.js';
 
-// Route Imports
+// ─── Route Imports ───
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/userRoutes.js';
 import planRoutes from './routes/plan.js';
@@ -19,13 +20,13 @@ import investmentRoutes from './routes/investmentRoutes.js';
 import reviewRoutes from './routes/reviews.js';
 import bitcoinRoutes from './routes/bitcoin.js';
 
-// Background Workers
+// ─── Background Workers ───
 import './workers/depositScanner.js';
 import './cron/profitJob.js';
 
 const app = express();
 
-// ─── SECURITY & CSP ───
+// ─── SECURITY HEADERS ───
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -47,35 +48,30 @@ app.use(
   })
 );
 
-// ─── FULLY CORRECTED CORS ───
+// ─── CORS CONFIGURATION ───
 const allowedOrigins = [
-  'https://trustra-capital-trade.vercel.app',
-  'http://localhost:5173',
+  'https://trustra-capital-trade.vercel.app', // production frontend
+  'http://localhost:5173',                     // local dev
   'https://trustracapitaltrade-backend.onrender.com'
 ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests with no origin (like mobile apps or curl)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) === -1) {
-        return callback(new Error('CORS blocked: Origin not allowed'), false);
-      }
-      return callback(null, true);
-    },
-    credentials: true, // Required for Refresh Token Cookies
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
-  })
-);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true); // mobile apps / curl
+    if (!allowedOrigins.includes(origin)) return callback(new Error('CORS blocked: Origin not allowed'), false);
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+}));
 
 // Handle pre-flight for all routes
 app.options('*', cors());
 
 // ─── RATE LIMITING ───
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500,
   message: { success: false, message: 'Node Traffic High: Try again in 15 mins.' }
 });
@@ -97,8 +93,7 @@ app.get('/', (req, res) =>
   })
 );
 
-// ─── ROUTE MAPPING ───
-// These prefixes must match your frontend api.jsx calls exactly
+// ─── API ROUTES ───
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/plans', planRoutes);
