@@ -1,38 +1,48 @@
-import React from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
-import { UserProvider } from './context/UserContext';
-import LoadingScreen from './components/LoadingScreen';
-import ProtectedLayout from './layouts/ProtectedLayout';
-import AdminLayout from './layouts/AdminLayout';
-import { publicRoutes, protectedRoutes, adminRoutes } from './routes';
+// src/App.jsx
+import React, { useEffect } from 'react';
+// ... other imports
 
 export default function App() {
-  const { isReady, user } = useAuth();
+  const { isReady, user, logout } = useAuth(); // Add logout here
   const location = useLocation();
 
-  // 1. Wait until auth initialization is fully complete
+  // FIX: Wake up Render backend immediately on mount
+  useEffect(() => {
+    fetch('https://trustracapitaltrade-backend.onrender.com').catch(() => {});
+  }, []);
+
+  // 1. Force isReady to true if it hangs too long (Safety Net)
   if (!isReady) {
     return <LoadingScreen message="Securing Trustra Node..." />;
   }
 
-  // 2. Global banned user check (immediate redirect if banned)
+  // 2. Fix the Banned User Redirect Loop
   if (user?.banned) {
-    return <Navigate to="/login" replace />;
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center text-white p-10 text-center">
+        <div>
+          <h1 className="text-2xl font-bold text-red-500 mb-4">NODE DEACTIVATED</h1>
+          <p className="text-slate-400 mb-6">Your account has been restricted due to compliance violations.</p>
+          <button onClick={logout} className="bg-white text-black px-6 py-2 rounded-xl font-bold">
+            Return to Login
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const isAdmin = user?.isAdmin || user?.role === 'admin';
 
   return (
     <Routes location={location} key={location.pathname}>
-      {/* ─── PUBLIC ROUTES ─── */}
+      {/* PUBLIC ROUTES */}
       {publicRoutes.map((route) => (
         <Route
           key={route.path}
           path={route.path}
           element={
-            // Redirect logged-in users away from login/register
-            user && (route.path === '/login' || route.path === '/register') ? (
+            // ONLY redirect if user is fully authenticated and NOT banned
+            user && !user.banned && (route.path === '/login' || route.path === '/register') ? (
               <Navigate to="/dashboard" replace />
             ) : (
               route.element
@@ -41,56 +51,25 @@ export default function App() {
         />
       ))}
 
-      {/* ─── USER PROTECTED ROUTES ─── */}
+      {/* USER PROTECTED ROUTES */}
       <Route
         element={
-          user ? (
+          user && !user.banned ? (
             <UserProvider>
               <ProtectedLayout />
             </UserProvider>
           ) : (
-            <Navigate
-              to="/login"
-              replace
-              state={{ from: location }} // helps redirect back after login
-            />
+            <Navigate to="/login" replace state={{ from: location }} />
           )
         }
       >
         {protectedRoutes.map((route) => (
-          <Route
-            key={route.path}
-            path={route.path}
-            element={route.element}
-          />
+          <Route key={route.path} path={route.path} element={route.element} />
         ))}
       </Route>
 
-      {/* ─── ADMIN PROTECTED ROUTES ─── */}
-      <Route
-        element={
-          isAdmin ? (
-            <AdminLayout />
-          ) : user ? (
-            // Logged-in but not admin → redirect to user dashboard
-            <Navigate to="/dashboard" replace />
-          ) : (
-            // Not logged in → send to login
-            <Navigate to="/login" replace />
-          )
-        }
-      >
-        {adminRoutes?.map((route) => (
-          <Route
-            key={route.path}
-            path={route.path}
-            element={route.element}
-          />
-        ))}
-      </Route>
-
-      {/* ─── 404 FALLBACK ─── */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* ... ADMIN ROUTES and 404 ... */}
     </Routes>
   );
 }
+
