@@ -1,76 +1,89 @@
-import React, { createContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useState, useEffect, useCallback, useContext } from "react";
 import api from "../api/api";
-import { useAuth } from "./AuthContext";
 
-export const UserContext = createContext();
+// Create context
+export const UserContext = createContext(null);
+
+// Custom hook to consume the context (this is what components use)
+export const useUser = () => {
+  const context = useContext(UserContext);
+  if (!context) {
+    throw new Error("useUser must be used within a UserProvider");
+  }
+  return context;
+};
 
 export const UserProvider = ({ children }) => {
-  const { token, isAuthenticated } = useAuth();
-  
-  // 🛠️ FIX 1: Initialize stats with 0 values to prevent "undefined" crashes
   const [stats, setStats] = useState({
     mainBalance: 0,
     profit: 0,
     activeNodes: 0,
     dailyROI: 0,
-    activePlan: "None"
+    activePlan: "None",
   });
-  
+
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetchStats = useCallback(async () => {
-    // Only fetch if authenticated and token exists
-    if (!token || !isAuthenticated) {
-      setLoading(false);
-      return;
-    }
+    setLoading(true);
+    setError(null);
 
     try {
-      // 🛠️ FIX 2: Added a timeout or check to ensure we don't hang
       const res = await api.get("/user/dashboard");
 
-      if (res.data && res.data.success) {
-        // Handle Mongoose Map conversion if necessary
+      if (res.data?.success) {
         const rawStats = res.data.stats || {};
-        
+
         setStats({
-          mainBalance: Number(rawStats.mainBalance || 0),
-          profit: Number(rawStats.profit || 0),
-          activeNodes: Number(rawStats.activeNodes || 0),
-          dailyROI: Number(rawStats.dailyROI || 0),
-          activePlan: rawStats.activePlan || "None"
+          mainBalance: Number(rawStats.mainBalance ?? 0),
+          profit: Number(rawStats.profit ?? 0),
+          activeNodes: Number(rawStats.activeNodes ?? 0),
+          dailyROI: Number(rawStats.dailyROI ?? 0),
+          activePlan: rawStats.activePlan ?? "None",
         });
-        
+
         setTransactions(res.data.transactions || []);
+      } else {
+        throw new Error(res.data?.message || "Invalid response format");
       }
     } catch (err) {
-      console.error("❌ UserContext Sync Error:", err.message);
-      // Stay with previous stats or 0s rather than null
+      console.error("❌ UserContext fetchStats failed:", err.message);
+      setError(err.message || "Failed to load dashboard data");
+      // Keep previous stats instead of resetting to zero
     } finally {
       setLoading(false);
     }
-  }, [token, isAuthenticated]);
+  }, []); // No deps needed – called only on mount or manual trigger
 
   useEffect(() => {
-    if (isAuthenticated) {
+    // Only fetch if we have a token (auth guard)
+    const token = localStorage.getItem("token");
+    if (token) {
       fetchStats();
+
+      // Optional: poll every 60 seconds
       const interval = setInterval(fetchStats, 60000);
+
       return () => clearInterval(interval);
     } else {
       setLoading(false);
+      setError("No authentication token found");
     }
-  }, [fetchStats, isAuthenticated]);
+  }, [fetchStats]);
 
   return (
-    <UserContext.Provider value={{ 
-      stats, 
-      transactions, 
-      loading, 
-      fetchStats 
-    }}>
+    <UserContext.Provider
+      value={{
+        stats,
+        transactions,
+        loading,
+        error,
+        fetchStats,          // Allow manual refresh from components
+      }}
+    >
       {children}
     </UserContext.Provider>
   );
 };
-

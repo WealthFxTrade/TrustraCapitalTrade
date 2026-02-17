@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
+// src/context/AuthContext.jsx
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useCallback,
+} from 'react';
 import api, { setAccessToken } from '../api/api';
 
 const AuthContext = createContext(null);
@@ -7,7 +14,8 @@ const initialState = {
   user: null,
   token: localStorage.getItem('token') || null,
   loading: true,
-  initialized: false, // 🔑 The "Shield" against early redirects
+  initialized: false,
+  error: null,
 };
 
 function authReducer(state, action) {
@@ -19,8 +27,17 @@ function authReducer(state, action) {
         token: action.payload.token,
         loading: false,
         initialized: true,
+        error: null,
       };
     case 'AUTH_FAILED':
+      return {
+        ...state,
+        user: null,
+        token: null,
+        loading: false,
+        initialized: true,
+        error: action.payload?.message || 'Authentication failed',
+      };
     case 'LOGOUT':
       return {
         ...state,
@@ -28,6 +45,7 @@ function authReducer(state, action) {
         token: null,
         loading: false,
         initialized: true,
+        error: null,
       };
     default:
       return state;
@@ -38,36 +56,43 @@ export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   const initAuth = useCallback(async () => {
-    const token = localStorage.getItem('token');
-    
-    if (!token) {
+    const storedToken = localStorage.getItem('token');
+
+    if (!storedToken) {
       setAccessToken(null);
-      return dispatch({ type: 'AUTH_FAILED' });
+      dispatch({ type: 'AUTH_FAILED', payload: { message: 'No token found' } });
+      return;
     }
 
-    // Set token immediately so the first request has it
-    setAccessToken(token);
+    setAccessToken(storedToken);
 
     try {
-      /** 
-       * 💡 NOTE: Your api.jsx interceptor will handle token refresh 
-       * automatically if this call returns a 401. 
-       */
       const res = await api.get('/auth/profile');
       const userData = res.data.user || res.data;
-      
-      // Get the LATEST token (in case the interceptor refreshed it during the call)
       const currentToken = localStorage.getItem('token');
-      
-      dispatch({ type: 'LOGIN', payload: { user: userData, token: currentToken } });
+
+      dispatch({
+        type: 'LOGIN',
+        payload: { user: userData, token: currentToken },
+      });
     } catch (err) {
-      console.error('Auth initialization failed:', err);
-      // Only clear if it's a genuine auth error, not a network timeout
-      if (err.response?.status === 401 || err.response?.status === 403) {
+      console.error('[Auth] Initialization failed:', err);
+
+      const status = err.response?.status;
+
+      if (status === 401 || status === 403) {
         localStorage.removeItem('token');
         setAccessToken(null);
+        dispatch({
+          type: 'AUTH_FAILED',
+          payload: { message: 'Session expired or invalid credentials' },
+        });
+      } else {
+        dispatch({
+          type: 'AUTH_FAILED',
+          payload: { message: 'Network or server error during auth check' },
+        });
       }
-      dispatch({ type: 'AUTH_FAILED' });
     }
   }, []);
 
@@ -76,25 +101,36 @@ export function AuthProvider({ children }) {
   }, [initAuth]);
 
   const login = useCallback((user, token) => {
+    if (!token) return;
+
     localStorage.setItem('token', token);
     setAccessToken(token);
-    dispatch({ type: 'LOGIN', payload: { user, token } });
+    dispatch({
+      type: 'LOGIN',
+      payload: { user, token },
+    });
   }, []);
 
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     setAccessToken(null);
     dispatch({ type: 'LOGOUT' });
-    // Use replace to prevent "back button" returning to dashboard
-    window.location.replace('/login');
+
+    // Prefer navigate if router is available in your app
+    // For now, use replace to prevent back-button issues
+    setTimeout(() => {
+      window.location.replace('/login');
+    }, 0);
   }, []);
 
+  const isReady = state.initialized && !state.loading;
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
-      {/* 🛡️ Critical: Do not render children until initialization is complete */}
-      {!state.initialized ? (
-        <div className="flex items-center justify-center min-h-screen bg-[#020617]">
+    <AuthContext.Provider value={{ ...state, login, logout, isReady }}>
+      {!isReady ? (
+        <div className="flex min-h-screen items-center justify-center bg-[#020617]">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-500"></div>
+          <p className="ml-4 text-slate-300">Securing session...</p>
         </div>
       ) : (
         children
@@ -103,5 +139,11 @@ export function AuthProvider({ children }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
-
+// Missing hook – this fixes the build error in DashboardHeader and others
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

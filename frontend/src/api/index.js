@@ -1,4 +1,6 @@
-import api from './apiService';
+// src/api/index.js
+// Central API export point – re-exports the unified, safe api instance
+import api from './api';  // ← points to api.jsx (the good one)
 
 /**
  * TRUSTRA CAPITAL - CORE API (2026 PRODUCTION)
@@ -20,10 +22,7 @@ export const generateAddress = (asset) => api.post(`/wallet/generate/${asset}`);
 export const getDepositAddress = (asset) => api.get(`/wallet/address/${asset}`);
 export const withdrawFunds = (data) => api.post('/transactions/withdraw', data);
 
-/** 
- * KYC Submission - Required by src/pages/KYC.jsx
- * Target: https://trustracapitaltrade-backend.onrender.com
- */
+// ─── KYC SUBMISSION ───
 export const submitKyc = (data) => api.post('/user/kyc', data);
 
 // ─── ADMIN OPERATIONS ───
@@ -32,7 +31,7 @@ export const adminKyc = () => api.get('/admin/kyc');
 export const adminApproveKyc = (userId) => api.post(`/admin/verify/${userId}`);
 export const adminUpdateBalance = (data) => api.post('/admin/users/update-balance', data);
 
-// Default export for "import api from '@/api'" usage
+// Default export (for "import api from '@/api'" style usage)
 export default {
   login,
   register,
@@ -47,6 +46,5 @@ export default {
   adminStats,
   adminKyc,
   adminApproveKyc,
-  adminUpdateBalance
+  adminUpdateBalance,
 };
-

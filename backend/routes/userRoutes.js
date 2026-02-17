@@ -1,52 +1,51 @@
+// routes/userRoutes.js
 import express from 'express';
 import {
-  getUserProfile,
-  updateUserProfile,
   getUserDashboard,
-  getUserLedger,
   getUserBalances,
+  getUserLedger,
+  updateUserProfile,
   approveDeposit,
   getUsers,
-  getUserById,
-  updateUser,
-  deleteUser,
   updateUserBalance,
   banUser,
   unbanUser,
-  verifyUserEmail,
-  resendVerificationEmail,
+  // getUserById,          // ← add this once you implement it in controller
+  // deleteUser,           // ← add this once implemented
+  // verifyUserEmail,
+  // resendVerificationEmail,
 } from '../controllers/userController.js';
 
 import { protect, admin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// ────────────── USER ROUTES ──────────────
+// ────────────── USER ROUTES (authenticated users only) ──────────────
 router.get('/dashboard', protect, getUserDashboard);
 
 router.route('/me')
-  .get(protect, getUserProfile)
+  .get(protect, getUserDashboard)      // use dashboard as profile for now
   .put(protect, updateUserProfile);
 
 router.get('/balance', protect, getUserBalances);
 router.get('/transactions', protect, getUserLedger);
 
-// Verification
-router.post('/verify/resend', protect, resendVerificationEmail);
-router.get('/verify/:token', verifyUserEmail);
+// Verification routes (if you implement them later)
+// router.post('/verify/resend', protect, resendVerificationEmail);
+// router.get('/verify/:token', verifyUserEmail);
 
-// ────────────── ADMIN ROUTES ──────────────
+// ────────────── ADMIN ROUTES (admin only) ──────────────
 router.post('/approve-deposit', protect, admin, approveDeposit);
 
 router.route('/')
   .get(protect, admin, getUsers);
 
 router.route('/:id')
-  .get(protect, admin, getUserById)
-  .put(protect, admin, updateUser)
-  .delete(protect, admin, deleteUser);
+  .get(protect, admin, getUserDashboard)   // temporary – replace with getUserById when added
+  .put(protect, admin, updateUserBalance)   // admin balance update
+  .delete(protect, admin, () => res.status(501).json({ message: 'Delete not implemented yet' })); // placeholder
 
-// Admin actions
+// Admin user actions
 router.put('/:id/balance', protect, admin, updateUserBalance);
 router.put('/:id/ban', protect, admin, banUser);
 router.put('/:id/unban', protect, admin, unbanUser);

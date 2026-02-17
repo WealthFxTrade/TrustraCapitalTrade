@@ -1,6 +1,6 @@
 // src/components/WithdrawalTab.jsx
 import { useState } from 'react';
-import { requestWithdrawal } from '../api/withdrawal.js';
+import api from '../api/api';  // ← use the single, safe API instance
 
 export default function WithdrawalTab({ balances, onSuccess }) {
   const [withdrawalData, setWithdrawalData] = useState({ asset: 'EUR', amount: '', address: '' });
@@ -12,6 +12,7 @@ export default function WithdrawalTab({ balances, onSuccess }) {
     setMessage('');
 
     const { asset, amount, address } = withdrawalData;
+
     if (!amount || !address) {
       setMessage('Amount and wallet address are required.');
       return;
@@ -24,12 +25,19 @@ export default function WithdrawalTab({ balances, onSuccess }) {
 
     try {
       setLoading(true);
-      await requestWithdrawal(asset, parseFloat(amount), address);
+      // Replaced old requestWithdrawal with direct api call
+      await api.post('/transactions/withdraw', {
+        asset,
+        amount: parseFloat(amount),
+        address,
+      });
+
       setMessage('Withdrawal requested successfully.');
       setWithdrawalData({ asset: 'EUR', amount: '', address: '' });
       onSuccess(); // refresh balances
     } catch (err) {
-      setMessage(err.response?.data?.message || 'Error requesting withdrawal.');
+      // No auto-logout or redirect – just show error
+      setMessage(err.response?.data?.message || err.message || 'Error requesting withdrawal.');
     } finally {
       setLoading(false);
     }

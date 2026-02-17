@@ -8,38 +8,35 @@ import AdminLayout from './layouts/AdminLayout';
 import { publicRoutes, protectedRoutes, adminRoutes } from './routes';
 
 export default function App() {
-  const { initialized, user, loading } = useAuth();
+  const { isReady, user } = useAuth();
   const location = useLocation();
 
-  // 1. BLOCKING INITIALIZATION: 
-  // Stay on the loading screen until AuthProvider finishes its profile check/refresh logic.
-  if (!initialized || loading) {
+  // 1. Wait until auth initialization is fully complete
+  if (!isReady) {
     return <LoadingScreen message="Securing Trustra Node..." />;
   }
 
-  // 2. GLOBAL SECURITY: Banned User Check
+  // 2. Global banned user check (immediate redirect if banned)
   if (user?.banned) {
-    return (
-      <Routes>
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    );
+    return <Navigate to="/login" replace />;
   }
 
   const isAdmin = user?.isAdmin || user?.role === 'admin';
 
   return (
-    <Routes>
+    <Routes location={location} key={location.pathname}>
       {/* ─── PUBLIC ROUTES ─── */}
-      {publicRoutes.map((r) => (
+      {publicRoutes.map((route) => (
         <Route
-          key={r.path}
-          path={r.path}
+          key={route.path}
+          path={route.path}
           element={
-            // If logged in, don't let them go back to login/register
-            user && (r.path === '/login' || r.path === '/register')
-              ? <Navigate to="/dashboard" replace />
-              : r.element
+            // Redirect logged-in users away from login/register
+            user && (route.path === '/login' || route.path === '/register') ? (
+              <Navigate to="/dashboard" replace />
+            ) : (
+              route.element
+            )
           }
         />
       ))}
@@ -52,13 +49,20 @@ export default function App() {
               <ProtectedLayout />
             </UserProvider>
           ) : (
-            // Crucial: Pass 'from' state so login knows where to return the user
-            <Navigate to="/login" state={{ from: location }} replace />
+            <Navigate
+              to="/login"
+              replace
+              state={{ from: location }} // helps redirect back after login
+            />
           )
         }
       >
-        {protectedRoutes.map((r) => (
-          <Route key={r.path} path={r.path} element={r.element} />
+        {protectedRoutes.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={route.element}
+          />
         ))}
       </Route>
 
@@ -67,19 +71,26 @@ export default function App() {
         element={
           isAdmin ? (
             <AdminLayout />
-          ) : (
+          ) : user ? (
+            // Logged-in but not admin → redirect to user dashboard
             <Navigate to="/dashboard" replace />
+          ) : (
+            // Not logged in → send to login
+            <Navigate to="/login" replace />
           )
         }
       >
-        {adminRoutes?.map((r) => (
-          <Route key={r.path} path={r.path} element={r.element} />
+        {adminRoutes?.map((route) => (
+          <Route
+            key={route.path}
+            path={route.path}
+            element={route.element}
+          />
         ))}
       </Route>
 
-      {/* ─── FALLBACK (404) ─── */}
+      {/* ─── 404 FALLBACK ─── */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
-

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRightLeft, Wallet, RefreshCw, TrendingUp, ChevronDown, ShieldCheck } from 'lucide-react';
-import api from '../api/apiService'; // Verify if your path is ../api/api or apiService
+import api from '../api/api';          // ← corrected import (points to the single safe instance)
 import toast from 'react-hot-toast';
 
 export default function WalletExchange() {
@@ -10,15 +10,16 @@ export default function WalletExchange() {
   const handleExchange = async (e) => {
     e.preventDefault();
     if (!amount || amount <= 0) return toast.error("Enter a valid amount");
-    
+
     setLoading(true);
     try {
-      // Changed to match your backend reinvest logic
+      // Using the unified, safe api instance
       await api.post('/transactions/reinvest', { amount: Number(amount) });
       toast.success("Funds Transferred to Main Wallet");
       setAmount('');
     } catch (err) {
-      toast.error(err.response?.data?.message || "Exchange Sync Failed");
+      // No auto-logout or redirect – just show toast
+      toast.error(err.response?.data?.message || err.message || "Exchange Sync Failed");
     } finally {
       setLoading(false);
     }
@@ -27,10 +28,10 @@ export default function WalletExchange() {
   return (
     <div className="min-h-screen bg-[#05070a] text-white p-6 md:p-12 flex items-center justify-center">
       <div className="w-full max-w-xl bg-[#0f1218] border border-white/5 rounded-[2.5rem] p-8 md:p-12 shadow-2xl relative overflow-hidden">
-        
+
         {/* Background Glow */}
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl" />
-        
+
         <header className="relative mb-10 text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 mb-4">
             <ShieldCheck size={12} className="text-indigo-400" />
@@ -44,7 +45,7 @@ export default function WalletExchange() {
 
         {/* --- EXCHANGE INTERFACE --- */}
         <div className="space-y-2 relative">
-          
+
           {/* From Card */}
           <div className="bg-black/40 border border-white/5 p-6 rounded-[1.5rem] group hover:border-white/10 transition-all">
             <div className="flex justify-between items-center mb-4">
@@ -96,8 +97,8 @@ export default function WalletExchange() {
             <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 font-black text-xl italic">€</div>
           </div>
 
-          <button 
-            disabled={loading} 
+          <button
+            disabled={loading}
             className="w-full bg-white text-black hover:bg-indigo-500 hover:text-white py-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] transition-all shadow-xl active:scale-95 disabled:opacity-50"
           >
             {loading ? (
@@ -117,4 +118,3 @@ export default function WalletExchange() {
     </div>
   );
 }
-

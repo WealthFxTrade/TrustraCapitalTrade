@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useContext, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { UserContext } from "../../context/UserContext";
-import api from "../../api"; // Using your fixed axios instance
+import api from "../../api";
 
 // Components
 import DashboardHeader from "../../components/DashboardHeader";
@@ -14,76 +14,90 @@ import BtcPrice from "../../components/BtcPrice";
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { stats, transactions, loading: contextLoading, fetchStats } = useContext(UserContext);
+  const { stats, transactions, loading: contextLoading, fetchStats, error: contextError } = useContext(UserContext);
+  
   const navigate = useNavigate();
   const location = useLocation();
 
   const [btcPrice, setBtcPrice] = useState(null);
+  const [btcError, setBtcError] = useState(null);
   const [autoOpenNode, setAutoOpenNode] = useState(null);
+  const [mounted, setMounted] = useState(true);
 
-  // 1. Strict Auth Guard
+  // Handle auto-open node from navigation state (one-time)
   useEffect(() => {
-    if (!user && !contextLoading) {
-      navigate("/login");
-    }
     if (location.state?.autoOpenNode) {
       setAutoOpenNode(location.state.autoOpenNode);
     }
-  }, [user, navigate, location.state, contextLoading]);
+  }, [location.state]);
 
-  // 2. Market Sync - Points to your fixed backend feed
+  // Fetch BTC price – no navigation on failure
   const fetchBTCPrice = useCallback(async () => {
+    if (!mounted) return;
+
     try {
-      // Prioritize your own backend market feed for data consistency
       const res = await api.get("/market/btc-price");
-      if (res.data?.price) {
+      if (res.data?.price && mounted) {
         setBtcPrice(res.data.price);
+        setBtcError(null);
       }
     } catch (err) {
-      // Fallback to CoinGecko if your backend feed is offline
+      console.warn("BTC price fetch failed", err);
+      setBtcError("Market data unavailable");
+
+      // Optional fallback (low priority)
       try {
         const cgRes = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur");
         const data = await cgRes.json();
-        setBtcPrice(data.bitcoin.eur);
-      } catch (cgErr) {
-        console.error("Global Market Sync Failure");
+        if (mounted) setBtcPrice(data.bitcoin?.eur);
+      } catch {
+        // silent fallback failure
       }
     }
-  }, []);
+  }, [mounted]);
 
+  // Data fetching & polling
   useEffect(() => {
+    if (!user) return;
+
     fetchBTCPrice();
-    if (user) fetchStats();
+    fetchStats?.(); // safe call
 
     const interval = setInterval(() => {
-      fetchBTCPrice();
-      if (user) fetchStats();
-    }, 60000);
+      if (mounted) {
+        fetchBTCPrice();
+        fetchStats?.();
+      }
+    }, 60000); // 1 min
 
-    return () => clearInterval(interval);
-  }, [fetchBTCPrice, fetchStats, user]);
+    return () => {
+      clearInterval(interval);
+      setMounted(false);
+    };
+  }, [user, fetchBTCPrice, fetchStats]);
 
-  // 3. Resilient Loading State
-  if (contextLoading && !user) {
+  // Show loading while context is fetching critical data
+  if (contextLoading && !stats && !transactions) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#05070a]">
         <div className="w-12 h-12 border-4 border-yellow-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.3em] text-yellow-600 animate-pulse">
-          Synchronizing Secure Node...
+        <p className="mt-4 text-xs font-bold uppercase tracking-wider text-yellow-600 animate-pulse">
+          Loading secure node...
         </p>
       </div>
     );
   }
 
-  // 4. Data Normalization (Handling Mongoose Map balances)
-  // Ensure the frontend reads from the correct Map keys we defined in User.js
+  // Safe stats with defaults & normalization
   const displayStats = {
-    mainBalance: user?.balances?.EUR || 0,
-    profit: user?.balances?.EUR_PROFIT || 0,
-    btcBalance: user?.balances?.BTC || 0,
+    mainBalance: user?.balances?.EUR ?? 0,
+    profit:      user?.balances?.EUR_PROFIT ?? 0,
+    btcBalance:  user?.balances?.BTC ?? 0,
     activeNodes: user?.isPlanActive ? 1 : 0,
-    dailyROI: user?.dailyRoiRate ? (user.investedAmount * user.dailyRoiRate) : 0,
-    ...stats // Allow UserContext to override if it fetches fresh aggregated data
+    dailyROI:    user?.dailyRoiRate && user?.investedAmount 
+                   ? user.investedAmount * user.dailyRoiRate 
+                   : 0,
+    ...stats, // override with fresh context data if available
   };
 
   return (
@@ -91,18 +105,21 @@ export default function Dashboard() {
       <DashboardHeader btcPrice={btcPrice} />
 
       <main className="px-6 lg:px-20 py-12 space-y-12 max-w-7xl mx-auto">
-        
         {/* Market & Identity Row */}
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
-             <BtcPrice price={btcPrice} />
+            <BtcPrice price={btcPrice} error={btcError} />
           </div>
           <div className="lg:col-span-2">
-             <AccountSummary user={user} stats={displayStats} autoOpenNode={autoOpenNode} />
+            <AccountSummary 
+              user={user} 
+              stats={displayStats} 
+              autoOpenNode={autoOpenNode} 
+            />
           </div>
         </section>
 
-        {/* Financial Intelligence Grid */}
+        {/* Financial Cards */}
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Equity Balance"
@@ -124,17 +141,19 @@ export default function Dashboard() {
           />
         </section>
 
-        {/* Transactional & Asset Modules */}
+        {/* Wallet & Activity */}
         <section className="grid grid-cols-1 lg:grid-cols-5 gap-6 pb-20">
           <div className="lg:col-span-3">
             <WalletDashboard user={user} stats={displayStats} />
           </div>
           <div className="lg:col-span-2">
-            <RecentActivity transactions={transactions || user?.ledger || []} />
+            <RecentActivity 
+              transactions={transactions || user?.ledger || []} 
+              error={contextError}
+            />
           </div>
         </section>
       </main>
     </div>
   );
 }
-

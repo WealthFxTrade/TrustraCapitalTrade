@@ -1,20 +1,17 @@
-// src/components/WalletDashboard.jsx
 import { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import DepositTab from './DepositTab.jsx';
 import WithdrawalTab from './WithdrawalTab.jsx';
 import RecentActivity from './RecentActivity.jsx';
-import { getBalances } from '../api/wallet.js';
-import { getRecentTransactions } from '../api/transaction.js';
-import { getProfile } from '../api/user.js';
+import api from '../api/api'; // ← unified safe API instance
 
-const SOCKET_URL = process.env.REACT_APP_API_URL;
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000';
 
 export default function WalletDashboard() {
   const [activeTab, setActiveTab] = useState('deposit');
   const [balances, setBalances] = useState({ BTC: 0, ETH: 0, USDT: 0, EUR: 0 });
   const [transactions, setTransactions] = useState([]);
-  const [userRole, setUserRole] = useState('user'); // default
+  const [userRole, setUserRole] = useState('user');
   const [loadingBalances, setLoadingBalances] = useState(true);
   const [loadingTransactions, setLoadingTransactions] = useState(true);
 
@@ -22,17 +19,19 @@ export default function WalletDashboard() {
     const token = localStorage.getItem('token');
     if (!token) return;
 
-    // Fetch user role and initial data
     const fetchData = async () => {
       try {
-        const user = await getProfile();
-        setUserRole(user.role || 'user');
+        // Get user profile (replaces getProfile from user.js)
+        const profileRes = await api.get('/user/me');
+        setUserRole(profileRes.data.role || 'user');
 
-        const balanceData = await getBalances();
-        setBalances(balanceData.balances || balances);
+        // Get balances (replaces getBalances from wallet.js)
+        const balanceRes = await api.get('/wallet/balances');
+        setBalances(balanceRes.data.balances || balances);
 
-        const txData = await getRecentTransactions();
-        setTransactions(txData);
+        // Get recent transactions (replaces getRecentTransactions from transaction.js)
+        const txRes = await api.get('/transactions/recent?limit=10');
+        setTransactions(txRes.data || []);
       } catch (err) {
         console.error('Initial fetch error:', err);
       } finally {
@@ -40,9 +39,10 @@ export default function WalletDashboard() {
         setLoadingTransactions(false);
       }
     };
+
     fetchData();
 
-    // WebSocket for real-time updates
+    // WebSocket setup
     const socket = io(SOCKET_URL, { auth: { token } });
     socket.on('balanceUpdate', setBalances);
     socket.on('transactionUpdate', (tx) => setTransactions(prev => [tx, ...prev]));
@@ -61,7 +61,7 @@ export default function WalletDashboard() {
     cursor: 'pointer',
     borderRadius: '6px',
     fontWeight: '600',
-    flex: 1
+    flex: 1,
   });
 
   const formatBalance = (ticker) => {

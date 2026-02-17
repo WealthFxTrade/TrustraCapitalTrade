@@ -1,0 +1,1698 @@
+[1mdiff --git a/backend/controllers/userController.js b/backend/controllers/userController.js[m
+[1mindex 461874d..f11b408 100644[m
+[1m--- a/backend/controllers/userController.js[m
+[1m+++ b/backend/controllers/userController.js[m
+[36m@@ -1,3 +1,4 @@[m
+[32m+[m[32m// controllers/userController.js[m
+ import User from "../models/User.js";[m
+ import Deposit from "../models/Deposit.js";[m
+ import mongoose from "mongoose";[m
+[36m@@ -9,17 +10,66 @@[m [mconst sendResponse = (res, status, success, data = {}, message = null) => {[m
+   return res.status(status).json({[m
+     success,[m
+     ...(message && { message }),[m
+[31m-    ...data[m
+[32m+[m[32m    ...data,[m
+   });[m
+ };[m
+ [m
+ /* =========================================================[m
+[31m-   USER LOGIC[m
+[32m+[m[32m   USER LOGIC (Frontend-facing)[m
+ ========================================================= */[m
+ [m
+ /**[m
+[31m- * @desc Get User Dashboard (Frontend UserContext Compatible)[m
+[32m+[m[32m * @desc Get current user's profile (self-view)[m
+[32m+[m[32m * @route GET /user/me or /user/profile[m
+[32m+[m[32m * @access Private[m
+[32m+[m[32m */[m
+[32m+[m[32mexport const getUserProfile = async (req, res) => {[m
+[32m+[m[32m  try {[m
+[32m+[m[32m    const user = await User.findById(req.user.id)[m
+[32m+[m[32m      .select('-password -__v -refreshTokens')[m
+[32m+[m[32m      .lean();[m
+[32m+[m
+[32m+[m[32m    if (!user) {[m
+[32m+[m[32m      return sendResponse(res, 404, false, {}, "User not found");[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    return sendResponse(res, 200, true, { profile: user });[m
+[32m+[m[32m  } catch (error) {[m
+[32m+[m[32m    console.error("getUserProfile error:", error);[m
+[32m+[m[32m    return sendResponse(res, 500, false, {}, "Server error");[m
+[32m+[m[32m  }[m
+[32m+[m[32m};[m
+[32m+[m
+[32m+[m[32m/**[m
+[32m+[m[32m * @desc Update user profile (self)[m
+[32m+[m[32m * @route PUT /user/me[m
+[32m+[m[32m * @access Private[m
+[32m+[m[32m */[m
+[32m+[m[32mexport const updateUserProfile = async (req, res) => {[m
+[32m+[m[32m  try {[m
+[32m+[m[32m    const updates = req.body;[m
+[32m+[m[32m    delete updates.password; // prevent password update here[m
+[32m+[m
+[32m+[m[32m    const user = await User.findByIdAndUpdate([m
+[32m+[m[32m      req.user.id,[m
+[32m+[m[32m      { $set: updates },[m
+[32m+[m[32m      { new: true, runValidators: true }[m
+[32m+[m[32m    ).select('-password -__v');[m
+[32m+[m
+[32m+[m[32m    if (!user) {[m
+[32m+[m[32m      return sendResponse(res, 404, false, {}, "User not found");[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    return sendResponse(res, 200, true, { user }, "Profile updated");[m
+[32m+[m[32m  } catch (error) {[m
+[32m+[m[32m    return sendResponse(res, 400, false, {}, error.message);[m
+[32m+[m[32m  }[m
+[32m+[m[32m};[m
+[32m+[m
+[32m+[m[32m/**[m
+[32m+[m[32m * @desc Get user dashboard (stats + recent transactions)[m
+  * @route GET /user/dashboard[m
+[32m+[m[32m * @access Private[m
+  */[m
+ export const getUserDashboard = async (req, res) => {[m
+   try {[m
+[36m@@ -30,53 +80,48 @@[m [mexport const getUserDashboard = async (req, res) => {[m
+       return sendResponse(res, 404, false, {}, "User not found");[m
+     }[m
+ [m
+[31m-    /* ---------- Convert balances Map safely ---------- */[m
+[31m-    const balances =[m
+[31m-      user.balances instanceof Map[m
+[31m-        ? Object.fromEntries(user.balances)[m
+[31m-        : user.balances || {};[m
+[32m+[m[32m    const balances = user.balances instanceof Map[m
+[32m+[m[32m      ? Object.fromEntries(user.balances)[m
+[32m+[m[32m      : user.balances || {};[m
+ [m
+     const mainBalance = Object.values(balances).reduce([m
+       (acc, val) => acc + Number(val || 0),[m
+       0[m
+     );[m
+ [m
+[31m-    /* ---------- Stats object (exactly what frontend expects) ---------- */[m
+     const stats = {[m
+       mainBalance,[m
+       profit: Number(user.profit ?? 0),[m
+       activeNodes: Number(user.activeNodes ?? 0),[m
+       dailyROI: Number(user.dailyROI ?? 0),[m
+[31m-      activePlan: user.activePlan ?? "None"[m
+[32m+[m[32m      activePlan: user.activePlan ?? "None",[m
+     };[m
+ [m
+[31m-    /* ---------- Fetch recent deposits as transactions ---------- */[m
+     const deposits = await Deposit.find({ user: userId })[m
+       .sort({ createdAt: -1 })[m
+       .limit(10)[m
+       .lean();[m
+ [m
+     const transactions = deposits.map((dep) => ({[m
+[31m-      id: dep._id,[m
+[32m+[m[32m      id: dep._id.toString(),[m
+       type: "deposit",[m
+       amount: Number(dep.amount),[m
+       currency: dep.currency,[m
+       status: dep.status,[m
+[31m-      date: dep.createdAt[m
+[32m+[m[32m      date: dep.createdAt.toISOString(),[m
+     }));[m
+ [m
+[31m-    return sendResponse(res, 200, true, {[m
+[31m-      stats,[m
+[31m-      transactions[m
+[31m-    });[m
+[32m+[m[32m    return sendResponse(res, 200, true, { stats, transactions });[m
+   } catch (error) {[m
+[31m-    console.error("Dashboard Error:", error);[m
+[32m+[m[32m    console.error("getUserDashboard error:", error);[m
+     return sendResponse(res, 500, false, {}, "Server error");[m
+   }[m
+ };[m
+ [m
+ /**[m
+[31m- * @desc Get User Balances[m
+[32m+[m[32m * @desc Get user balances[m
+[32m+[m[32m * @route GET /user/balance[m
+[32m+[m[32m * @access Private[m
+  */[m
+ export const getUserBalances = async (req, res) => {[m
+   try {[m
+[36m@@ -85,10 +130,9 @@[m [mexport const getUserBalances = async (req, res) => {[m
+       return sendResponse(res, 404, false, {}, "User not found");[m
+     }[m
+ [m
+[31m-    const balances =[m
+[31m-      user.balances instanceof Map[m
+[31m-        ? Object.fromEntries(user.balances)[m
+[31m-        : user.balances || {};[m
+[32m+[m[32m    const balances = user.balances instanceof Map[m
+[32m+[m[32m      ? Object.fromEntries(user.balances)[m
+[32m+[m[32m      : user.balances || {};[m
+ [m
+     return sendResponse(res, 200, true, { balances });[m
+   } catch (error) {[m
+[36m@@ -97,7 +141,9 @@[m [mexport const getUserBalances = async (req, res) => {[m
+ };[m
+ [m
+ /**[m
+[31m- * @desc Get Full User Ledger[m
+[32m+[m[32m * @desc Get full user ledger[m
+[32m+[m[32m * @route GET /user/transactions[m
+[32m+[m[32m * @access Private[m
+  */[m
+ export const getUserLedger = async (req, res) => {[m
+   try {[m
+[36m@@ -115,9 +161,6 @@[m [mexport const getUserLedger = async (req, res) => {[m
+    ADMIN LOGIC[m
+ ========================================================= */[m
+ [m
+[31m-/**[m
+[31m- * @desc Approve deposit and credit user (Atomic Transaction)[m
+[31m- */[m
+ export const approveDeposit = async (req, res) => {[m
+   const session = await mongoose.startSession();[m
+ [m
+[36m@@ -136,13 +179,8 @@[m [mexport const approveDeposit = async (req, res) => {[m
+       throw new Error("User not found");[m
+     }[m
+ [m
+[31m-    const currentBalance =[m
+[31m-      user.balances.get(deposit.currency) || 0;[m
+[31m-[m
+[31m-    user.balances.set([m
+[31m-      deposit.currency,[m
+[31m-      currentBalance + Number(deposit.amount)[m
+[31m-    );[m
+[32m+[m[32m    const currentBalance = user.balances.get(deposit.currency) || 0;[m
+[32m+[m[32m    user.balances.set(deposit.currency, currentBalance + Number(deposit.amount));[m
+ [m
+     deposit.status = "completed";[m
+ [m
+[36m@@ -152,78 +190,77 @@[m [mexport const approveDeposit = async (req, res) => {[m
+ [m
+     await session.commitTransaction();[m
+ [m
+[31m-    return sendResponse([m
+[31m-      res,[m
+[31m-      200,[m
+[31m-      true,[m
+[31m-      {},[m
+[31m-      "Deposit approved and credited."[m
+[31m-    );[m
+[32m+[m[32m    return sendResponse(res, 200, true, {}, "Deposit approved and credited.");[m
+   } catch (error) {[m
+     await session.abortTransaction();[m
+[31m-    console.error("Approve Deposit Error:", error);[m
+     return sendResponse(res, 400, false, {}, error.message);[m
+   } finally {[m
+     session.endSession();[m
+   }[m
+ };[m
+ [m
+[31m-/**[m
+[31m- * @desc Get All Users (Admin)[m
+[31m- */[m
+ export const getUsers = async (req, res) => {[m
+   try {[m
+[31m-    const users = await User.find().lean();[m
+[32m+[m[32m    const users = await User.find()[m
+[32m+[m[32m      .select('-password -__v -refreshTokens')[m
+[32m+[m[32m      .lean();[m
+[32m+[m
+     return sendResponse(res, 200, true, { users });[m
+   } catch (error) {[m
+     return sendResponse(res, 500, false, {}, "Server error");[m
+   }[m
+ };[m
+ [m
+[31m-/**[m
+[31m- * @desc Update User Balance (Admin Manual Adjustment)[m
+[31m- */[m
+ export const updateUserBalance = async (req, res) => {[m
+[32m+[m[32m  const session = await mongoose.startSession();[m
+[32m+[m
+   try {[m
+[32m+[m[32m    session.startTransaction();[m
+[32m+[m
+     const { userId, currency, amount } = req.body;[m
+ [m
+[31m-    const user = await User.findById(userId);[m
+[32m+[m[32m    const user = await User.findById(userId).session(session);[m
+     if (!user) {[m
+[31m-      return sendResponse(res, 404, false, {}, "User not found");[m
+[32m+[m[32m      throw new Error("User not found");[m
+     }[m
+ [m
+     const currentBalance = user.balances.get(currency) || 0;[m
+     user.balances.set(currency, currentBalance + Number(amount));[m
+ [m
+     user.markModified("balances");[m
+[31m-    await user.save();[m
+[32m+[m[32m    await user.save({ session });[m
+[32m+[m
+[32m+[m[32m    await session.commitTransaction();[m
+ [m
+     return sendResponse(res, 200, true, {}, "Balance updated");[m
+   } catch (error) {[m
+[32m+[m[32m    await session.abortTransaction();[m
+     return sendResponse(res, 400, false, {}, error.message);[m
+[32m+[m[32m  } finally {[m
+[32m+[m[32m    session.endSession();[m
+   }[m
+ };[m
+ [m
+[31m-/**[m
+[31m- * @desc Ban User[m
+[31m- */[m
+ export const banUser = async (req, res) => {[m
+   try {[m
+     const { userId } = req.body;[m
+[31m-    await User.findByIdAndUpdate(userId, { banned: true });[m
+[32m+[m[32m    const user = await User.findByIdAndUpdate(userId, { banned: true }, { new: true });[m
+[32m+[m[32m    if (!user) {[m
+[32m+[m[32m      return sendResponse(res, 404, false, {}, "User not found");[m
+[32m+[m[32m    }[m
+     return sendResponse(res, 200, true, {}, "User banned");[m
+   } catch (error) {[m
+     return sendResponse(res, 400, false, {}, error.message);[m
+   }[m
+ };[m
+ [m
+[31m-/**[m
+[31m- * @desc Unban User[m
+[31m- */[m
+ export const unbanUser = async (req, res) => {[m
+   try {[m
+     const { userId } = req.body;[m
+[31m-    await User.findByIdAndUpdate(userId, { banned: false });[m
+[32m+[m[32m    const user = await User.findByIdAndUpdate(userId, { banned: false }, { new: true });[m
+[32m+[m[32m    if (!user) {[m
+[32m+[m[32m      return sendResponse(res, 404, false, {}, "User not found");[m
+[32m+[m[32m    }[m
+     return sendResponse(res, 200, true, {}, "User unbanned");[m
+   } catch (error) {[m
+     return sendResponse(res, 400, false, {}, error.message);[m
+[1mdiff --git a/backend/routes/userRoutes.js b/backend/routes/userRoutes.js[m
+[1mindex 0528eee..41ad41d 100644[m
+[1m--- a/backend/routes/userRoutes.js[m
+[1m+++ b/backend/routes/userRoutes.js[m
+[36m@@ -1,52 +1,51 @@[m
+[32m+[m[32m// routes/userRoutes.js[m
+ import express from 'express';[m
+ import {[m
+[31m-  getUserProfile,[m
+[31m-  updateUserProfile,[m
+   getUserDashboard,[m
+[31m-  getUserLedger,[m
+   getUserBalances,[m
+[32m+[m[32m  getUserLedger,[m
+[32m+[m[32m  updateUserProfile,[m
+   approveDeposit,[m
+   getUsers,[m
+[31m-  getUserById,[m
+[31m-  updateUser,[m
+[31m-  deleteUser,[m
+   updateUserBalance,[m
+   banUser,[m
+   unbanUser,[m
+[31m-  verifyUserEmail,[m
+[31m-  resendVerificationEmail,[m
+[32m+[m[32m  // getUserById,          // ← add this once you implement it in controller[m
+[32m+[m[32m  // deleteUser,           // ← add this once implemented[m
+[32m+[m[32m  // verifyUserEmail,[m
+[32m+[m[32m  // resendVerificationEmail,[m
+ } from '../controllers/userController.js';[m
+ [m
+ import { protect, admin } from '../middleware/authMiddleware.js';[m
+ [m
+ const router = express.Router();[m
+ [m
+[31m-// ────────────── USER ROUTES ──────────────[m
+[32m+[m[32m// ────────────── USER ROUTES (authenticated users only) ──────────────[m
+ router.get('/dashboard', protect, getUserDashboard);[m
+ [m
+ router.route('/me')[m
+[31m-  .get(protect, getUserProfile)[m
+[32m+[m[32m  .get(protect, getUserDashboard)      // use dashboard as profile for now[m
+   .put(protect, updateUserProfile);[m
+ [m
+ router.get('/balance', protect, getUserBalances);[m
+ router.get('/transactions', protect, getUserLedger);[m
+ [m
+[31m-// Verification[m
+[31m-router.post('/verify/resend', protect, resendVerificationEmail);[m
+[31m-router.get('/verify/:token', verifyUserEmail);[m
+[32m+[m[32m// Verification routes (if you implement them later)[m
+[32m+[m[32m// router.post('/verify/resend', protect, resendVerificationEmail);[m
+[32m+[m[32m// router.get('/verify/:token', verifyUserEmail);[m
+ [m
+[31m-// ────────────── ADMIN ROUTES ──────────────[m
+[32m+[m[32m// ────────────── ADMIN ROUTES (admin only) ──────────────[m
+ router.post('/approve-deposit', protect, admin, approveDeposit);[m
+ [m
+ router.route('/')[m
+   .get(protect, admin, getUsers);[m
+ [m
+ router.route('/:id')[m
+[31m-  .get(protect, admin, getUserById)[m
+[31m-  .put(protect, admin, updateUser)[m
+[31m-  .delete(protect, admin, deleteUser);[m
+[32m+[m[32m  .get(protect, admin, getUserDashboard)   // temporary – replace with getUserById when added[m
+[32m+[m[32m  .put(protect, admin, updateUserBalance)   // admin balance update[m
+[32m+[m[32m  .delete(protect, admin, () => res.status(501).json({ message: 'Delete not implemented yet' })); // placeholder[m
+ [m
+[31m-// Admin actions[m
+[32m+[m[32m// Admin user actions[m
+ router.put('/:id/balance', protect, admin, updateUserBalance);[m
+ router.put('/:id/ban', protect, admin, banUser);[m
+ router.put('/:id/unban', protect, admin, unbanUser);[m
+[1mdiff --git a/frontend/src/App.jsx b/frontend/src/App.jsx[m
+[1mindex 752a24a..3933d2e 100644[m
+[1m--- a/frontend/src/App.jsx[m
+[1m+++ b/frontend/src/App.jsx[m
+[36m@@ -8,38 +8,35 @@[m [mimport AdminLayout from './layouts/AdminLayout';[m
+ import { publicRoutes, protectedRoutes, adminRoutes } from './routes';[m
+ [m
+ export default function App() {[m
+[31m-  const { initialized, user, loading } = useAuth();[m
+[32m+[m[32m  const { isReady, user } = useAuth();[m
+   const location = useLocation();[m
+ [m
+[31m-  // 1. BLOCKING INITIALIZATION: [m
+[31m-  // Stay on the loading screen until AuthProvider finishes its profile check/refresh logic.[m
+[31m-  if (!initialized || loading) {[m
+[32m+[m[32m  // 1. Wait until auth initialization is fully complete[m
+[32m+[m[32m  if (!isReady) {[m
+     return <LoadingScreen message="Securing Trustra Node..." />;[m
+   }[m
+ [m
+[31m-  // 2. GLOBAL SECURITY: Banned User Check[m
+[32m+[m[32m  // 2. Global banned user check (immediate redirect if banned)[m
+   if (user?.banned) {[m
+[31m-    return ([m
+[31m-      <Routes>[m
+[31m-        <Route path="*" element={<Navigate to="/login" replace />} />[m
+[31m-      </Routes>[m
+[31m-    );[m
+[32m+[m[32m    return <Navigate to="/login" replace />;[m
+   }[m
+ [m
+   const isAdmin = user?.isAdmin || user?.role === 'admin';[m
+ [m
+   return ([m
+[31m-    <Routes>[m
+[32m+[m[32m    <Routes location={location} key={location.pathname}>[m
+       {/* ─── PUBLIC ROUTES ─── */}[m
+[31m-      {publicRoutes.map((r) => ([m
+[32m+[m[32m      {publicRoutes.map((route) => ([m
+         <Route[m
+[31m-          key={r.path}[m
+[31m-          path={r.path}[m
+[32m+[m[32m          key={route.path}[m
+[32m+[m[32m          path={route.path}[m
+           element={[m
+[31m-            // If logged in, don't let them go back to login/register[m
+[31m-            user && (r.path === '/login' || r.path === '/register')[m
+[31m-              ? <Navigate to="/dashboard" replace />[m
+[31m-              : r.element[m
+[32m+[m[32m            // Redirect logged-in users away from login/register[m
+[32m+[m[32m            user && (route.path === '/login' || route.path === '/register') ? ([m
+[32m+[m[32m              <Navigate to="/dashboard" replace />[m
+[32m+[m[32m            ) : ([m
+[32m+[m[32m              route.element[m
+[32m+[m[32m            )[m
+           }[m
+         />[m
+       ))}[m
+[36m@@ -52,13 +49,20 @@[m [mexport default function App() {[m
+               <ProtectedLayout />[m
+             </UserProvider>[m
+           ) : ([m
+[31m-            // Crucial: Pass 'from' state so login knows where to return the user[m
+[31m-            <Navigate to="/login" state={{ from: location }} replace />[m
+[32m+[m[32m            <Navigate[m
+[32m+[m[32m              to="/login"[m
+[32m+[m[32m              replace[m
+[32m+[m[32m              state={{ from: location }} // helps redirect back after login[m
+[32m+[m[32m            />[m
+           )[m
+         }[m
+       >[m
+[31m-        {protectedRoutes.map((r) => ([m
+[31m-          <Route key={r.path} path={r.path} element={r.element} />[m
+[32m+[m[32m        {protectedRoutes.map((route) => ([m
+[32m+[m[32m          <Route[m
+[32m+[m[32m            key={route.path}[m
+[32m+[m[32m            path={route.path}[m
+[32m+[m[32m            element={route.element}[m
+[32m+[m[32m          />[m
+         ))}[m
+       </Route>[m
+ [m
+[36m@@ -67,19 +71,26 @@[m [mexport default function App() {[m
+         element={[m
+           isAdmin ? ([m
+             <AdminLayout />[m
+[31m-          ) : ([m
+[32m+[m[32m          ) : user ? ([m
+[32m+[m[32m            // Logged-in but not admin → redirect to user dashboard[m
+             <Navigate to="/dashboard" replace />[m
+[32m+[m[32m          ) : ([m
+[32m+[m[32m            // Not logged in → send to login[m
+[32m+[m[32m            <Navigate to="/login" replace />[m
+           )[m
+         }[m
+       >[m
+[31m-        {adminRoutes?.map((r) => ([m
+[31m-          <Route key={r.path} path={r.path} element={r.element} />[m
+[32m+[m[32m        {adminRoutes?.map((route) => ([m
+[32m+[m[32m          <Route[m
+[32m+[m[32m            key={route.path}[m
+[32m+[m[32m            path={route.path}[m
+[32m+[m[32m            element={route.element}[m
+[32m+[m[32m          />[m
+         ))}[m
+       </Route>[m
+ [m
+[31m-      {/* ─── FALLBACK (404) ─── */}[m
+[32m+[m[32m      {/* ─── 404 FALLBACK ─── */}[m
+       <Route path="*" element={<Navigate to="/" replace />} />[m
+     </Routes>[m
+   );[m
+ }[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/admin.js b/frontend/src/api/admin.js[m
+[1mdeleted file mode 100644[m
+[1mindex 37a19d8..0000000[m
+[1m--- a/frontend/src/api/admin.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,30 +0,0 @@[m
+[31m-import api from './apiService'; // Use the unified engine[m
+[31m-[m
+[31m-/**[m
+[31m- * Get pending withdrawals[m
+[31m- * Endpoint: GET /api/transactions/pending-withdrawals[m
+[31m- */[m
+[31m-export const getPendingWithdrawals = async () => {[m
+[31m-  // Token is automatically attached by the apiService interceptor[m
+[31m-  const response = await api.get('/transactions/pending-withdrawals');[m
+[31m-  return response.data;[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * Approve withdrawal[m
+[31m- * Endpoint: POST /api/admin/withdrawals/:id/approve[m
+[31m- */[m
+[31m-export const approveWithdrawal = async (withdrawalId, txHash) => {[m
+[31m-  const response = await api.post(`/admin/withdrawals/${withdrawalId}/approve`, { txHash });[m
+[31m-  return response.data;[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * Reject withdrawal[m
+[31m- * Endpoint: POST /api/admin/withdrawals/:id/reject[m
+[31m- */[m
+[31m-export const rejectWithdrawal = async (withdrawalId, reason) => {[m
+[31m-  const response = await api.post(`/admin/withdrawals/${withdrawalId}/reject`, { reason });[m
+[31m-  return response.data;[m
+[31m-};[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/adminDashboard.js b/frontend/src/api/adminDashboard.js[m
+[1mdeleted file mode 100644[m
+[1mindex a3bdf32..0000000[m
+[1m--- a/frontend/src/api/adminDashboard.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,38 +0,0 @@[m
+[31m-// api/adminDashboard.js   (or wherever you keep your API functions)[m
+[31m-import axios from './axios';  // your configured axios instance[m
+[31m-[m
+[31m-/**[m
+[31m- * Fetch admin dashboard statistics[m
+[31m- * @param {Object} [config] - Optional axios config (e.g. { signal } for abort)[m
+[31m- * @returns {Promise<Object>} - The stats response data[m
+[31m- * @throws {Error} - If request fails (with meaningful message)[m
+[31m- */[m
+[31m-export const fetchAdminStats = async (config = {}) => {[m
+[31m-  try {[m
+[31m-    const response = await axios.get('/admin/dashboard/stats', {[m
+[31m-      ...config,[m
+[31m-      // Optional: you can force fresh data or add params if needed later[m
+[31m-      // params: { refresh: true },[m
+[31m-    });[m
+[31m-[m
+[31m-    // Optional: validate response shape (defensive programming)[m
+[31m-    if (!response.data?.success || !response.data?.data) {[m
+[31m-      throw new Error('Invalid response format from admin stats endpoint');[m
+[31m-    }[m
+[31m-[m
+[31m-    return response.data.data; // return the useful part directly[m
+[31m-  } catch (error) {[m
+[31m-    // Improve error handling for better UX/debugging[m
+[31m-    const message =[m
+[31m-      error.response?.data?.message ||[m
+[31m-      error.message ||[m
+[31m-      'Failed to fetch admin statistics';[m
+[31m-[m
+[31m-    const enhancedError = new Error(message);[m
+[31m-    enhancedError.status = error.response?.status;[m
+[31m-    enhancedError.code = error.code;[m
+[31m-    enhancedError.isAxiosError = error.isAxiosError;[m
+[31m-[m
+[31m-    throw enhancedError;[m
+[31m-  }[m
+[31m-};[m
+[1mdiff --git a/frontend/src/api/adminService.js b/frontend/src/api/adminService.js[m
+[1mdeleted file mode 100644[m
+[1mindex 1f57eba..0000000[m
+[1m--- a/frontend/src/api/adminService.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,9 +0,0 @@[m
+[31m-import api from './axios';[m
+[31m-[m
+[31m-export const getAdminStats = () => api.get('/admin/stats');[m
+[31m-export const getAllUsers = () => api.get('/admin/users');[m
+[31m-export const getAuditLogs = () => api.get('/admin/audit-logs');[m
+[31m-[m
+[31m-export const adjustUserBalance = (userId, adjustmentData) => [m
+[31m-  api.post(`/admin/users/${userId}/adjust-balance`, adjustmentData);[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/adminWithdrawals.js b/frontend/src/api/adminWithdrawals.js[m
+[1mdeleted file mode 100644[m
+[1mindex 9e62ad6..0000000[m
+[1m--- a/frontend/src/api/adminWithdrawals.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,27 +0,0 @@[m
+[31m-import { request } from './api';[m
+[31m-[m
+[31m-/**[m
+[31m- * FETCH PENDING WITHDRAWALS[m
+[31m- * Retrieves the global queue of payout requests awaiting admin review.[m
+[31m- */[m
+[31m-export const getPendingWithdrawals = async () => {[m
+[31m-  // Interceptor automatically attaches the Authorization header[m
+[31m-  return await request('/transactions/pending-withdrawals', 'GET');[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * APPROVE WITHDRAWAL[m
+[31m- * Confirms the payout and attaches the blockchain Transaction Hash (txHash).[m
+[31m- */[m
+[31m-export const approveWithdrawal = async (withdrawalId, txHash) => {[m
+[31m-  return await request(`/admin/withdrawals/${withdrawalId}/approve`, 'POST', { txHash });[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * REJECT WITHDRAWAL[m
+[31m- * Cancels the payout and sends a reason to the investor.[m
+[31m- */[m
+[31m-export const rejectWithdrawal = async (withdrawalId, reason) => {[m
+[31m-  return await request(`/admin/withdrawals/${withdrawalId}/reject`, 'POST', { reason });[m
+[31m-};[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/api.jsx b/frontend/src/api/api.jsx[m
+[1mindex 060c8f1..41eb1e5 100644[m
+[1m--- a/frontend/src/api/api.jsx[m
+[1m+++ b/frontend/src/api/api.jsx[m
+[36m@@ -1,67 +1,103 @@[m
+[31m-import axios from "axios";[m
+[32m+[m[32m// src/api/api.jsx – production-ready single Axios instance[m
+[32m+[m[32mimport axios from 'axios';[m
+ [m
+[31m-let accessToken = localStorage.getItem("token") || null;[m
+[32m+[m[32m// In-memory + persistent token storage[m
+[32m+[m[32mlet accessToken = localStorage.getItem('token') || null;[m
+[32m+[m
+[32m+[m[32m// Explicit exports for AuthContext and other consumers[m
+[32m+[m[32mexport const getAccessToken = () => accessToken;[m
+ [m
+ export const setAccessToken = (token) => {[m
+   accessToken = token;[m
+[32m+[m[32m  if (token) {[m
+[32m+[m[32m    localStorage.setItem('token', token);[m
+[32m+[m[32m  } else {[m
+[32m+[m[32m    localStorage.removeItem('token');[m
+[32m+[m[32m  }[m
+ };[m
+ [m
+[31m-const BASE_URL = ([m
+[31m-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") ||[m
+[31m-  "https://trustracapitaltrade-backend.onrender.com"[m
+[31m-).endsWith("/api")[m
+[31m-  ? (import.meta.env.VITE_API_URL?.replace(/\/$/, ""))[m
+[31m-  : (import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "https://trustracapitaltrade-backend.onrender.com") + "/api";[m
+[31m-[m
+ const api = axios.create({[m
+[31m-  baseURL: BASE_URL,[m
+[31m-  withCredentials: true,[m
+[32m+[m[32m  // Use VITE_API_URL in production (Vercel env var)[m
+[32m+[m[32m  // Fallback only for local dev if .env missing[m
+[32m+[m[32m  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:10000/api',[m
+[32m+[m[32m  withCredentials: true,          // Required for HttpOnly refresh cookie[m
+   timeout: 30000,[m
+[31m-  headers: { "Content-Type": "application/json" },[m
+[32m+[m[32m  headers: {[m
+[32m+[m[32m    'Content-Type': 'application/json',[m
+[32m+[m[32m  },[m
+ });[m
+ [m
+[31m-api.interceptors.request.use((config) => {[m
+[31m-  const token = accessToken || localStorage.getItem("token");[m
+[31m-  if (token) {[m
+[31m-    config.headers.Authorization = `Bearer ${token}`;[m
+[31m-  }[m
+[31m-  return config;[m
+[31m-});[m
+[32m+[m[32m// Request interceptor: attach current token[m
+[32m+[m[32mapi.interceptors.request.use([m
+[32m+[m[32m  (config) => {[m
+[32m+[m[32m    const token = getAccessToken();[m
+[32m+[m[32m    if (token) {[m
+[32m+[m[32m      config.headers.Authorization = `Bearer ${token}`;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    return config;[m
+[32m+[m[32m  },[m
+[32m+[m[32m  (error) => Promise.reject(error)[m
+[32m+[m[32m);[m
+ [m
+[32m+[m[32m// Response interceptor: refresh on 401, no auto-redirect/logout[m
+ api.interceptors.response.use([m
+   (response) => response,[m
+   async (error) => {[m
+     const originalRequest = error.config;[m
+ [m
+[31m-    if ([m
+[31m-      error.response?.status === 401 &&[m
+[31m-      !originalRequest._retry &&[m
+[31m-      !originalRequest.url.includes('/auth/login') &&[m
+[31m-      !originalRequest.url.includes('/auth/refresh')[m
+[31m-    ) {[m
+[32m+[m[32m    // Network / timeout / CORS error[m
+[32m+[m[32m    if (!error.response) {[m
+[32m+[m[32m      console.error('[API] Network/timeout error:', error.message);[m
+[32m+[m[32m      return Promise.reject({[m
+[32m+[m[32m        message: 'Network error – please check your connection',[m
+[32m+[m[32m      });[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    // Refresh token only once per failed 401 request[m
+[32m+[m[32m    if (error.response.status === 401 && !originalRequest._retry) {[m
+       originalRequest._retry = true;[m
+ [m
+       try {[m
+[31m-        const res = await api.get('/auth/refresh');[m
+[31m-        const newToken = res.data.token;[m
+[31m-        accessToken = newToken;[m
+[31m-        localStorage.setItem("token", newToken);[m
+[32m+[m[32m        console.log('[API] Attempting token refresh...');[m
+[32m+[m[32m        const refreshRes = await axios.post([m
+[32m+[m[32m          '/auth/refresh',[m
+[32m+[m[32m          {},[m
+[32m+[m[32m          {[m
+[32m+[m[32m            baseURL: api.defaults.baseURL,[m
+[32m+[m[32m            withCredentials: true,[m
+[32m+[m[32m          }[m
+[32m+[m[32m        );[m
+[32m+[m
+[32m+[m[32m        const newToken = refreshRes.data?.accessToken || refreshRes.data?.token;[m
+[32m+[m[32m        if (!newToken) {[m
+[32m+[m[32m          throw new Error('No new token received from /auth/refresh');[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        setAccessToken(newToken);[m
+         originalRequest.headers.Authorization = `Bearer ${newToken}`;[m
+[32m+[m[32m        console.log('[API] Token refreshed successfully');[m
+         return api(originalRequest);[m
+[31m-      } catch (err) {[m
+[31m-        // SESSION DEAD: Clear everything[m
+[31m-        localStorage.removeItem("token");[m
+[31m-        accessToken = null;[m
+[31m-        [m
+[31m-        // Prevent redirect loop if already on login[m
+[31m-        if (!window.location.pathname.includes("/login")) {[m
+[31m-           window.location.href = "/login?session=expired";[m
+[31m-        }[m
+[32m+[m[32m      } catch (refreshErr) {[m
+[32m+[m[32m        console.warn('[API] Refresh token failed:', refreshErr.message || refreshErr);[m
+[32m+[m
+[32m+[m[32m        // CRITICAL: Do NOT logout or redirect here[m
+[32m+[m[32m        // Let the component handle it (show error message, retry button, etc.)[m
+[32m+[m[32m        return Promise.reject({[m
+[32m+[m[32m          message: 'Session refresh failed. Please log in again.',[m
+[32m+[m[32m          status: refreshErr.response?.status,[m
+[32m+[m[32m          data: refreshErr.response?.data,[m
+[32m+[m[32m        });[m
+       }[m
+     }[m
+[31m-    return Promise.reject(error);[m
+[32m+[m
+[32m+[m[32m    // Pass through other errors cleanly[m
+[32m+[m[32m    const message = error.response?.data?.message || 'API request failed';[m
+[32m+[m[32m    return Promise.reject({[m
+[32m+[m[32m      message,[m
+[32m+[m[32m      status: error.response?.status,[m
+[32m+[m[32m      data: error.response?.data,[m
+[32m+[m[32m    });[m
+   }[m
+ );[m
+ [m
+ export default api;[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/apiService.js b/frontend/src/api/apiService.js[m
+[1mdeleted file mode 100644[m
+[1mindex 9833c98..0000000[m
+[1m--- a/frontend/src/api/apiService.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,39 +0,0 @@[m
+[31m-import axios from 'axios';[m
+[31m-[m
+[31m-const api = axios.create({[m
+[31m-  // ✅ PRODUCTION URL: Matches your Render deployment[m
+[31m-  baseURL: 'https://trustracapitaltrade-backend.onrender.com', [m
+[31m-  headers: {[m
+[31m-    'Content-Type': 'application/json',[m
+[31m-  },[m
+[31m-  timeout: 30000, // 30s timeout for Render cold starts[m
+[31m-});[m
+[31m-[m
+[31m-// Add a request interceptor to include JWT token[m
+[31m-api.interceptors.request.use([m
+[31m-  (config) => {[m
+[31m-    // ✅ SYNCED KEY: Matches your Login/AuthContext storage[m
+[31m-    const userInfo = JSON.parse(localStorage.getItem('userInfo')); [m
+[31m-    [m
+[31m-    if (userInfo?.token) {[m
+[31m-      config.headers.Authorization = `Bearer ${userInfo.token}`;[m
+[31m-    }[m
+[31m-    return config;[m
+[31m-  },[m
+[31m-  (error) => Promise.reject(error)[m
+[31m-);[m
+[31m-[m
+[31m-// Optional: Add Response Interceptor to handle 401s (Expired Tokens)[m
+[31m-api.interceptors.response.use([m
+[31m-  (response) => response,[m
+[31m-  (error) => {[m
+[31m-    if (error.response?.status === 401) {[m
+[31m-      localStorage.removeItem('userInfo');[m
+[31m-      window.location.href = '/login';[m
+[31m-    }[m
+[31m-    return Promise.reject(error);[m
+[31m-  }[m
+[31m-);[m
+[31m-[m
+[31m-export default api;[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/axios.js b/frontend/src/api/axios.js[m
+[1mdeleted file mode 100644[m
+[1mindex 6208d34..0000000[m
+[1m--- a/frontend/src/api/axios.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,72 +0,0 @@[m
+[31m-import axios from 'axios';[m
+[31m-import { getAccessToken, setAccessToken } from './tokenService';[m
+[31m-[m
+[31m-// Create Axios instance[m
+[31m-const api = axios.create({[m
+[31m-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:10000/api',[m
+[31m-  withCredentials: true, // required to send HttpOnly cookies[m
+[31m-  timeout: 15000,        // 15s timeout[m
+[31m-  headers: {[m
+[31m-    'Content-Type': 'application/json',[m
+[31m-  },[m
+[31m-});[m
+[31m-[m
+[31m-// Request interceptor: attach in-memory access token[m
+[31m-api.interceptors.request.use([m
+[31m-  (config) => {[m
+[31m-    const token = getAccessToken(); // in-memory token only[m
+[31m-    if (token) {[m
+[31m-      config.headers.Authorization = `Bearer ${token}`;[m
+[31m-    }[m
+[31m-    return config;[m
+[31m-  },[m
+[31m-  (error) => Promise.reject(error)[m
+[31m-);[m
+[31m-[m
+[31m-// Response interceptor: handle 401 errors & token refresh[m
+[31m-api.interceptors.response.use([m
+[31m-  (response) => response,[m
+[31m-  async (error) => {[m
+[31m-    const originalRequest = error.config;[m
+[31m-[m
+[31m-    // Network or CORS errors[m
+[31m-    if (!error.response) {[m
+[31m-      console.error('Network error:', error);[m
+[31m-      return Promise.reject({ message: 'Network error. Please try again.' });[m
+[31m-    }[m
+[31m-[m
+[31m-    // Handle expired access token[m
+[31m-    if (error.response.status === 401 && !originalRequest._retry) {[m
+[31m-      originalRequest._retry = true;[m
+[31m-[m
+[31m-      try {[m
+[31m-        // Request new access token using refresh token cookie[m
+[31m-        const { data } = await axios.post([m
+[31m-          '/auth/refresh', [m
+[31m-          {}, [m
+[31m-          {[m
+[31m-            baseURL: api.defaults.baseURL,[m
+[31m-            withCredentials: true,[m
+[31m-          }[m
+[31m-        );[m
+[31m-[m
+[31m-        // Store new token in memory[m
+[31m-        setAccessToken(data.accessToken);[m
+[31m-[m
+[31m-        // Retry original request with new token[m
+[31m-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;[m
+[31m-        return api(originalRequest);[m
+[31m-      } catch (refreshError) {[m
+[31m-        // Refresh failed → force logout[m
+[31m-        window.location.href = '/login';[m
+[31m-        return Promise.reject(refreshError);[m
+[31m-      }[m
+[31m-    }[m
+[31m-[m
+[31m-    // Other API errors[m
+[31m-    const message = error.response.data?.message || 'Unexpected API error';[m
+[31m-    return Promise.reject({ ...error.response.data, message });[m
+[31m-  }[m
+[31m-);[m
+[31m-[m
+[31m-export default api;[m
+[1mdiff --git a/frontend/src/api/deposit.js b/frontend/src/api/deposit.js[m
+[1mdeleted file mode 100644[m
+[1mindex 7a57e6d..0000000[m
+[1m--- a/frontend/src/api/deposit.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,7 +0,0 @@[m
+[31m-import axios from 'axios';[m
+[31m-const API = axios.create({ baseURL: process.env.REACT_APP_API_URL, withCredentials: true });[m
+[31m-[m
+[31m-export const getDeposits = async () => {[m
+[31m-  const res = await API.get('/api/deposits/history');[m
+[31m-  return res.data.deposits;[m
+[31m-};[m
+[1mdiff --git a/frontend/src/api/depositApi.js b/frontend/src/api/depositApi.js[m
+[1mdeleted file mode 100644[m
+[1mindex 6ec37ff..0000000[m
+[1m--- a/frontend/src/api/depositApi.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,12 +0,0 @@[m
+[31m-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';[m
+[31m-[m
+[31m-export async function getBtcDepositAddress(token, fresh = false) {[m
+[31m-  const res = await fetch(`${BACKEND_URL}/api/deposits/btc${fresh ? '?fresh=true' : ''}`, {[m
+[31m-    headers: {[m
+[31m-      Authorization: `Bearer ${token}`,[m
+[31m-      'Content-Type': 'application/json',[m
+[31m-    },[m
+[31m-  });[m
+[31m-  if (!res.ok) throw new Error(`Failed to fetch BTC address: ${res.status}`);[m
+[31m-  return res.json();[m
+[31m-}[m
+[1mdiff --git a/frontend/src/api/http.js b/frontend/src/api/http.js[m
+[1mdeleted file mode 100644[m
+[1mindex 7f56f4e..0000000[m
+[1m--- a/frontend/src/api/http.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,14 +0,0 @@[m
+[31m-import axios from 'axios';[m
+[31m-[m
+[31m-const api = axios.create({[m
+[31m-  baseURL: import.meta.env.VITE_API_BASE_URL,[m
+[31m-  withCredentials: true,[m
+[31m-});[m
+[31m-[m
+[31m-api.interceptors.request.use((config) => {[m
+[31m-  const token = localStorage.getItem('token');[m
+[31m-  if (token) config.headers.Authorization = `Bearer ${token}`;[m
+[31m-  return config;[m
+[31m-});[m
+[31m-[m
+[31m-export default api;[m
+[1mdiff --git a/frontend/src/api/index.js b/frontend/src/api/index.js[m
+[1mindex 941a9fc..82b72be 100644[m
+[1m--- a/frontend/src/api/index.js[m
+[1m+++ b/frontend/src/api/index.js[m
+[36m@@ -1,4 +1,6 @@[m
+[31m-import api from './apiService';[m
+[32m+[m[32m// src/api/index.js[m
+[32m+[m[32m// Central API export point – re-exports the unified, safe api instance[m
+[32m+[m[32mimport api from './api';  // ← points to api.jsx (the good one)[m
+ [m
+ /**[m
+  * TRUSTRA CAPITAL - CORE API (2026 PRODUCTION)[m
+[36m@@ -20,10 +22,7 @@[m [mexport const generateAddress = (asset) => api.post(`/wallet/generate/${asset}`);[m
+ export const getDepositAddress = (asset) => api.get(`/wallet/address/${asset}`);[m
+ export const withdrawFunds = (data) => api.post('/transactions/withdraw', data);[m
+ [m
+[31m-/** [m
+[31m- * KYC Submission - Required by src/pages/KYC.jsx[m
+[31m- * Target: https://trustracapitaltrade-backend.onrender.com[m
+[31m- */[m
+[32m+[m[32m// ─── KYC SUBMISSION ───[m
+ export const submitKyc = (data) => api.post('/user/kyc', data);[m
+ [m
+ // ─── ADMIN OPERATIONS ───[m
+[36m@@ -32,7 +31,7 @@[m [mexport const adminKyc = () => api.get('/admin/kyc');[m
+ export const adminApproveKyc = (userId) => api.post(`/admin/verify/${userId}`);[m
+ export const adminUpdateBalance = (data) => api.post('/admin/users/update-balance', data);[m
+ [m
+[31m-// Default export for "import api from '@/api'" usage[m
+[32m+[m[32m// Default export (for "import api from '@/api'" style usage)[m
+ export default {[m
+   login,[m
+   register,[m
+[36m@@ -47,6 +46,5 @@[m [mexport default {[m
+   adminStats,[m
+   adminKyc,[m
+   adminApproveKyc,[m
+[31m-  adminUpdateBalance[m
+[32m+[m[32m  adminUpdateBalance,[m
+ };[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/market.js b/frontend/src/api/market.js[m
+[1mdeleted file mode 100644[m
+[1mindex f9905b4..0000000[m
+[1m--- a/frontend/src/api/market.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,29 +0,0 @@[m
+[31m-import api from "./apiService";[m
+[31m-[m
+[31m-/**[m
+[31m- * Fetch Bitcoin price from backend[m
+[31m- * Endpoint: GET /api/market/btc[m
+[31m- */[m
+[31m-export const fetchBTCPrice = async () => {[m
+[31m-  try {[m
+[31m-    const res = await api.get("/market/btc");[m
+[31m-    return res.data.price; // Backend should respond { price: <number> }[m
+[31m-  } catch (err) {[m
+[31m-    console.error("⚠️ BTC Fetch Error:", err.message);[m
+[31m-    return null;[m
+[31m-  }[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * Fetch all market data (optional, extendable)[m
+[31m- * Endpoint: GET /api/market[m
+[31m- */[m
+[31m-export const fetchMarketData = async () => {[m
+[31m-  try {[m
+[31m-    const res = await api.get("/market");[m
+[31m-    return res.data;[m
+[31m-  } catch (err) {[m
+[31m-    console.error("⚠️ Market Data Fetch Error:", err.message);[m
+[31m-    return null;[m
+[31m-  }[m
+[31m-};[m
+[1mdiff --git a/frontend/src/api/tokenService.js b/frontend/src/api/tokenService.js[m
+[1mdeleted file mode 100644[m
+[1mindex d19aca6..0000000[m
+[1m--- a/frontend/src/api/tokenService.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,10 +0,0 @@[m
+[31m-// In-memory storage for access token[m
+[31m-let accessToken = null;[m
+[31m-[m
+[31m-export function getAccessToken() {[m
+[31m-  return accessToken;[m
+[31m-}[m
+[31m-[m
+[31m-export function setAccessToken(token) {[m
+[31m-  accessToken = token;[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/transaction.js b/frontend/src/api/transaction.js[m
+[1mdeleted file mode 100644[m
+[1mindex cd1a49f..0000000[m
+[1m--- a/frontend/src/api/transaction.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,12 +0,0 @@[m
+[31m-import axios from 'axios';[m
+[31m-[m
+[31m-const API = axios.create({[m
+[31m-  baseURL: process.env.REACT_APP_API_URL,[m
+[31m-  withCredentials: true,[m
+[31m-});[m
+[31m-[m
+[31m-// Fetch recent transactions for user[m
+[31m-export const getRecentTransactions = async (limit = 5) => {[m
+[31m-  const res = await API.get(`/api/transactions/recent?limit=${limit}`);[m
+[31m-  return res.data.transactions || [];[m
+[31m-};[m
+[1mdiff --git a/frontend/src/api/transactions.js b/frontend/src/api/transactions.js[m
+[1mdeleted file mode 100644[m
+[1mindex 9e810dc..0000000[m
+[1m--- a/frontend/src/api/transactions.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,53 +0,0 @@[m
+[31m-import api from './apiService'; // Use the unified engine we built[m
+[31m-[m
+[31m-/**[m
+[31m- * DEPOSIT REQUEST[m
+[31m- * Initializes a new investment deposit[m
+[31m- * Endpoint: POST /api/transactions/deposit[m
+[31m- */[m
+[31m-export const deposit = async (amount, method = 'manual') => {[m
+[31m-  // api already prepends baseURL + /api and attaches JWT via interceptors[m
+[31m-  const response = await api.post('/transactions/deposit', { amount, method });[m
+[31m-  return response.data;[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * WITHDRAWAL REQUEST[m
+[31m- * Submits a Satoshi payout request to the admin queue[m
+[31m- * Endpoint: POST /api/transactions/withdraw[m
+[31m- */[m
+[31m-export const withdraw = async (amount, btcAddress) => {[m
+[31m-  const response = await api.post('/transactions/withdraw', { amount, btcAddress });[m
+[31m-  return response.data;[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * TRANSACTION HISTORY[m
+[31m- * Fetches the ledger for the currently logged-in investor[m
+[31m- * Endpoint: GET /api/transactions/my[m
+[31m- */[m
+[31m-export const getMyTransactions = async () => {[m
+[31m-  const response = await api.get('/transactions/my');[m
+[31m-  return response.data;[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * ADMIN: PENDING WITHDRAWALS[m
+[31m- * Fetches the global queue of payouts awaiting verification[m
+[31m- * Endpoint: GET /api/transactions/pending-withdrawals[m
+[31m- */[m
+[31m-export const getPendingWithdrawals = async () => {[m
+[31m-  const response = await api.get('/transactions/pending-withdrawals');[m
+[31m-  return response.data;[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * ADMIN: UPDATE STATUS[m
+[31m- * Approves or rejects a specific transaction[m
+[31m- * Endpoint: PATCH /api/transactions/:id/status[m
+[31m- */[m
+[31m-export const updateTransactionStatus = async (id, status) => {[m
+[31m-  const response = await api.patch(`/transactions/${id}/status`, { status });[m
+[31m-  return response.data;[m
+[31m-};[m
+[31m-[m
+[1mdiff --git a/frontend/src/api/user.js b/frontend/src/api/user.js[m
+[1mdeleted file mode 100644[m
+[1mindex 46e8370..0000000[m
+[1m--- a/frontend/src/api/user.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,117 +0,0 @@[m
+[31m-// src/api/user.js  (or src/api/auth.js – pick based on domain organization)[m
+[31m-/**[m
+[31m- * TRUSTRA CAPITAL TRADE – User & Authentication API Functions[m
+[31m- *[m
+[31m- * All functions use the pre-configured axios instance (`api`) which automatically:[m
+[31m- *  - Attaches Bearer token[m
+[31m- *  - Handles 401 → logout & redirect[m
+[31m- *  - Normalizes errors[m
+[31m- *  - Adds timeout & base URL[m
+[31m- */[m
+[31m-[m
+[31m-import api from './apiService';[m
+[31m-[m
+[31m-/**[m
+[31m- * Get current authenticated user's profile[m
+[31m- * Endpoint: GET /api/auth/me[m
+[31m- *[m
+[31m- * @returns {Promise<Object>} User profile data (id, email, name, role, kycStatus, etc.)[m
+[31m- * @throws {Object} Normalized error { message, status, success: false }[m
+[31m- */[m
+[31m-export const getProfile = async () => {[m
+[31m-  try {[m
+[31m-    const response = await api.get('/auth/me');[m
+[31m-    return response.data;[m
+[31m-  } catch (error) {[m
+[31m-    // Let the interceptor-normalized error bubble up[m
+[31m-    throw error;[m
+[31m-  }[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * Update user profile (name, phone, avatar, preferences, etc.)[m
+[31m- * Endpoint: PUT /api/auth/update-profile[m
+[31m- *[m
+[31m- * @param {Object} userData – Partial user object (e.g. { name, phone, avatarUrl })[m
+[31m- * @returns {Promise<Object>} Updated user profile or success message[m
+[31m- * @throws {Object} Normalized error[m
+[31m- */[m
+[31m-export const updateProfile = async (userData) => {[m
+[31m-  try {[m
+[31m-    const response = await api.put('/auth/update-profile', userData);[m
+[31m-    return response.data;[m
+[31m-  } catch (error) {[m
+[31m-    throw error;[m
+[31m-  }[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * Change user password[m
+[31m- * Endpoint: POST /api/auth/change-password[m
+[31m- *[m
+[31m- * @param {string} currentPassword – User's existing password[m
+[31m- * @param {string} newPassword – New password[m
+[31m- * @returns {Promise<Object>} Success message or token if needed[m
+[31m- * @throws {Object} Normalized error (e.g. wrong current password → 400/401)[m
+[31m- */[m
+[31m-export const changePassword = async (currentPassword, newPassword) => {[m
+[31m-  if (!currentPassword || !newPassword) {[m
+[31m-    throw new Error('Both current and new password are required');[m
+[31m-  }[m
+[31m-[m
+[31m-  try {[m
+[31m-    const response = await api.post('/auth/change-password', {[m
+[31m-      currentPassword,[m
+[31m-      newPassword,[m
+[31m-    });[m
+[31m-    return response.data;[m
+[31m-  } catch (error) {[m
+[31m-    throw error;[m
+[31m-  }[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * (Optional) Upload avatar / profile picture[m
+[31m- * Endpoint: POST /api/auth/upload-avatar (multipart/form-data)[m
+[31m- *[m
+[31m- * @param {File} file – Image file (jpg/png)[m
+[31m- * @returns {Promise<Object>} { avatarUrl, message }[m
+[31m- */[m
+[31m-export const uploadAvatar = async (file) => {[m
+[31m-  if (!file) throw new Error('No file provided');[m
+[31m-[m
+[31m-  const formData = new FormData();[m
+[31m-  formData.append('avatar', file);[m
+[31m-[m
+[31m-  try {[m
+[31m-    const response = await api.post('/auth/upload-avatar', formData, {[m
+[31m-      headers: {[m
+[31m-        'Content-Type': 'multipart/form-data',[m
+[31m-      },[m
+[31m-    });[m
+[31m-    return response.data;[m
+[31m-  } catch (error) {[m
+[31m-    throw error;[m
+[31m-  }[m
+[31m-};[m
+[31m-[m
+[31m-/**[m
+[31m- * (Optional) Get user KYC status[m
+[31m- * Endpoint: GET /api/auth/kyc-status[m
+[31m- */[m
+[31m-export const getKycStatus = async () => {[m
+[31m-  try {[m
+[31m-    const response = await api.get('/auth/kyc-status');[m
+[31m-    return response.data;[m
+[31m-  } catch (error) {[m
+[31m-    throw error;[m
+[31m-  }[m
+[31m-};[m
+[31m-[m
+[31m-export default {[m
+[31m-  getProfile,[m
+[31m-  updateProfile,[m
+[31m-  changePassword,[m
+[31m-  uploadAvatar,[m
+[31m-  getKycStatus,[m
+[31m-};[m
+[1mdiff --git a/frontend/src/api/wallet.js b/frontend/src/api/wallet.js[m
+[1mdeleted file mode 100644[m
+[1mindex 1f63db3..0000000[m
+[1m--- a/frontend/src/api/wallet.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,26 +0,0 @@[m
+[31m-import axios from 'axios';[m
+[31m-[m
+[31m-const API = axios.create({[m
+[31m-  baseURL: process.env.REACT_APP_API_URL,[m
+[31m-  withCredentials: true, // send cookies for auth[m
+[31m-});[m
+[31m-[m
+[31m-// Get user balances[m
+[31m-export const getBalances = async () => {[m
+[31m-  const res = await API.get('/api/user/balances');[m
+[31m-  return res.data;[m
+[31m-};[m
+[31m-[m
+[31m-// Generic deposit address fetch for any asset[m
+[31m-export const getDepositAddress = async (asset = 'BTC', fresh = false) => {[m
+[31m-  try {[m
+[31m-    const res = await API.get(`/api/wallet/${asset.toLowerCase()}?fresh=${fresh}`);[m
+[31m-    if (!res.data.address) throw new Error('No address returned from API');[m
+[31m-    return res.data.address;[m
+[31m-  } catch (err) {[m
+[31m-    throw new Error(err.response?.data?.message || `Failed to generate ${asset} address`);[m
+[31m-  }[m
+[31m-};[m
+[31m-[m
+[31m-// Convenience function for BTC (kept for backward compatibility)[m
+[31m-export const getBtcAddress = async (fresh = false) => getDepositAddress('BTC', fresh);[m
+[1mdiff --git a/frontend/src/api/walletApi.js b/frontend/src/api/walletApi.js[m
+[1mdeleted file mode 100644[m
+[1mindex d874d2c..0000000[m
+[1m--- a/frontend/src/api/walletApi.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,17 +0,0 @@[m
+[31m-import axios from 'axios';[m
+[31m-const BACKEND_URL = import.meta.env.VITE_API_BASE;[m
+[31m-[m
+[31m-export const getWallet = () =>[m
+[31m-  axios.get(`${BACKEND_URL}/wallet`, { withCredentials: true });[m
+[31m-[m
+[31m-export const getWithdrawals = () =>[m
+[31m-  axios.get(`${BACKEND_URL}/withdrawals`, { withCredentials: true });[m
+[31m-[m
+[31m-export const requestWithdrawal = (data) =>[m
+[31m-  axios.post(`${BACKEND_URL}/withdraw`, data, { withCredentials: true });[m
+[31m-[m
+[31m-export const getDeposits = (currency = 'BTC') =>[m
+[31m-  axios.get(`${BACKEND_URL}/deposits/${currency.toLowerCase()}`, { withCredentials: true });[m
+[31m-[m
+[31m-export const getDepositHistory = (currency = 'BTC') =>[m
+[31m-  axios.get(`${BACKEND_URL}/deposits/${currency.toLowerCase()}/history`, { withCredentials: true });[m
+[1mdiff --git a/frontend/src/api/withdrawal.js b/frontend/src/api/withdrawal.js[m
+[1mdeleted file mode 100644[m
+[1mindex cba3489..0000000[m
+[1m--- a/frontend/src/api/withdrawal.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,12 +0,0 @@[m
+[31m-import axios from 'axios';[m
+[31m-const API = axios.create({ baseURL: process.env.REACT_APP_API_URL, withCredentials: true });[m
+[31m-[m
+[31m-export const requestWithdrawal = async (asset, amount, address) => {[m
+[31m-  const res = await API.post('/api/withdrawals/request', { asset, amount, address });[m
+[31m-  return res.data;[m
+[31m-};[m
+[31m-[m
+[31m-export const getWithdrawals = async () => {[m
+[31m-  const res = await API.get('/api/withdrawals/history');[m
+[31m-  return res.data.withdrawals;[m
+[31m-};[m
+[1mdiff --git a/frontend/src/api/withdrawalApi.js b/frontend/src/api/withdrawalApi.js[m
+[1mdeleted file mode 100644[m
+[1mindex 4fbf428..0000000[m
+[1m--- a/frontend/src/api/withdrawalApi.js[m
+[1m+++ /dev/null[m
+[36m@@ -1,31 +0,0 @@[m
+[31m-import api from './apiService'; // Ensure this matches your base API filename[m
+[31m-[m
+[31m-// --- USER ENDPOINTS ---[m
+[31m-[m
+[31m-/** Fetch user's own withdrawals */[m
+[31m-export const getWithdrawals = async () => {[m
+[31m-  return await api.get('/transactions/my-withdrawals');[m
+[31m-};[m
+[31m-[m
+[31m-/** Request a new payout */[m
+[31m-export const requestWithdrawal = async (data) => {[m
+[31m-  return await api.post('/transactions/withdraw', data);[m
+[31m-};[m
+[31m-[m
+[31m-// --- ADMIN ENDPOINTS ---[m
+[31m-[m
+[31m-/** Admin: Get all pending payout requests */[m
+[31m-export const adminGetWithdrawals = async () => {[m
+[31m-  return await api.get('/admin/withdrawals/pending');[m
+[31m-};[m
+[31m-[m
+[31m-/** Admin: Approve a payout */[m
+[31m-export const adminApproveWithdrawal = async (id) => {[m
+[31m-  return await api.post(`/admin/withdrawals/${id}/approve`);[m
+[31m-};[m
+[31m-[m
+[31m-/** Admin: Reject a payout */[m
+[31m-export const adminRejectWithdrawal = async (id) => {[m
+[31m-  return await api.post(`/admin/withdrawals/${id}/reject`);[m
+[31m-};[m
+[31m-[m
+[1mdiff --git a/frontend/src/components/DepositTab.jsx b/frontend/src/components/DepositTab.jsx[m
+[1mindex 8a1bbf3..0d669be 100644[m
+[1m--- a/frontend/src/components/DepositTab.jsx[m
+[1m+++ b/frontend/src/components/DepositTab.jsx[m
+[36m@@ -1,7 +1,7 @@[m
+[32m+[m[32m// src/components/DepositTab.jsx[m
+ import { useState, useEffect } from 'react';[m
+[31m-import { getDepositAddress } from '../api/wallet.js';[m
+[31m-// Corrected: Use named export { QRCodeSVG } as required by qrcode.react v3+[m
+ import { QRCodeSVG } from 'qrcode.react';[m
+[32m+[m[32mimport api from '../api/api';  // ← the only API import needed now[m
+ [m
+ export default function DepositTab() {[m
+   const assets = ['BTC', 'ETH', 'USDT'];[m
+[36m@@ -10,20 +10,28 @@[m [mexport default function DepositTab() {[m
+   const [loading, setLoading] = useState(true);[m
+   const [error, setError] = useState('');[m
+ [m
+[31m-  // Fetch deposit address from backend[m
+[32m+[m[32m  // Fetch deposit address from backend (replaces getDepositAddress)[m
+   const fetchAddress = async (fresh = false, retryCount = 2) => {[m
+     setLoading(true);[m
+     setError('');[m
+[32m+[m
+     try {[m
+[31m-      const addr = await getDepositAddress(selectedAsset, fresh);[m
+[32m+[m[32m      // Use direct api call – adjust endpoint if your backend uses different path[m
+[32m+[m[32m      const res = await api.get(`/wallet/address/${selectedAsset}`, {[m
+[32m+[m[32m        params: { fresh }  // if backend supports ?fresh=true param[m
+[32m+[m[32m      });[m
+[32m+[m
+[32m+[m[32m      const addr = res.data.address || res.data;  // adjust based on your response shape[m
+       if (!addr) throw new Error('No address returned from API');[m
+[32m+[m
+       setAddress(addr);[m
+     } catch (err) {[m
+       console.error(`${selectedAsset} Address fetch error:`, err);[m
+[32m+[m
+       if (retryCount > 0) {[m
+         setTimeout(() => fetchAddress(fresh, retryCount - 1), 1000);[m
+       } else {[m
+[31m-        setError(err.message || `Failed to generate ${selectedAsset} address`);[m
+[32m+[m[32m        setError(err.response?.data?.message || err.message || `Failed to generate ${selectedAsset} address`);[m
+         setAddress('');[m
+       }[m
+     } finally {[m
+[36m@@ -33,7 +41,8 @@[m [mexport default function DepositTab() {[m
+ [m
+   useEffect(() => {[m
+     fetchAddress();[m
+[31m-    // Cleanup function if user switches tabs quickly[m
+[32m+[m
+[32m+[m[32m    // Cleanup[m
+     return () => {[m
+       setLoading(false);[m
+     };[m
+[36m@@ -79,35 +88,43 @@[m [mexport default function DepositTab() {[m
+       ) : error ? ([m
+         <div style={{ padding: '20px', border: '1px solid #e74c3c', borderRadius: '10px' }}>[m
+           <p style={{ color: '#e74c3c' }}>{error}</p>[m
+[31m-          <button onClick={() => fetchAddress()} style={{ color: '#fff', background: 'none', border: 'underline', cursor: 'pointer' }}>Retry Sync</button>[m
+[32m+[m[32m          <button[m
+[32m+[m[32m            onClick={() => fetchAddress()}[m
+[32m+[m[32m            style={{ color: '#fff', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}[m
+[32m+[m[32m          >[m
+[32m+[m[32m            Retry Sync[m
+[32m+[m[32m          </button>[m
+         </div>[m
+       ) : ([m
+         <div className="animate-in fade-in zoom-in duration-300">[m
+           <label style={{ fontSize: '10px', color: '#555', textTransform: 'uppercase', fontWeight: '900' }}>[m
+             Unique Deposit Address[m
+           </label>[m
+[31m-          <code style={{ [m
+[31m-            wordBreak: 'break-all', [m
+[31m-            display: 'block', [m
+[31m-            padding: '12px', [m
+[31m-            background: '#000', [m
+[31m-            color: '#00ff00', [m
+[31m-            borderRadius: '6px', [m
+[31m-            fontSize: '0.85rem',[m
+[31m-            marginBottom: '15px' [m
+[31m-          }}>[m
+[32m+[m[32m          <code[m
+[32m+[m[32m            style={{[m
+[32m+[m[32m              wordBreak: 'break-all',[m
+[32m+[m[32m              display: 'block',[m
+[32m+[m[32m              padding: '12px',[m
+[32m+[m[32m              background: '#000',[m
+[32m+[m[32m              color: '#00ff00',[m
+[32m+[m[32m              borderRadius: '6px',[m
+[32m+[m[32m              fontSize: '0.85rem',[m
+[32m+[m[32m              marginBottom: '15px',[m
+[32m+[m[32m            }}[m
+[32m+[m[32m          >[m
+             {address}[m
+           </code>[m
+ [m
+           {/* QR Code Section */}[m
+[31m-          <div style={{ [m
+[31m-            margin: '20px 0', [m
+[31m-            padding: '15px', [m
+[31m-            background: '#fff', [m
+[31m-            display: 'inline-block', [m
+[31m-            borderRadius: '12px' [m
+[31m-          }}>[m
+[31m-            {/* Updated component to QRCodeSVG */}[m
+[32m+[m[32m          <div[m
+[32m+[m[32m            style={{[m
+[32m+[m[32m              margin: '20px 0',[m
+[32m+[m[32m              padding: '15px',[m
+[32m+[m[32m              background: '#fff',[m
+[32m+[m[32m              display: 'inline-block',[m
+[32m+[m[32m              borderRadius: '12px',[m
+[32m+[m[32m            }}[m
+[32m+[m[32m          >[m
+             <QRCodeSVG value={address} size={180} level="H" />[m
+           </div>[m
+ [m
+[36m@@ -150,7 +167,7 @@[m [mexport default function DepositTab() {[m
+ [m
+           <div style={{ marginTop: '20px', padding: '15px', background: 'rgba(231, 76, 60, 0.1)', borderRadius: '8px' }}>[m
+             <p style={{ fontSize: '0.75rem', color: '#e74c3c', margin: 0 }}>[m
+[31m-              <strong>⚠️ ATTENTION:</strong> Send only <strong>{selectedAsset}</strong> to this address. [m
+[32m+[m[32m              <strong>⚠️ ATTENTION:</strong> Send only <strong>{selectedAsset}</strong> to this address.[m
+               Cross-chain deposits will result in permanent loss.[m
+             </p>[m
+             <p style={{ fontSize: '0.75rem', color: '#888', marginTop: '5px' }}>[m
+[1mdiff --git a/frontend/src/components/WalletDashboard.jsx b/frontend/src/components/WalletDashboard.jsx[m
+[1mindex 582ff35..6b58491 100644[m
+[1m--- a/frontend/src/components/WalletDashboard.jsx[m
+[1m+++ b/frontend/src/components/WalletDashboard.jsx[m
+[36m@@ -1,20 +1,17 @@[m
+[31m-// src/components/WalletDashboard.jsx[m
+ import { useState, useEffect } from 'react';[m
+ import io from 'socket.io-client';[m
+ import DepositTab from './DepositTab.jsx';[m
+ import WithdrawalTab from './WithdrawalTab.jsx';[m
+ import RecentActivity from './RecentActivity.jsx';[m
+[31m-import { getBalances } from '../api/wallet.js';[m
+[31m-import { getRecentTransactions } from '../api/transaction.js';[m
+[31m-import { getProfile } from '../api/user.js';[m
+[32m+[m[32mimport api from '../api/api'; // ← unified safe API instance[m
+ [m
+[31m-const SOCKET_URL = process.env.REACT_APP_API_URL;[m
+[32m+[m[32mconst SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000';[m
+ [m
+ export default function WalletDashboard() {[m
+   const [activeTab, setActiveTab] = useState('deposit');[m
+   const [balances, setBalances] = useState({ BTC: 0, ETH: 0, USDT: 0, EUR: 0 });[m
+   const [transactions, setTransactions] = useState([]);[m
+[31m-  const [userRole, setUserRole] = useState('user'); // default[m
+[32m+[m[32m  const [userRole, setUserRole] = useState('user');[m
+   const [loadingBalances, setLoadingBalances] = useState(true);[m
+   const [loadingTransactions, setLoadingTransactions] = useState(true);[m
+ [m
+[36m@@ -22,17 +19,19 @@[m [mexport default function WalletDashboard() {[m
+     const token = localStorage.getItem('token');[m
+     if (!token) return;[m
+ [m
+[31m-    // Fetch user role and initial data[m
+     const fetchData = async () => {[m
+       try {[m
+[31m-        const user = await getProfile();[m
+[31m-        setUserRole(user.role || 'user');[m
+[32m+[m[32m        // Get user profile (replaces getProfile from user.js)[m
+[32m+[m[32m        const profileRes = await api.get('/user/me');[m
+[32m+[m[32m        setUserRole(profileRes.data.role || 'user');[m
+ [m
+[31m-        const balanceData = await getBalances();[m
+[31m-        setBalances(balanceData.balances || balances);[m
+[32m+[m[32m        // Get balances (replaces getBalances from wallet.js)[m
+[32m+[m[32m        const balanceRes = await api.get('/wallet/balances');[m
+[32m+[m[32m        setBalances(balanceRes.data.balances || balances);[m
+ [m
+[31m-        const txData = await getRecentTransactions();[m
+[31m-        setTransactions(txData);[m
+[32m+[m[32m        // Get recent transactions (replaces getRecentTransactions from transaction.js)[m
+[32m+[m[32m        const txRes = await api.get('/transactions/recent?limit=10');[m
+[32m+[m[32m        setTransactions(txRes.data || []);[m
+       } catch (err) {[m
+         console.error('Initial fetch error:', err);[m
+       } finally {[m
+[36m@@ -40,9 +39,10 @@[m [mexport default function WalletDashboard() {[m
+         setLoadingTransactions(false);[m
+       }[m
+     };[m
+[32m+[m
+     fetchData();[m
+ [m
+[31m-    // WebSocket for real-time updates[m
+[32m+[m[32m    // WebSocket setup[m
+     const socket = io(SOCKET_URL, { auth: { token } });[m
+     socket.on('balanceUpdate', setBalances);[m
+     socket.on('transactionUpdate', (tx) => setTransactions(prev => [tx, ...prev]));[m
+[36m@@ -61,7 +61,7 @@[m [mexport default function WalletDashboard() {[m
+     cursor: 'pointer',[m
+     borderRadius: '6px',[m
+     fontWeight: '600',[m
+[31m-    flex: 1[m
+[32m+[m[32m    flex: 1,[m
+   });[m
+ [m
+   const formatBalance = (ticker) => {[m
+[1mdiff --git a/frontend/src/components/WithdrawalTab.jsx b/frontend/src/components/WithdrawalTab.jsx[m
+[1mindex 4de712c..9bc2142 100644[m
+[1m--- a/frontend/src/components/WithdrawalTab.jsx[m
+[1m+++ b/frontend/src/components/WithdrawalTab.jsx[m
+[36m@@ -1,6 +1,6 @@[m
+ // src/components/WithdrawalTab.jsx[m
+ import { useState } from 'react';[m
+[31m-import { requestWithdrawal } from '../api/withdrawal.js';[m
+[32m+[m[32mimport api from '../api/api';  // ← use the single, safe API instance[m
+ [m
+ export default function WithdrawalTab({ balances, onSuccess }) {[m
+   const [withdrawalData, setWithdrawalData] = useState({ asset: 'EUR', amount: '', address: '' });[m
+[36m@@ -12,6 +12,7 @@[m [mexport default function WithdrawalTab({ balances, onSuccess }) {[m
+     setMessage('');[m
+ [m
+     const { asset, amount, address } = withdrawalData;[m
+[32m+[m
+     if (!amount || !address) {[m
+       setMessage('Amount and wallet address are required.');[m
+       return;[m
+[36m@@ -24,12 +25,19 @@[m [mexport default function WithdrawalTab({ balances, onSuccess }) {[m
+ [m
+     try {[m
+       setLoading(true);[m
+[31m-      await requestWithdrawal(asset, parseFloat(amount), address);[m
+[32m+[m[32m      // Replaced old requestWithdrawal with direct api call[m
+[32m+[m[32m      await api.post('/transactions/withdraw', {[m
+[32m+[m[32m        asset,[m
+[32m+[m[32m        amount: parseFloat(amount),[m
+[32m+[m[32m        address,[m
+[32m+[m[32m      });[m
+[32m+[m
+       setMessage('Withdrawal requested successfully.');[m
+       setWithdrawalData({ asset: 'EUR', amount: '', address: '' });[m
+       onSuccess(); // refresh balances[m
+     } catch (err) {[m
+[31m-      setMessage(err.response?.data?.message || 'Error requesting withdrawal.');[m
+[32m+[m[32m      // No auto-logout or redirect – just show error[m
+[32m+[m[32m      setMessage(err.response?.data?.message || err.message || 'Error requesting withdrawal.');[m
+     } finally {[m
+       setLoading(false);[m
+     }[m
+[1mdiff --git a/frontend/src/context/AuthContext.jsx b/frontend/src/context/AuthContext.jsx[m
+[1mindex c45b690..bd97511 100644[m
+[1m--- a/frontend/src/context/AuthContext.jsx[m
+[1m+++ b/frontend/src/context/AuthContext.jsx[m
+[36m@@ -1,4 +1,11 @@[m
+[31m-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';[m
+[32m+[m[32m// src/context/AuthContext.jsx[m
+[32m+[m[32mimport React, {[m
+[32m+[m[32m  createContext,[m
+[32m+[m[32m  useContext,[m
+[32m+[m[32m  useReducer,[m
+[32m+[m[32m  useEffect,[m
+[32m+[m[32m  useCallback,[m
+[32m+[m[32m} from 'react';[m
+ import api, { setAccessToken } from '../api/api';[m
+ [m
+ const AuthContext = createContext(null);[m
+[36m@@ -7,7 +14,8 @@[m [mconst initialState = {[m
+   user: null,[m
+   token: localStorage.getItem('token') || null,[m
+   loading: true,[m
+[31m-  initialized: false, // 🔑 The "Shield" against early redirects[m
+[32m+[m[32m  initialized: false,[m
+[32m+[m[32m  error: null,[m
+ };[m
+ [m
+ function authReducer(state, action) {[m
+[36m@@ -19,8 +27,17 @@[m [mfunction authReducer(state, action) {[m
+         token: action.payload.token,[m
+         loading: false,[m
+         initialized: true,[m
+[32m+[m[32m        error: null,[m
+       };[m
+     case 'AUTH_FAILED':[m
+[32m+[m[32m      return {[m
+[32m+[m[32m        ...state,[m
+[32m+[m[32m        user: null,[m
+[32m+[m[32m        token: null,[m
+[32m+[m[32m        loading: false,[m
+[32m+[m[32m        initialized: true,[m
+[32m+[m[32m        error: action.payload?.message || 'Authentication failed',[m
+[32m+[m[32m      };[m
+     case 'LOGOUT':[m
+       return {[m
+         ...state,[m
+[36m@@ -28,6 +45,7 @@[m [mfunction authReducer(state, action) {[m
+         token: null,[m
+         loading: false,[m
+         initialized: true,[m
+[32m+[m[32m        error: null,[m
+       };[m
+     default:[m
+       return state;[m
+[36m@@ -38,36 +56,43 @@[m [mexport function AuthProvider({ children }) {[m
+   const [state, dispatch] = useReducer(authReducer, initialState);[m
+ [m
+   const initAuth = useCallback(async () => {[m
+[31m-    const token = localStorage.getItem('token');[m
+[31m-    [m
+[31m-    if (!token) {[m
+[32m+[m[32m    const storedToken = localStorage.getItem('token');[m
+[32m+[m
+[32m+[m[32m    if (!storedToken) {[m
+       setAccessToken(null);[m
+[31m-      return dispatch({ type: 'AUTH_FAILED' });[m
+[32m+[m[32m      dispatch({ type: 'AUTH_FAILED', payload: { message: 'No token found' } });[m
+[32m+[m[32m      return;[m
+     }[m
+ [m
+[31m-    // Set token immediately so the first request has it[m
+[31m-    setAccessToken(token);[m
+[32m+[m[32m    setAccessToken(storedToken);[m
+ [m
+     try {[m
+[31m-      /** [m
+[31m-       * 💡 NOTE: Your api.jsx interceptor will handle token refresh [m
+[31m-       * automatically if this call returns a 401. [m
+[31m-       */[m
+       const res = await api.get('/auth/profile');[m
+       const userData = res.data.user || res.data;[m
+[31m-      [m
+[31m-      // Get the LATEST token (in case the interceptor refreshed it during the call)[m
+       const currentToken = localStorage.getItem('token');[m
+[31m-      [m
+[31m-      dispatch({ type: 'LOGIN', payload: { user: userData, token: currentToken } });[m
+[32m+[m
+[32m+[m[32m      dispatch({[m
+[32m+[m[32m        type: 'LOGIN',[m
+[32m+[m[32m        payload: { user: userData, token: currentToken },[m
+[32m+[m[32m      });[m
+     } catch (err) {[m
+[31m-      console.error('Auth initialization failed:', err);[m
+[31m-      // Only clear if it's a genuine auth error, not a network timeout[m
+[31m-      if (err.response?.status === 401 || err.response?.status === 403) {[m
+[32m+[m[32m      console.error('[Auth] Initialization failed:', err);[m
+[32m+[m
+[32m+[m[32m      const status = err.response?.status;[m
+[32m+[m
+[32m+[m[32m      if (status === 401 || status === 403) {[m
+         localStorage.removeItem('token');[m
+         setAccessToken(null);[m
+[32m+[m[32m        dispatch({[m
+[32m+[m[32m          type: 'AUTH_FAILED',[m
+[32m+[m[32m          payload: { message: 'Session expired or invalid credentials' },[m
+[32m+[m[32m        });[m
+[32m+[m[32m      } else {[m
+[32m+[m[32m        dispatch({[m
+[32m+[m[32m          type: 'AUTH_FAILED',[m
+[32m+[m[32m          payload: { message: 'Network or server error during auth check' },[m
+[32m+[m[32m        });[m
+       }[m
+[31m-      
