@@ -1,3 +1,4 @@
+// controllers/userController.js
 import User from "../models/User.js";
 import Deposit from "../models/Deposit.js";
 import mongoose from "mongoose";
@@ -9,17 +10,66 @@ const sendResponse = (res, status, success, data = {}, message = null) => {
   return res.status(status).json({
     success,
     ...(message && { message }),
-    ...data
+    ...data,
   });
 };
 
 /* =========================================================
-   USER LOGIC
+   USER LOGIC (Frontend-facing)
 ========================================================= */
 
 /**
- * @desc Get User Dashboard (Frontend UserContext Compatible)
+ * @desc Get current user's profile (self-view)
+ * @route GET /user/me or /user/profile
+ * @access Private
+ */
+export const getUserProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id)
+      .select('-password -__v -refreshTokens')
+      .lean();
+
+    if (!user) {
+      return sendResponse(res, 404, false, {}, "User not found");
+    }
+
+    return sendResponse(res, 200, true, { profile: user });
+  } catch (error) {
+    console.error("getUserProfile error:", error);
+    return sendResponse(res, 500, false, {}, "Server error");
+  }
+};
+
+/**
+ * @desc Update user profile (self)
+ * @route PUT /user/me
+ * @access Private
+ */
+export const updateUserProfile = async (req, res) => {
+  try {
+    const updates = req.body;
+    delete updates.password; // prevent password update here
+
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).select('-password -__v');
+
+    if (!user) {
+      return sendResponse(res, 404, false, {}, "User not found");
+    }
+
+    return sendResponse(res, 200, true, { user }, "Profile updated");
+  } catch (error) {
+    return sendResponse(res, 400, false, {}, error.message);
+  }
+};
+
+/**
+ * @desc Get user dashboard (stats + recent transactions)
  * @route GET /user/dashboard
+ * @access Private
  */
 export const getUserDashboard = async (req, res) => {
   try {
@@ -30,53 +80,48 @@ export const getUserDashboard = async (req, res) => {
       return sendResponse(res, 404, false, {}, "User not found");
     }
 
-    /* ---------- Convert balances Map safely ---------- */
-    const balances =
-      user.balances instanceof Map
-        ? Object.fromEntries(user.balances)
-        : user.balances || {};
+    const balances = user.balances instanceof Map
+      ? Object.fromEntries(user.balances)
+      : user.balances || {};
 
     const mainBalance = Object.values(balances).reduce(
       (acc, val) => acc + Number(val || 0),
       0
     );
 
-    /* ---------- Stats object (exactly what frontend expects) ---------- */
     const stats = {
       mainBalance,
       profit: Number(user.profit ?? 0),
       activeNodes: Number(user.activeNodes ?? 0),
       dailyROI: Number(user.dailyROI ?? 0),
-      activePlan: user.activePlan ?? "None"
+      activePlan: user.activePlan ?? "None",
     };
 
-    /* ---------- Fetch recent deposits as transactions ---------- */
     const deposits = await Deposit.find({ user: userId })
       .sort({ createdAt: -1 })
       .limit(10)
       .lean();
 
     const transactions = deposits.map((dep) => ({
-      id: dep._id,
+      id: dep._id.toString(),
       type: "deposit",
       amount: Number(dep.amount),
       currency: dep.currency,
       status: dep.status,
-      date: dep.createdAt
+      date: dep.createdAt.toISOString(),
     }));
 
-    return sendResponse(res, 200, true, {
-      stats,
-      transactions
-    });
+    return sendResponse(res, 200, true, { stats, transactions });
   } catch (error) {
-    console.error("Dashboard Error:", error);
+    console.error("getUserDashboard error:", error);
     return sendResponse(res, 500, false, {}, "Server error");
   }
 };
 
 /**
- * @desc Get User Balances
+ * @desc Get user balances
+ * @route GET /user/balance
+ * @access Private
  */
 export const getUserBalances = async (req, res) => {
   try {
@@ -85,10 +130,9 @@ export const getUserBalances = async (req, res) => {
       return sendResponse(res, 404, false, {}, "User not found");
     }
 
-    const balances =
-      user.balances instanceof Map
-        ? Object.fromEntries(user.balances)
-        : user.balances || {};
+    const balances = user.balances instanceof Map
+      ? Object.fromEntries(user.balances)
+      : user.balances || {};
 
     return sendResponse(res, 200, true, { balances });
   } catch (error) {
@@ -97,7 +141,9 @@ export const getUserBalances = async (req, res) => {
 };
 
 /**
- * @desc Get Full User Ledger
+ * @desc Get full user ledger
+ * @route GET /user/transactions
+ * @access Private
  */
 export const getUserLedger = async (req, res) => {
   try {
@@ -115,9 +161,6 @@ export const getUserLedger = async (req, res) => {
    ADMIN LOGIC
 ========================================================= */
 
-/**
- * @desc Approve deposit and credit user (Atomic Transaction)
- */
 export const approveDeposit = async (req, res) => {
   const session = await mongoose.startSession();
 
@@ -136,13 +179,8 @@ export const approveDeposit = async (req, res) => {
       throw new Error("User not found");
     }
 
-    const currentBalance =
-      user.balances.get(deposit.currency) || 0;
-
-    user.balances.set(
-      deposit.currency,
-      currentBalance + Number(deposit.amount)
-    );
+    const currentBalance = user.balances.get(deposit.currency) || 0;
+    user.balances.set(deposit.currency, currentBalance + Number(deposit.amount));
 
     deposit.status = "completed";
 
@@ -152,78 +190,78 @@ export const approveDeposit = async (req, res) => {
 
     await session.commitTransaction();
 
-    return sendResponse(
-      res,
-      200,
-      true,
-      {},
-      "Deposit approved and credited."
-    );
+    return sendResponse(res, 200, true, {}, "Deposit approved and credited.");
   } catch (error) {
     await session.abortTransaction();
-    console.error("Approve Deposit Error:", error);
+    console.error("approveDeposit error:", error);
     return sendResponse(res, 400, false, {}, error.message);
   } finally {
     session.endSession();
   }
 };
 
-/**
- * @desc Get All Users (Admin)
- */
 export const getUsers = async (req, res) => {
   try {
-    const users = await User.find().lean();
+    const users = await User.find()
+      .select('-password -__v -refreshTokens')
+      .lean();
+
     return sendResponse(res, 200, true, { users });
   } catch (error) {
     return sendResponse(res, 500, false, {}, "Server error");
   }
 };
 
-/**
- * @desc Update User Balance (Admin Manual Adjustment)
- */
 export const updateUserBalance = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
+    session.startTransaction();
+
     const { userId, currency, amount } = req.body;
 
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).session(session);
     if (!user) {
-      return sendResponse(res, 404, false, {}, "User not found");
+      throw new Error("User not found");
     }
 
     const currentBalance = user.balances.get(currency) || 0;
     user.balances.set(currency, currentBalance + Number(amount));
 
     user.markModified("balances");
-    await user.save();
+    await user.save({ session });
+
+    await session.commitTransaction();
 
     return sendResponse(res, 200, true, {}, "Balance updated");
   } catch (error) {
+    await session.abortTransaction();
     return sendResponse(res, 400, false, {}, error.message);
+  } finally {
+    session.endSession();
   }
 };
 
-/**
- * @desc Ban User
- */
 export const banUser = async (req, res) => {
   try {
     const { userId } = req.body;
-    await User.findByIdAndUpdate(userId, { banned: true });
+    const user = await User.findByIdAndUpdate(userId, { banned: true }, { new: true });
+    if (!user) {
+      return sendResponse(res, 404, false, {}, "User not found");
+    }
     return sendResponse(res, 200, true, {}, "User banned");
   } catch (error) {
     return sendResponse(res, 400, false, {}, error.message);
   }
 };
 
-/**
- * @desc Unban User
- */
 export const unbanUser = async (req, res) => {
   try {
     const { userId } = req.body;
-    await User.findByIdAndUpdate(userId, { banned: false });
+    const user = await User.findByIdAndUpdate(userId, { banned: false }, { new: true });
+    if (!user) {
+      return sendResponse(res, 404, false, {}, "User not found");
+    }
     return sendResponse(res, 200, true, {}, "User unbanned");
   } catch (error) {
     return sendResponse(res, 400, false, {}, error.message);
