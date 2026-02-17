@@ -1,7 +1,6 @@
-// src/context/AuthContext.jsx
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom'; // Add for SPA navigation
-import api, { setAccessToken } from '../api/api'; // Assume your API client
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../api/api';
 
 const AuthContext = createContext(null);
 
@@ -15,35 +14,26 @@ const initialState = {
 
 function authReducer(state, action) {
   switch (action.type) {
-    case 'LOGIN':
-      return {
-        ...state,
-        user: action.payload.user,
-        token: action.payload.token,
-        loading: false,
-        initialized: true,
-        error: null,
+    case 'AUTH_SUCCESS':
+      return { 
+        ...state, 
+        user: action.payload.user, 
+        token: action.payload.token, 
+        loading: false, 
+        initialized: true, 
+        error: null 
       };
     case 'AUTH_FAILED':
-      return {
-        ...state,
-        user: null,
-        token: null,
-        loading: false,
-        initialized: true,
-        error: action.payload?.message || 'Authentication failed',
+      return { 
+        ...state, 
+        user: null, 
+        token: null, 
+        loading: false, 
+        initialized: true, 
+        error: action.payload 
       };
     case 'LOGOUT':
-      return {
-        ...state,
-        user: null,
-        token: null,
-        loading: false,
-        initialized: true,
-        error: null,
-      };
-    case 'SET_LOADING':
-      return { ...state, loading: action.payload };
+      return { ...initialState, token: null, loading: false, initialized: true };
     default:
       return state;
   }
@@ -51,97 +41,89 @@ function authReducer(state, action) {
 
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
+  const [systemStatus, setSystemStatus] = useState({ maintenanceMode: false });
   const navigate = useNavigate();
+  const hasInitialized = useRef(false);
 
-  // Token refresh logic (optional enhancement)
-  const refreshToken = useCallback(async () => {
+  // 🛡️ Fetch Global System Status (Maintenance Mode)
+  const fetchSystemStatus = useCallback(async () => {
     try {
-      const refreshRes = await api.post('/auth/refresh');
-      const { token, refreshToken: newRefresh } = refreshRes.data;
-      localStorage.setItem('token', token);
-      if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
-      setAccessToken(token);
-      return token;
+      const res = await api.get('/system/status');
+      setSystemStatus(res.data);
     } catch (err) {
-      return null;
+      console.warn("[System] Status check failed");
     }
   }, []);
 
   const initAuth = useCallback(async () => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
+    // Run system check alongside auth
+    fetchSystemStatus();
+
     const storedToken = localStorage.getItem('token');
     if (!storedToken) {
-      dispatch({ type: 'AUTH_FAILED', payload: { message: 'No token found' } });
+      dispatch({ type: 'AUTH_FAILED', payload: 'No active session' });
       return;
     }
 
-    setAccessToken(storedToken);
-    dispatch({ type: 'SET_LOADING', payload: true });
+    // 🕒 WATCHDOG: Force unblock the UI if Render.com is sleeping
+    const watchdog = setTimeout(() => {
+      if (!state.initialized) {
+        dispatch({ type: 'AUTH_FAILED', payload: 'Node wake-up timeout' });
+      }
+    }, 8000);
 
     try {
-      // Try refresh first if token might be expired
-      let currentToken = storedToken;
-      if (localStorage.getItem('refreshToken')) {
-        currentToken = await refreshToken() || storedToken;
-      }
-
       const res = await api.get('/auth/profile');
+      clearTimeout(watchdog);
+      
       const userData = res.data.user || res.data;
       dispatch({
-        type: 'LOGIN',
-        payload: { user: userData, token: currentToken },
+        type: 'AUTH_SUCCESS',
+        payload: { user: userData, token: storedToken }
       });
     } catch (err) {
-      console.error('[Auth] Initialization failed:', err);
-      const status = err.response?.status;
-      if (status === 401 || status === 403) {
+      clearTimeout(watchdog);
+      console.error('[Auth] Init Error:', err.message);
+
+      if (err.response?.status === 401) {
         localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        setAccessToken(null);
-        dispatch({
-          type: 'AUTH_FAILED',
-          payload: { message: 'Session expired. Please log in again.' },
-        });
-        navigate('/login', { replace: true });
-      } else {
-        dispatch({
-          type: 'AUTH_FAILED',
-          payload: { message: 'Network or server error. Please try again.' },
-        });
+        navigate('/login');
       }
+
+      dispatch({ 
+        type: 'AUTH_FAILED', 
+        payload: err.response?.data?.message || 'Connection timeout' 
+      });
     }
-  }, [navigate, refreshToken]);
+  }, [navigate, fetchSystemStatus, state.initialized]);
 
   useEffect(() => {
     initAuth();
   }, [initAuth]);
 
-  const login = useCallback((user, token) => {
-    if (!token) return;
+  const login = (user, token) => {
     localStorage.setItem('token', token);
-    setAccessToken(token);
-    dispatch({
-      type: 'LOGIN',
-      payload: { user, token },
-    });
-    navigate('/dashboard', { replace: true }); // Redirect after login
-  }, [navigate]);
+    dispatch({ type: 'AUTH_SUCCESS', payload: { user, token } });
+    navigate('/dashboard');
+  };
 
-  const logout = useCallback(() => {
+  const logout = () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    setAccessToken(null);
     dispatch({ type: 'LOGOUT' });
-    navigate('/login', { replace: true });
-  }, [navigate]);
-
-  const isReady = state.initialized && !state.loading;
+    navigate('/login');
+  };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, isReady }}>
-      {!isReady ? (
-        <div className="flex min-h-screen items-center justify-center bg-[#020617]">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-500"></div>
-          <p className="ml-4 text-slate-300">Securing session...</p>
+    <AuthContext.Provider value={{ ...state, login, logout, systemStatus }}>
+      {!state.initialized ? (
+        <div className="flex min-h-screen items-center justify-center bg-[#020617] text-white">
+          <div className="flex flex-col items-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-500 mb-4"></div>
+            <p className="text-slate-300 font-black uppercase tracking-[0.3em] text-[10px]">Securing Trustra Node...</p>
+          </div>
         </div>
       ) : (
         children
@@ -152,9 +134,7 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
 

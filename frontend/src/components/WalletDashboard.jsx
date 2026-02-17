@@ -1,19 +1,18 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
+import { Wallet, ArrowDownCircle, ArrowUpCircle, ShieldCheck, Activity } from 'lucide-react';
 import DepositTab from './DepositTab.jsx';
 import WithdrawalTab from './WithdrawalTab.jsx';
 import RecentActivity from './RecentActivity.jsx';
-import api from '../api/api'; // ← unified safe API instance
+import api from '../api/api';
 
-const SOCKET_URL = import.meta.env.VITE_API_URL || 'http://localhost:10000';
+const SOCKET_URL = import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com';
 
 export default function WalletDashboard() {
   const [activeTab, setActiveTab] = useState('deposit');
   const [balances, setBalances] = useState({ BTC: 0, ETH: 0, USDT: 0, EUR: 0 });
   const [transactions, setTransactions] = useState([]);
-  const [userRole, setUserRole] = useState('user');
-  const [loadingBalances, setLoadingBalances] = useState(true);
-  const [loadingTransactions, setLoadingTransactions] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -21,97 +20,88 @@ export default function WalletDashboard() {
 
     const fetchData = async () => {
       try {
-        // Get user profile (replaces getProfile from user.js)
-        const profileRes = await api.get('/user/me');
-        setUserRole(profileRes.data.role || 'user');
-
-        // Get balances (replaces getBalances from wallet.js)
-        const balanceRes = await api.get('/wallet/balances');
-        setBalances(balanceRes.data.balances || balances);
-
-        // Get recent transactions (replaces getRecentTransactions from transaction.js)
-        const txRes = await api.get('/transactions/recent?limit=10');
+        const [balRes, txRes] = await Promise.all([
+          api.get('/wallet/balances'),
+          api.get('/transactions/recent?limit=10')
+        ]);
+        setBalances(balRes.data.balances || balances);
         setTransactions(txRes.data || []);
       } catch (err) {
-        console.error('Initial fetch error:', err);
+        console.error('Fetch error:', err);
       } finally {
-        setLoadingBalances(false);
-        setLoadingTransactions(false);
+        setLoading(false);
       }
     };
 
     fetchData();
 
-    // WebSocket setup
+    // WebSocket logic
     const socket = io(SOCKET_URL, { auth: { token } });
     socket.on('balanceUpdate', setBalances);
     socket.on('transactionUpdate', (tx) => setTransactions(prev => [tx, ...prev]));
-    socket.on('connect', () => console.log('🟢 WebSocket connected'));
-    socket.on('disconnect', () => console.log('🔴 WebSocket disconnected'));
 
     return () => socket.disconnect();
   }, []);
 
-  const tabStyle = (tabName) => ({
-    padding: '12px 24px',
-    margin: '0 5px',
-    background: activeTab === tabName ? '#4CAF50' : '#f0f0f0',
-    color: activeTab === tabName ? '#fff' : '#333',
-    border: 'none',
-    cursor: 'pointer',
-    borderRadius: '6px',
-    fontWeight: '600',
-    flex: 1,
-  });
-
   const formatBalance = (ticker) => {
-    const value = balances[ticker] || 0;
-    return ticker === 'EUR' || ticker === 'USDT' ? value.toFixed(2) : value.toFixed(6);
+    const val = balances[ticker] || 0;
+    return ticker === 'EUR' || ticker === 'USDT' 
+      ? val.toLocaleString(undefined, { minimumFractionDigits: 2 }) 
+      : val.toLocaleString(undefined, { minimumFractionDigits: 6 });
   };
 
   return (
-    <div style={{ maxWidth: '750px', margin: '40px auto', padding: '25px', backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontFamily: "'Inter', sans-serif" }}>
-      <h2 style={{ textAlign: 'center', color: '#1a1a1a', marginBottom: '25px' }}>Financial Overview</h2>
+    <div className="glass-card overflow-hidden animate-fade-in">
+      {/* Header Info */}
+      <div className="p-6 border-b border-slate-800 bg-white/5 flex flex-col sm:flex-row justify-between items-center gap-4">
+        <div>
+          <h3 className="text-white font-black text-xs uppercase tracking-[0.3em] flex items-center gap-2">
+            <Wallet size={16} className="text-blue-500" /> Capital Terminals
+          </h3>
+          <p className="text-slate-500 text-[9px] font-bold uppercase mt-1">Live Ledger Synchronization</p>
+        </div>
+        <div className="flex gap-4">
+           {['EUR', 'BTC'].map(ticker => (
+             <div key={ticker} className="text-right">
+                <p className="text-slate-500 text-[8px] font-black uppercase">{ticker}</p>
+                <p className="text-sm font-bold text-white font-mono">{formatBalance(ticker)}</p>
+             </div>
+           ))}
+        </div>
+      </div>
 
-      {/* Admin-only button */}
-      {userRole === 'admin' && (
-        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-          <button style={{ backgroundColor: '#e74c3c', color: '#fff', padding: '8px 16px', borderRadius: '6px', border: 'none', cursor: 'pointer' }}>
-            Admin Panel
+      {/* Action Tabs */}
+      <div className="p-6">
+        <div className="flex bg-slate-950/50 p-1 rounded-xl border border-slate-800 mb-6">
+          <button 
+            onClick={() => setActiveTab('deposit')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              activeTab === 'deposit' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            <ArrowDownCircle size={14} /> Deposit
+          </button>
+          <button 
+            onClick={() => setActiveTab('withdraw')}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              activeTab === 'withdraw' ? 'bg-red-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            <ArrowUpCircle size={14} /> Withdraw
           </button>
         </div>
-      )}
 
-      {/* Balances */}
-      <div style={{ display: 'flex', justifyContent: 'space-around', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '10px', marginBottom: '30px' }}>
-        {['EUR', 'BTC', 'ETH', 'USDT'].map(ticker => (
-          <div key={ticker} style={{ textAlign: 'center' }}>
-            <span style={{ fontSize: '0.8rem', color: '#666', display: 'block' }}>{ticker} Balance</span>
-            <span style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#2c3e50' }}>
-              {loadingBalances ? '...' : formatBalance(ticker)}
-            </span>
-          </div>
-        ))}
+        {/* Tab Content Area */}
+        <div className="min-h-[300px] transition-all duration-500">
+          {activeTab === 'deposit' ? <DepositTab /> : <WithdrawalTab />}
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', marginBottom: '30px' }}>
-        <button onClick={() => setActiveTab('deposit')} style={tabStyle('deposit')}>Deposit Assets</button>
-        <button onClick={() => setActiveTab('withdraw')} style={tabStyle('withdraw')}>Withdraw Funds</button>
-      </div>
-
-      {/* Dynamic Tab Content */}
-      <div className="dashboard-content" style={{ minHeight: '400px' }}>
-        {activeTab === 'deposit' ? <DepositTab /> : <WithdrawalTab />}
-      </div>
-
-      {/* Recent Activity */}
-      <RecentActivity transactions={transactions} loading={loadingTransactions} />
-
-      {/* Footer */}
-      <div style={{ marginTop: '30px', borderTop: '1px solid #eee', paddingTop: '15px', textAlign: 'center' }}>
-        <p style={{ fontSize: '0.8rem', color: '#999' }}>Secure Blockchain Gateway v4.2.0 | © 2026 Trustra Capital</p>
+      {/* Footer Transactions */}
+      <div className="p-6 bg-slate-950/30 border-t border-slate-800">
+         <RecentActivity transactions={transactions} loading={loading} />
       </div>
     </div>
   );
 }
+

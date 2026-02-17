@@ -1,52 +1,62 @@
-import { useEffect, useState } from 'react';
-import axios from 'axios';
+import React from 'react';
+import { ShieldCheck, Mail, Activity, ArrowUpRight } from 'lucide-react';
 
-const AccountSummary = () => {
-  const [userData, setUserData] = useState(null);
-
-  const fetchUserData = async () => {
-    try {
-      // Assuming a new endpoint to get logged-in user's data
-      const { data } = await axios.get('/api/me'); 
-      setUserData(data);
-    } catch (err) {
-      console.error("Error fetching user data:", err);
-    }
-  };
-
-  useEffect(() => { fetchUserData(); }, []);
-
-  if (!userData) {
-    return <div className="p-8 text-white">Loading account data...</div>;
-  }
+export default function AccountSummary({ user, stats }) {
+  // We use the data already passed from the Dashboard parent
+  if (!user) return null;
 
   return (
-    <div className="p-8 bg-slate-900 text-white">
-      <h2 className="text-2xl font-bold mb-4">Account Summary</h2>
-      <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-        <p className="font-bold">Welcome, {userData.fullName}!</p>
-        <p className="text-slate-400">Email: {userData.email}</p>
+    <div className="glass-card p-8 h-full flex flex-col justify-between border-l-4 border-l-blue-500">
+      <div className="relative z-10">
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-black text-white flex items-center gap-2 tracking-tight">
+              Welcome back, {user.fullName.split(' ')[0]}!
+              <ShieldCheck size={18} className="text-blue-500" />
+            </h2>
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 mt-1">
+              <Mail size={12} /> {user.email}
+            </p>
+          </div>
+          <div className="bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20">
+             <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Verified</span>
+          </div>
+        </div>
 
-        <h3 className="text-xl font-bold mt-4 mb-2">Balances:</h3>
-        {Object.entries(userData.balances).map(([currency, amount]) => (
-          <p key={currency} className="text-green-400">
-            {currency}: ${amount.toFixed(2)}
-          </p>
-        ))}
-
-        <h3 className="text-xl font-bold mt-4 mb-2">Recent Transactions:</h3>
-        <div className="space-y-2 max-h-40 overflow-y-auto"> {/* Added scrolling for transactions */}
-          {userData.ledger.slice(0, 5).map(tx => ( // Displaying a few recent transactions
-            <div key={tx._id} className="bg-slate-700 p-2 rounded-md text-sm">
-              <p>{new Date(tx.createdAt).toLocaleDateString()}: {tx.type} of ${tx.amount} ({tx.currency}) - Status: {tx.status}</p>
+        {/* Currency Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
+          {Object.entries(user.balances || {}).map(([currency, amount]) => (
+            <div key={currency} className="bg-slate-950/40 p-3 rounded-xl border border-slate-800">
+              <p className="text-slate-500 text-[9px] font-black uppercase tracking-widest mb-1">{currency}</p>
+              <p className="text-sm font-bold text-emerald-400 font-mono">
+                {currency === 'BTC' ? '₿' : '€'}{amount.toLocaleString(undefined, { minimumFractionDigits: currency === 'BTC' ? 8 : 2 })}
+              </p>
             </div>
           ))}
-          {userData.ledger.length === 0 && <p className="text-slate-400">No transactions yet.</p>}
+        </div>
+      </div>
+
+      {/* Mini Activity Section */}
+      <div className="relative z-10 bg-slate-950/20 p-4 rounded-2xl border border-white/5">
+        <p className="text-slate-500 text-[9px] font-black uppercase tracking-[0.2em] mb-3 flex items-center gap-2">
+          <Activity size={12} className="text-blue-500" /> Recent Node Activity
+        </p>
+        <div className="space-y-2">
+          {(user.ledger || []).slice(0, 2).map((tx) => (
+            <div key={tx._id} className="flex items-center justify-between text-[10px]">
+              <span className="text-slate-300 font-bold uppercase">{tx.type}</span>
+              <span className="text-slate-500 font-mono">{new Date(tx.createdAt).toLocaleDateString()}</span>
+              <span className={tx.amount > 0 ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
+                {tx.amount > 0 ? '+' : ''}{tx.amount} {tx.currency}
+              </span>
+            </div>
+          ))}
+          {(!user.ledger || user.ledger.length === 0) && (
+            <p className="text-[10px] text-slate-600 italic">No recent transactions indexed.</p>
+          )}
         </div>
       </div>
     </div>
   );
-};
-
-export default AccountSummary;
+}
 

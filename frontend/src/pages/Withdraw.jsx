@@ -1,29 +1,31 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  PlusCircle,
-  Wallet,
-  ChevronRight,
-  TrendingUp,
-  LogOut,
-  ArrowDownCircle,
-  ShieldCheck,
-  Loader2,
-  Info
+import { 
+  LayoutDashboard, 
+  PlusCircle, 
+  Wallet, 
+  ChevronRight, 
+  TrendingUp, 
+  LogOut, 
+  ArrowDownCircle, 
+  ShieldCheck, 
+  Loader2, 
+  Info,
+  ShieldAlert
 } from 'lucide-react';
-import api from '../api/api'; // ✅ Fixed path
-import { useAuth } from '../context/AuthContext'; // ✅ Added for state management
+import api from '../api/api';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 export default function Withdraw() {
   const navigate = useNavigate();
-  const { logout, user } = useAuth(); // ✅ Use centralized logout
+  const { logout, user } = useAuth();
   const [amount, setAmount] = useState('');
   const [address, setAddress] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const availableBalance = Number(user?.mainBalance || 0);
+  // Syncing with your AuthContext balance structure
+  const availableBalance = Number(user?.balances?.EUR || 0);
 
   const handleWithdraw = async (e) => {
     e.preventDefault();
@@ -79,7 +81,9 @@ export default function Withdraw() {
         <main className="p-6 md:p-12 max-w-5xl w-full mx-auto space-y-10">
           <div className="space-y-2">
             <h1 className="text-3xl font-black italic uppercase tracking-tighter">Withdraw Funds</h1>
-            <p className="text-gray-500 text-sm font-medium uppercase tracking-wider italic">Available: €{availableBalance.toLocaleString()}</p>
+            <p className="text-gray-500 text-sm font-medium uppercase tracking-wider italic">
+              Available: €{availableBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            </p>
           </div>
 
           <div className="grid lg:grid-cols-5 gap-10">
@@ -117,33 +121,28 @@ export default function Withdraw() {
               </div>
 
               <button
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-500 py-6 rounded-[2rem] font-black text-xs tracking-widest uppercase transition-all flex justify-center items-center gap-3 shadow-xl shadow-blue-600/20 active:scale-95 disabled:opacity-50"
+                disabled={loading || !amount}
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white py-6 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
               >
-                {loading ? <Loader2 className="animate-spin" /> : <>Request Payout <ChevronRight size={18} /></>}
+                {loading ? <Loader2 className="animate-spin" /> : <>Authorize Withdrawal <ChevronRight size={18} /></>}
               </button>
             </form>
 
             {/* SIDE INFO */}
             <div className="lg:col-span-2 space-y-6">
-              <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 space-y-6">
-                <div className="flex items-center gap-3 text-blue-500">
-                  <ShieldCheck size={24} />
-                  <h3 className="font-black uppercase italic text-sm">Security Verification</h3>
-                </div>
-                <p className="text-xs text-gray-500 leading-relaxed">
-                  Withdrawals are processed manually by Trustra Nodes to ensure precision. Estimated processing time: <span className="text-white">1–6 hours</span>.
+              <div className="p-8 bg-blue-600/5 border border-blue-600/10 rounded-3xl space-y-4">
+                <ShieldCheck className="text-blue-500" size={28} />
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Security Protocol</h4>
+                <p className="text-xs text-gray-400 leading-relaxed font-bold">
+                  Withdrawals are processed through encrypted Trustra nodes. Standard processing time: <span className="text-white">12-24 Hours</span>.
                 </p>
-                <div className="pt-4 border-t border-white/5 space-y-3">
-                  <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
-                    <span className="text-gray-600">Network Fee</span>
-                    <span className="text-blue-500">€2.50 Flat</span>
-                  </div>
-                  <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
-                    <span className="text-gray-600">Protocol</span>
-                    <span className="text-emerald-500">AES-256 Enabled</span>
-                  </div>
-                </div>
+              </div>
+
+              <div className="p-8 bg-white/5 border border-white/5 rounded-3xl flex items-start gap-4">
+                <Info size={20} className="text-gray-500 shrink-0" />
+                <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
+                  Ensure your destination address is correct. Trustra Capital cannot recover assets sent to incorrect blockchain endpoints.
+                </p>
               </div>
             </div>
           </div>
