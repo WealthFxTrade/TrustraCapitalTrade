@@ -78,15 +78,19 @@ app.use(express.json({ limit:'5mb' }));
 app.use(express.urlencoded({ extended:true }));
 app.use(morgan('dev'));
 
-// ─── HEALTH CHECK ───
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    node: 'Trustra_Secure_Gateway_v8.4.1',
-    status: 'Online',
-    timestamp: new Date().toISOString()
-  });
+// ─── HEALTH CHECK FUNCTION ───
+const healthStatus = () => ({
+  success: true,
+  node: 'Trustra_Secure_Gateway_v8.4.1',
+  status: 'Online',
+  timestamp: new Date().toISOString()
 });
+
+// ─── HEALTH ENDPOINT ───
+app.get('/health', (req, res) => res.status(200).json(healthStatus()));
+
+// ─── REDIRECT ROOT TO HEALTH ───
+app.get('/', (req, res) => res.redirect('/health'));
 
 // ─── API ROUTES ───
 app.use('/api/auth', authRoutes);
