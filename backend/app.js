@@ -53,7 +53,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // curl, mobile apps
+    if (!origin) return callback(null, true); // mobile apps / curl
     if (!allowedOrigins.includes(origin)) return callback(new Error('CORS blocked: Origin not allowed'), false);
     return callback(null, true);
   },
@@ -89,8 +89,8 @@ const healthStatus = () => ({
 // ─── HEALTH ENDPOINT ───
 app.get('/health', (req, res) => res.status(200).json(healthStatus()));
 
-// ─── REDIRECT ROOT TO HEALTH ───
-app.get('/', (req, res) => res.redirect('/health'));
+// ─── ROOT SERVE SAME HEALTH JSON ───
+app.get('/', (req, res) => res.status(200).json(healthStatus()));
 
 // ─── API ROUTES ───
 app.use('/api/auth', authRoutes);
