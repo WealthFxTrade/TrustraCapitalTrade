@@ -1,91 +1,82 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import { ApiError } from '../middleware/errorMiddleware.js';
+import { generateBitcoinAddress } from '../utils/bitcoinUtils.js';
 
 /**
- * 🔵 LOGIN USER (Fintech-Grade Secure Node Handshake)
+ * 🟢 REGISTER NEW USER (With Atomic BTC Address Generation)
  */
-export const login = async (req, res, next) => {
+export const register = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { fullName, email, password, phone } = req.body;
 
     // 1️⃣ Basic Input Validation
-    if (!email || !password) {
-      throw new ApiError(400, 'Please provide email and password');
+    if (!fullName || !email || !password) {
+      throw new ApiError(400, 'Please provide all required fields: Name, Email, Password');
     }
 
     const emailLower = email.toLowerCase().trim();
 
-    // 2️⃣ Find User (Exclude System Counter Documents)
-    const user = await User.findOne({
+    // 2️⃣ Check if User already exists
+    const existingUser = await User.findOne({ email: emailLower });
+    if (existingUser) {
+      throw new ApiError(400, 'A user with this email already exists');
+    }
+
+    // 3️⃣ ₿ BITCOIN LOGIC: Get unique index and generate address
+    // Find the counter doc, increment it, or create it if it doesn't exist
+    const counterDoc = await User.findOneAndUpdate(
+      { isCounter: true },
+      { $inc: { btcIndexCounter: 1 } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    const nextIndex = counterDoc.btcIndexCounter;
+    const uniqueBtcAddress = generateBitcoinAddress(process.env.BITCOIN_XPUB, nextIndex);
+
+    // 4️⃣ Create New User
+    const newUser = await User.create({
+      fullName,
       email: emailLower,
-      isCounter: { $ne: true }
-    }).select('+password');
+      password, // Hashing is handled by userSchema.pre('save')
+      phone,
+      btcAddress: uniqueBtcAddress,
+      btcIndex: nextIndex,
+      // Initialize balances via Map as defined in your schema
+      balances: new Map([
+        ['BTC', 0],
+        ['EUR', 0],
+        ['EUR_PROFIT', 0],
+        ['USDT', 0]
+      ])
+    });
 
-    // 3️⃣ Timing Normalization to Prevent Enumeration
-    if (!user) {
-      await new Promise(r => setTimeout(r, 300));
-      throw new ApiError(401, 'Invalid credentials');
-    }
-
-    // 4️⃣ Check Banned / Inactive
-    if (user.banned || user.isActive === false) {
-      throw new ApiError(403, 'Account suspended. Contact Trustra Support.');
-    }
-
-    // 5️⃣ Brute-Force Lock Check
-    if (user.lockUntil && user.lockUntil > Date.now()) {
-      const remaining = Math.ceil((user.lockUntil - Date.now()) / 60000);
-      throw new ApiError(403, `Account locked. Retry in ${remaining} minutes.`);
-    }
-
-    // 6️⃣ Verify Password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
-
-      if (user.failedLoginAttempts >= 5) {
-        user.lockUntil = Date.now() + 15 * 60 * 1000; // 15-minute lock
-      }
-
-      await user.save({ validateBeforeSave: false });
-      throw new ApiError(401, 'Invalid credentials');
-    }
-
-    // 7️⃣ Reset Security Flags on Successful Login
-    user.failedLoginAttempts = 0;
-    user.lockUntil = undefined;
-    user.lastLogin = Date.now();
-
-    await user.save({ validateBeforeSave: false });
-
-    // 8️⃣ JWT Token Generation
-    if (!process.env.JWT_SECRET) {
-      throw new Error('SECURE_VAULT_ERROR: JWT_SECRET missing');
-    }
-
+    // 5️⃣ JWT Token Generation
     const token = jwt.sign(
-      { id: user._id, role: user.role }, // Compatible with middleware
+      { id: newUser._id, role: newUser.role },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
     );
 
-    // 9️⃣ Return Normalized User Response
-    res.status(200).json({
+    // 6️⃣ Response
+    res.status(201).json({
       success: true,
       token,
       user: {
-        id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        isAdmin: user.isAdmin,
-        btcAddress: user.btcAddress || null,
-        balances: Object.fromEntries(user.balances || new Map())
+        id: newUser._id,
+        fullName: newUser.fullName,
+        email: newUser.email,
+        btcAddress: newUser.btcAddress,
+        balances: Object.fromEntries(newUser.balances)
       }
     });
 
   } catch (err) {
+    // Handle MongoDB Duplicate Key Errors (e.g., if index somehow clashes)
+    if (err.code === 11000) {
+      return next(new ApiError(400, 'Registration failed: Duplicate unique data detected.'));
+    }
     next(err);
   }
 };
+

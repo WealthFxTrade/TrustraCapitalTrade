@@ -1,27 +1,29 @@
-// backend/test-wallet.js
 import dotenv from 'dotenv';
+import { deriveBtcAddress, getBtcBalance } from './utils/bitcoinUtils.js';
+import { getEthBalance, getUsdtBalance } from './utils/ethUtils.js';
+
 dotenv.config();
 
-import { ethers } from 'ethers';
-import bip39 from 'bip39';
-import bitcoin from 'bitcoinjs-lib';
-import bip32 from 'bip32';
+async function runWalletAudit() {
+  console.log("🚀 Starting Trustra Wallet Audit...\n");
 
-(async () => {
-  try {
-    // Ethereum Wallet
-    const ethWallet = ethers.Wallet.fromMnemonic(process.env.ETH_MNEMONIC);
-    console.log('Ethereum Address:', ethWallet.address);
+  // BTC Check
+  const xpub = process.env.BITCOIN_XPUB;
+  const btcMaster = process.env.BTC_WALLET_ADDRESS;
+  const derived = deriveBtcAddress(xpub, 0);
 
-    // Bitcoin Wallet
-    const seed = await bip39.mnemonicToSeed(process.env.ETH_MNEMONIC);
-    const root = bip32.fromSeed(seed, bitcoin.networks.bitcoin);
-    const btcNode = root.derivePath("m/84'/0'/0'/0/0");
-    const { address } = bitcoin.payments.p2wpkh({ pubkey: btcNode.publicKey });
-    console.log('Bitcoin Address:', address);
+  console.log("--- ₿ BITCOIN CHECK ---");
+  console.log(`✅ Derived Index 0: ${derived}`);
+  console.log(derived === btcMaster ? "✅ MATCH" : "⚠️ MISMATCH");
+  console.log(`💰 Balance: ${await getBtcBalance(btcMaster)} BTC`);
 
-    console.log('✅ Wallets generated successfully');
-  } catch (err) {
-    console.error('❌ Wallet Test Error:', err.message);
-  }
-})();
+  // ETH Check
+  const ethMaster = process.env.MASTER_ETH_ADDRESS;
+  console.log("\n--- 💎 ETHEREUM CHECK ---");
+  console.log(`🎯 Target Address: ${ethMaster}`);
+  console.log(`💰 ETH Balance: ${await getEthBalance(ethMaster)} ETH`);
+  console.log(`💰 USDT Balance: ${await getUsdtBalance(ethMaster)} USDT`);
+}
+
+runWalletAudit();
+

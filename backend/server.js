@@ -12,20 +12,22 @@ const MONGO_URI = process.env.MONGO_URI;
 
 const startServer = async () => {
   try {
-    // MongoDB
-    await mongoose.connect(MONGO_URI, { autoIndex: true });
+    // 1️⃣ Connect to MongoDB
+    await mongoose.connect(MONGO_URI, {
+      autoIndex: true
+    });
     console.log('✅ MongoDB Connected: Cluster Synchronized');
 
-    // Cron Jobs
+    // 2️⃣ Start Cron Jobs
     initCronJobs();
     console.log('🕒 Profit Cron Job Initialized: Daily ROI Drops Active');
 
-    // Express Server
+    // 3️⃣ Start Express server
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Trustra Backend running on port ${PORT}`);
     });
 
-    // Socket.io
+    // 4️⃣ Initialize Socket.io
     const io = new Server(server, {
       pingTimeout: 60000,
       cors: {
@@ -52,9 +54,10 @@ const startServer = async () => {
       });
     });
 
+    // 5️⃣ Share Socket.io globally
     app.set('socketio', io);
 
-    // Deposit Scanner
+    // 6️⃣ Initialize Deposit Scanner last
     import('./workers/depositScanner.js').then(() => {
       console.log('💰 Deposit Scanner Initialized');
     });

@@ -1,31 +1,26 @@
 import { ethers } from 'ethers';
 import dotenv from 'dotenv';
-
 dotenv.config();
 
-// Initialize provider with the URL from your .env
-const provider = new ethers.JsonRpcProvider(process.env.ETHEREUM_RPC_URL, undefined, {
-  staticNetwork: new ethers.Network("mainnet", 1)
-});
+const provider = new ethers.JsonRpcProvider(process.env.ETHEREUM_RPC_URL);
+const USDT_ABI = ["function balanceOf(address) view returns (uint256)"];
 
 export const getEthBalance = async (address) => {
   try {
-    const balanceWei = await provider.getBalance(address);
-    return parseFloat(ethers.formatEther(balanceWei));
+    const balance = await provider.getBalance(address);
+    return ethers.formatEther(balance);
   } catch (error) {
-    throw new Error(`[ETH_SYNC_ERROR] ${address}: ${error.message}`);
+    throw new Error("ETH Balance Fetch Failed");
   }
 };
 
 export const getUsdtBalance = async (address) => {
   try {
-    const usdtAddress = process.env.USDT_CONTRACT_ADDRESS || "0xdAC17F958D2ee523a2206206994597C13D831ec7";
-    const abi = ["function balanceOf(address owner) view returns (uint256)"];
-    const contract = new ethers.Contract(usdtAddress, abi, provider);
-    const balanceRaw = await contract.balanceOf(address);
-    return Number(balanceRaw) / 1000000;
+    const contract = new ethers.Contract(process.env.USDT_CONTRACT_ADDRESS, USDT_ABI, provider);
+    const balance = await contract.balanceOf(address);
+    return ethers.formatUnits(balance, 6);
   } catch (error) {
-    throw new Error(`[USDT_SYNC_ERROR] ${address}: ${error.message}`);
+    return "0.00";
   }
 };
 

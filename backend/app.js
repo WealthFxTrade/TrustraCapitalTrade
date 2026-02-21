@@ -20,6 +20,10 @@ import investmentRoutes from './routes/investmentRoutes.js';
 import reviewRoutes from './routes/reviews.js';
 import bitcoinRoutes from './routes/bitcoin.js';
 
+// ─── Background Workers ───
+import './workers/depositScanner.js';
+import './cron/profitJob.js';
+
 const app = express();
 
 // ─── SECURITY HEADERS ───
@@ -46,8 +50,8 @@ app.use(
 
 // ─── CORS CONFIGURATION ───
 const allowedOrigins = [
-  'https://trustra-capital-trade.vercel.app',
-  'http://localhost:5173',
+  'https://trustra-capital-trade.vercel.app', // production frontend
+  'http://localhost:5173',                     // local dev
   'https://trustracapitaltrade-backend.onrender.com'
 ];
 
@@ -58,39 +62,37 @@ app.use(cors({
     return callback(null, true);
   },
   credentials: true,
-  methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
+// Pre-flight for all routes
 app.options('*', cors());
 
-// ─── RATE LIMIT ───
+// ─── RATE LIMITING ───
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500,
-  message: { success:false, message:'Node Traffic High: Try again in 15 mins.' }
+  message: { success: false, message: 'Node Traffic High: Try again in 15 mins.' }
 });
 app.use('/api/', limiter);
 
 // ─── GENERAL MIDDLEWARE ───
 app.use(compression());
-app.use(express.json({ limit:'5mb' }));
-app.use(express.urlencoded({ extended:true }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// ─── HEALTH CHECK FUNCTION ───
-const healthStatus = () => ({
-  success: true,
-  node: 'Trustra_Secure_Gateway_v8.4.1',
-  status: 'Online',
-  timestamp: new Date().toISOString()
+// ─── HEALTH CHECK + ROOT REDIRECT ───
+app.get('/', (req, res) => res.redirect('/health'));
+app.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    node: 'Trustra_Secure_Gateway_v8.4.1',
+    status: 'Online',
+    timestamp: new Date().toISOString()
+  });
 });
-
-// ─── HEALTH ENDPOINT ───
-app.get('/health', (req, res) => res.status(200).json(healthStatus()));
-
-// ─── ROOT SERVE SAME HEALTH JSON ───
-app.get('/', (req, res) => res.status(200).json(healthStatus()));
 
 // ─── API ROUTES ───
 app.use('/api/auth', authRoutes);
@@ -109,4 +111,5 @@ app.use('/api/investments', investmentRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
+export { app };
 export default app;
