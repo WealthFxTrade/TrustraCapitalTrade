@@ -1,3 +1,4 @@
+// backend/server.js
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -9,28 +10,22 @@ import initCronJobs from './utils/cronJob.js';
 const PORT = process.env.PORT || 10000;
 const MONGO_URI = process.env.MONGO_URI;
 
-/**
- * 🚀 Trustra Enterprise Gateway v8.4.1
- * Initializes MongoDB, Cron Jobs, Scanner, and Socket.io
- */
 const startServer = async () => {
   try {
-    // 1️⃣ Connect to MongoDB
-    await mongoose.connect(MONGO_URI, {
-      autoIndex: true, // Standard for 2026 high-speed indexing
-    });
+    // MongoDB
+    await mongoose.connect(MONGO_URI, { autoIndex: true });
     console.log('✅ MongoDB Connected: Cluster Synchronized');
 
-    // 2️⃣ Start Cron Jobs
+    // Cron Jobs
     initCronJobs();
     console.log('🕒 Profit Cron Job Initialized: Daily ROI Drops Active');
 
-    // 3️⃣ Start Express server
+    // Express Server
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Trustra Backend running on port ${PORT}`);
     });
 
-    // 4️⃣ Initialize Socket.io
+    // Socket.io
     const io = new Server(server, {
       pingTimeout: 60000,
       cors: {
@@ -57,17 +52,16 @@ const startServer = async () => {
       });
     });
 
-    // 5️⃣ Share Socket.io globally for controllers/workers
     app.set('socketio', io);
 
-    // 6️⃣ Initialize Deposit Scanner last (after server logs)
+    // Deposit Scanner
     import('./workers/depositScanner.js').then(() => {
       console.log('💰 Deposit Scanner Initialized');
     });
 
   } catch (err) {
     console.error('❌ Critical Startup Error:', err.message);
-    process.exit(1); // Render/PM2 will auto-restart
+    process.exit(1);
   }
 };
 
