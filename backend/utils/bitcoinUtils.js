@@ -12,21 +12,15 @@ export const deriveBtcAddress = (xpub, index) => {
   try {
     const isMainnet = process.env.BITCOIN_NETWORK === 'mainnet';
     const network = isMainnet ? bitcoin.networks.bitcoin : bitcoin.networks.testnet;
-    
     if (!xpub) throw new Error('BITCOIN_XPUB is missing from .env');
 
-    // Load the xPub node
     const node = bip32.fromBase58(xpub, network);
-
-    // Derivation path: m/0/index (Standard for receiving addresses from an xPub)
     const child = node.derive(0).derive(index);
 
-    // Generate Bech32 (SegWit) address: starts with 'bc1' (mainnet) or 'tb1' (testnet)
     const { address } = bitcoin.payments.p2wpkh({
       pubkey: child.publicKey,
       network: network,
     });
-
     return address;
   } catch (error) {
     console.error('[BTC Derivation Error]:', error.message);
@@ -39,17 +33,24 @@ export const deriveBtcAddress = (xpub, index) => {
  */
 export const getBtcBalance = async (address) => {
   try {
-    // FIX: Corrected URL path for Blockchain.com API
     const response = await axios.get(`https://blockchain.info{address}`);
-    
-    // The API returns a plain number string in Satoshis
     const totalReceivedSats = parseInt(response.data);
-    
-    if (isNaN(totalReceivedSats)) return 0;
-
-    return totalReceivedSats / 100000000; // Convert Satoshis to BTC
+    return isNaN(totalReceivedSats) ? 0 : totalReceivedSats / 100000000;
   } catch (error) {
-    console.warn(`[BTC Balance Check Failed] ${address}:`, error.message);
+    return 0;
+  }
+};
+
+/**
+ * 🛰️ 3. CONFIRMATION CHECKER (Fixes SyntaxError in confirmDeposit.js)
+ */
+export const getBtcTxConfirmations = async (txid) => {
+  try {
+    if (!txid) return 0;
+    const res = await axios.get(`https://api.blockcypher.com{txid}`);
+    return res.data.confirmations || 0;
+  } catch (error) {
+    console.warn(`[BTC Confirm Check Failed] TXID: ${txid}`);
     return 0;
   }
 };

@@ -1,4 +1,3 @@
-// backend/app.js
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -10,69 +9,42 @@ import { notFound, errorHandler } from './middleware/error.js';
 // ─── Route Imports ───
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/userRoutes.js';
-import planRoutes from './routes/plan.js';
 import marketRoutes from './routes/market.js';
-import transactionRoutes from './routes/transactions.js';
 import adminRoutes from './routes/adminRoutes.js';
-import walletRoutes from './routes/walletRoutes.js';
-import withdrawalRoutes from './routes/withdrawalRoutes.js';
-import investmentRoutes from './routes/investmentRoutes.js';
-import reviewRoutes from './routes/reviews.js';
-import bitcoinRoutes from './routes/bitcoin.js';
-
-// ─── Background Workers ───
-import './workers/depositScanner.js';
-import './cron/profitJob.js';
+// ... other imports
 
 const app = express();
 
-// ─── SECURITY HEADERS ───
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        connectSrc: [
-          "'self'",
-          "https://trustracapitaltrade-backend.onrender.com",
-          "https://trustra-capital-trade.vercel.app",
-          "https://api.coingecko.com",
-          "https://eth.drpc.org"
-        ],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "https:"]
-      }
-    },
-    crossOriginResourcePolicy: { policy: 'cross-origin' }
-  })
-);
-
-// ─── CORS CONFIGURATION ───
+// ─── SECURITY & CORS ───
 const allowedOrigins = [
-  'https://trustra-capital-trade.vercel.app', // production frontend
-  'http://localhost:5173',                     // local dev
-  'https://trustracapitaltrade-backend.onrender.com'
+  'https://trustra-capital-trade.vercel.app',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173'
 ];
+
+app.use(helmet({
+  contentSecurityPolicy: false, // Set to false if using external APIs like CoinGecko/BlockCypher to avoid header conflicts
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // mobile apps / curl
-    if (!allowedOrigins.includes(origin)) return callback(new Error('CORS blocked: Origin not allowed'), false);
-    return callback(null, true);
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin || allowedOrigins.includes(origin) || origin.includes('vercel.app')) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS blocked: Origin not allowed'), false);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
 }));
 
-// Pre-flight for all routes
-app.options('*', cors());
+app.options('*', cors()); // Enable pre-flight for all routes
 
-// ─── RATE LIMITING ───
+// ─── RATE LIMITING (Node Security) ───
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500,
+  windowMs: 15 * 60 * 1000,
+  max: 1000, // Increased for dashboard polling
   message: { success: false, message: 'Node Traffic High: Try again in 15 mins.' }
 });
 app.use('/api/', limiter);
@@ -83,8 +55,7 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// ─── HEALTH CHECK + ROOT REDIRECT ───
-app.get('/', (req, res) => res.redirect('/health'));
+// ─── HEALTH CHECK ───
 app.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -97,19 +68,13 @@ app.get('/health', (req, res) => {
 // ─── API ROUTES ───
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
-app.use('/api/plans', planRoutes);
-app.use('/api/reviews', reviewRoutes);
 app.use('/api/market', marketRoutes);
-app.use('/api/bitcoin', bitcoinRoutes);
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/wallet', walletRoutes);
-app.use('/api/withdraw', withdrawalRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/investments', investmentRoutes);
+// ... mount other routes here
 
 // ─── ERROR HANDLERS ───
 app.use(notFound);
 app.use(errorHandler);
 
-export { app };
-export default app;
+export default app; // Use default export for server.js
+

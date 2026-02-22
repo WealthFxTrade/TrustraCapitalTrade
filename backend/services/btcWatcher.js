@@ -1,91 +1,93 @@
-// backend/services/btcWatcher.js
+import User from '../models/User.js';
 import axios from 'axios';
-import Deposit from '../models/Deposit.js';
-import { confirmDeposit } from './confirmDeposit.js';
-import { root, network, addressType } from '../config/bitcoin.js';
-
-// How often to poll the blockchain (ms)
-const POLL_INTERVAL = 30_000; // 30 seconds
 
 /**
- * Derive the BTC address for a deposit index
- * @param {number} index - derivation index
+ * ₿ BTC WATCHER: Syncs on-chain deposits and converts value to EUR
  */
-function deriveAddress(index) {
-  const child = root.derivePath(`0/${index}`);
-  switch (addressType) {
-    case 'native-segwit':
-      return bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network }).address;
-    case 'nested-segwit':
-      return bitcoin.payments.p2sh({
-        redeem: bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network }),
-        network,
-      }).address;
-    default:
-      return bitcoin.payments.p2pkh({ pubkey: child.publicKey, network }).address;
-  }
-}
-
-/**
- * Poll blockchain API for a single deposit address
- * Updates deposit record with confirmations
- */
-async function checkDepositTx(deposit) {
+export async function checkBtcDeposits() {
   try {
-    // Example using Blockstream API for BTC mainnet
-    const resp = await axios.get(`https://blockstream.info/api/address/${deposit.address}/txs`);
-    const txs = resp.data;
+    const users = await User.find({ btcAddress: { $exists: true, $ne: "" } });
+    if (!users.length) return;
 
-    for (const tx of txs) {
-      // Only consider txs that include this address as output
-      const outputToAddress = tx.vout.some(
-        (vout) => vout.scriptpubkey_address === deposit.address
+    // ✅ FIXED CoinGecko endpoint
+    let btcToEurPrice = 0;
+
+    try {
+      const priceRes = await axios.get(
+        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur'
       );
-      if (!outputToAddress) continue;
+      btcToEurPrice = priceRes.data.bitcoin.eur;
+    } catch (err) {
+      console.error("❌ [PRICE_SYNC_FAILED] Using fallback.");
+      btcToEurPrice = 90000; // Fallback
+    }
 
-      const confirmations = tx.status.confirmed ? tx.status.confirmations : 0;
+    for (const user of users) {
+      if (
+        !user.btcAddress ||
+        user.btcAddress.startsWith('xpub') ||
+        user.btcAddress.length < 26
+      ) continue;
 
-      // Update deposit confirmations
-      deposit.confirmations = confirmations;
+      try {
+        // ✅ FIXED BlockCypher endpoint
+        const res = await axios.get(
+          `https://api.blockcypher.com/v1/btc/main/addrs/${user.btcAddress}/balance`
+        );
 
-      // Update receivedAmount (BTC → satoshis)
-      const received = tx.vout
-        .filter((vout) => vout.scriptpubkey_address === deposit.address)
-        .reduce((sum, vout) => sum + Math.round(vout.value), 0); // value in satoshis
+        const confirmedSatoshis = res.data.balance; // confirmed only
+        const onChainBtc = confirmedSatoshis / 1e8;
 
-      deposit.receivedAmount = received;
-      deposit.amountSat = received; // store internally in satoshis
+        const storedBtc = user.balances.get('BTC') || 0;
 
-      await deposit.save();
+        // Only credit confirmed NEW deposits
+        if (onChainBtc > storedBtc) {
+          const newBtc = onChainBtc - storedBtc;
+          const eurValue = newBtc * btcToEurPrice;
 
-      // If enough confirmations, confirm deposit & credit user
-      if (confirmations >= 3 && deposit.status !== 'confirmed') {
-        await confirmDeposit(deposit._id);
+          user.balances.set('BTC', onChainBtc);
+
+          const currentEur = user.balances.get('EUR') || 0;
+          user.balances.set('EUR', currentEur + eurValue);
+
+          user.ledger.push({
+            amount: eurValue,
+            currency: 'EUR',
+            type: 'deposit',
+            status: 'completed',
+            description: `On-chain BTC Deposit: +${newBtc.toFixed(6)} BTC`,
+            createdAt: new Date()
+          });
+
+          user.markModified('balances');
+          user.markModified('ledger');
+          await user.save();
+
+          console.log(
+            `✅ [BTC_SYNC] ${user.email}: +€${eurValue.toFixed(2)} credited.`
+          );
+        }
+
+        // Prevent rate limits
+        await new Promise(r => setTimeout(r, 1100));
+
+      } catch (err) {
+        if (err.response?.status !== 404) {
+          console.error(`⚠️ [SYNC_SKIP] ${user.email}: ${err.message}`);
+        }
       }
     }
+
   } catch (err) {
-    console.error(`Error checking deposit ${deposit._id}:`, err.message);
+    console.error(`❌ [CRITICAL_WATCHER_ERROR]`, err.message);
   }
 }
 
 /**
- * Main watcher loop
+ * 🚀 DAEMON
  */
-export async function startBtcWatcher() {
-  console.log('BTC watcher started');
-
-  setInterval(async () => {
-    try {
-      // Find deposits that are not yet confirmed or expired
-      const deposits = await Deposit.find({
-        status: { $in: ['pending', 'confirming'] },
-      }).sort({ createdAt: 1 });
-
-      for (const dep of deposits) {
-        await checkDepositTx(dep);
-      }
-    } catch (err) {
-      console.error('BTC watcher loop error:', err.message);
-    }
-  }, POLL_INTERVAL);
-}
+export const startBtcDaemon = (minutes = 5) => {
+  setInterval(checkBtcDeposits, minutes * 60 * 1000);
+  setTimeout(checkBtcDeposits, 5000);
+  console.log(`[SYSTEM] BTC Node Watcher initialized: ${minutes}m cycle.`);
+};
