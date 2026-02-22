@@ -8,30 +8,16 @@ const initialState = {
   user: null,
   token: localStorage.getItem('token') || null,
   loading: true,
-  initialized: false,
+  initialized: false, // This tracks if we've finished the initial check
   error: null,
 };
 
 function authReducer(state, action) {
   switch (action.type) {
     case 'AUTH_SUCCESS':
-      return { 
-        ...state, 
-        user: action.payload.user, 
-        token: action.payload.token, 
-        loading: false, 
-        initialized: true, 
-        error: null 
-      };
+      return { ...state, user: action.payload.user, token: action.payload.token, loading: false, initialized: true, error: null };
     case 'AUTH_FAILED':
-      return { 
-        ...state, 
-        user: null, 
-        token: null, 
-        loading: false, 
-        initialized: true, 
-        error: action.payload 
-      };
+      return { ...state, user: null, token: null, loading: false, initialized: true, error: action.payload };
     case 'LOGOUT':
       return { ...initialState, token: null, loading: false, initialized: true };
     default:
@@ -45,7 +31,6 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const hasInitialized = useRef(false);
 
-  // 🛡️ Fetch Global System Status (Maintenance Mode)
   const fetchSystemStatus = useCallback(async () => {
     try {
       const res = await api.get('/system/status');
@@ -59,46 +44,34 @@ export function AuthProvider({ children }) {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    // Run system check alongside auth
     fetchSystemStatus();
 
     const storedToken = localStorage.getItem('token');
+    
+    // 💡 FIX 1: If no token, don't wait for Render.com. Show landing page immediately.
     if (!storedToken) {
-      dispatch({ type: 'AUTH_FAILED', payload: 'No active session' });
+      dispatch({ type: 'AUTH_FAILED', payload: 'Guest Session' });
       return;
     }
 
-    // 🕒 WATCHDOG: Force unblock the UI if Render.com is sleeping
+    // 🕒 FIX 2: Better Watchdog. Use a ref or simple timeout to force initialization.
     const watchdog = setTimeout(() => {
-      if (!state.initialized) {
-        dispatch({ type: 'AUTH_FAILED', payload: 'Node wake-up timeout' });
-      }
-    }, 8000);
+      dispatch({ type: 'AUTH_FAILED', payload: 'Node wake-up timeout' });
+    }, 12000); // 12s for Render.com cold start
 
     try {
       const res = await api.get('/auth/profile');
       clearTimeout(watchdog);
-      
-      const userData = res.data.user || res.data;
       dispatch({
         type: 'AUTH_SUCCESS',
-        payload: { user: userData, token: storedToken }
+        payload: { user: res.data.user || res.data, token: storedToken }
       });
     } catch (err) {
       clearTimeout(watchdog);
-      console.error('[Auth] Init Error:', err.message);
-
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
-        navigate('/login');
-      }
-
-      dispatch({ 
-        type: 'AUTH_FAILED', 
-        payload: err.response?.data?.message || 'Connection timeout' 
-      });
+      if (err.response?.status === 401) localStorage.removeItem('token');
+      dispatch({ type: 'AUTH_FAILED', payload: 'Session expired' });
     }
-  }, [navigate, fetchSystemStatus, state.initialized]);
+  }, [fetchSystemStatus]);
 
   useEffect(() => {
     initAuth();
@@ -116,9 +89,13 @@ export function AuthProvider({ children }) {
     navigate('/login');
   };
 
+  // 💡 FIX 3: Conditional Rendering Logic.
+  // ONLY show the loading screen if we have a token and haven't finished checking it.
+  const isVerifyingExistingUser = !!localStorage.getItem('token') && !state.initialized;
+
   return (
     <AuthContext.Provider value={{ ...state, login, logout, systemStatus }}>
-      {!state.initialized ? (
+      {isVerifyingExistingUser ? (
         <div className="flex min-h-screen items-center justify-center bg-[#020617] text-white">
           <div className="flex flex-col items-center">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-500 mb-4"></div>
