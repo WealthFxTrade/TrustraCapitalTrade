@@ -12,33 +12,42 @@ export const AdminLiveProvider = ({ children }) => {
   const [onlineAdmins, setOnlineAdmins] = useState(0);
 
   useEffect(() => {
+    // 🛡️ Security: Only connect if user is Admin
     if (!user || !token) return;
-    if (user.role !== "admin" && user.role !== "superadmin") return;
+    if (user.role !== "admin" && !user.isAdmin) return;
 
-    // 🔌 Connect once
+    // 🔌 Connect via your centralized socket service
     socketRef.current = connectSocket(token);
     const socket = socketRef.current;
 
-    socket.on("admin:balance:update", (payload) => {
-      setEvents((prev) =>
-        [{ type: "balance", timestamp: Date.now(), ...payload }, ...prev].slice(0, 100)
-      );
+    // Join the secure admin room
+    socket.emit('join_admin_room');
+
+    // ₿ Listen for Live BTC Deposits (from btcWatcher.js)
+    socket.on("global_deposit_confirmed", (payload) => {
+      setEvents((prev) => [
+        { type: "DEPOSIT", timestamp: Date.now(), ...payload },
+        ...prev
+      ].slice(0, 100));
     });
 
-    socket.on("admin:transaction:new", (payload) => {
-      setEvents((prev) =>
-        [{ type: "transaction", timestamp: Date.now(), ...payload }, ...prev].slice(0, 100)
-      );
+    // 💸 Listen for New Withdrawal Requests (from withdrawalController.js)
+    socket.on("admin_notification", (payload) => {
+      setEvents((prev) => [
+        { type: "WITHDRAWAL", timestamp: Date.now(), ...payload },
+        ...prev
+      ].slice(0, 100));
     });
 
+    // 👤 Admin Presence logic
     socket.on("admin:online", (count) => {
       setOnlineAdmins(Number(count) || 0);
     });
 
     return () => {
-      // 🧹 HARD CLEANUP (important)
-      socket.off("admin:balance:update");
-      socket.off("admin:transaction:new");
+      // 🧹 HARD CLEANUP
+      socket.off("global_deposit_confirmed");
+      socket.off("admin_notification");
       socket.off("admin:online");
       socket.disconnect();
       socketRef.current = null;
@@ -56,3 +65,4 @@ export const AdminLiveProvider = ({ children }) => {
     </AdminLiveContext.Provider>
   );
 };
+

@@ -11,7 +11,8 @@ import authRoutes from './routes/auth.js';
 import userRoutes from './routes/userRoutes.js';
 import marketRoutes from './routes/market.js';
 import adminRoutes from './routes/adminRoutes.js';
-// ... other imports
+import investmentRoutes from './routes/investmentRoutes.js';
+import withdrawalRoutes from './routes/withdrawalRoutes.js';
 
 const app = express();
 
@@ -23,29 +24,29 @@ const allowedOrigins = [
 ];
 
 app.use(helmet({
-  contentSecurityPolicy: false, // Set to false if using external APIs like CoinGecko/BlockCypher to avoid header conflicts
+  contentSecurityPolicy: false, // Allowed for external price oracles (CoinGecko)
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin || allowedOrigins.includes(origin) || origin.includes('vercel.app')) {
+    // Allow if no origin (mobile/curl) or if it's in our whitelisted list
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
       return callback(null, true);
     }
-    return callback(new Error('CORS blocked: Origin not allowed'), false);
+    return callback(new Error('CORS blocked: Node Access Denied'), false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
 }));
 
-app.options('*', cors()); // Enable pre-flight for all routes
+app.options('*', cors()); 
 
-// ─── RATE LIMITING (Node Security) ───
+// ─── RATE LIMITING ───
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000, // Increased for dashboard polling
-  message: { success: false, message: 'Node Traffic High: Try again in 15 mins.' }
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: 2000, // Generous limit for dashboard polling & sockets
+  message: { success: false, message: 'Node Traffic High: Try again later.' }
 });
 app.use('/api/', limiter);
 
@@ -70,11 +71,12 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/admin', adminRoutes);
-// ... mount other routes here
+app.use('/api/investment', investmentRoutes);
+app.use('/api/withdrawal', withdrawalRoutes);
 
 // ─── ERROR HANDLERS ───
 app.use(notFound);
 app.use(errorHandler);
 
-export default app; // Use default export for server.js
+export default app;
 

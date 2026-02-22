@@ -1,93 +1,128 @@
 import User from '../models/User.js';
 import axios from 'axios';
 
+const MEMPOOL = 'https://mempool.space/api';
+const COINGECKO = 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur';
+const MIN_CONFIRMATIONS = 3;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 /**
- * ₿ BTC WATCHER: Syncs on-chain deposits and converts value to EUR
+ * Validates a BTC address format locally before hitting the API
  */
+const isValidBtcAddress = (address) => {
+  if (!address || typeof address !== 'string') return false;
+  // Basic check: BTC addresses are 26-62 chars and don't contain spaces
+  const btcRegex = /^(1|3|bc1)[a-zA-HJ-NP-Z0-9]{25,62}$/;
+  return btcRegex.test(address);
+};
+
 export async function checkBtcDeposits() {
   try {
-    const users = await User.find({ btcAddress: { $exists: true, $ne: "" } });
+    const users = await User.find({ btcAddress: { $exists: true, $ne: "" }, banned: false });
     if (!users.length) return;
 
-    // ✅ FIXED CoinGecko endpoint
-    let btcToEurPrice = 0;
-
+    // 1. Get Price & Current Block Height
+    let btcToEur = 90000;
+    let currentHeight = 0;
     try {
-      const priceRes = await axios.get(
-        'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur'
-      );
-      btcToEurPrice = priceRes.data.bitcoin.eur;
+      const [priceRes, tipRes] = await Promise.all([
+        axios.get(COINGECKO),
+        axios.get(`${MEMPOOL}/blocks/tip/height`)
+      ]);
+      btcToEur = priceRes.data.bitcoin.eur;
+      currentHeight = tipRes.data;
     } catch (err) {
-      console.error("❌ [PRICE_SYNC_FAILED] Using fallback.");
-      btcToEurPrice = 90000; // Fallback
+      console.error("⚠️ [WATCHER] Price/Height fetch failed, using fallbacks.");
     }
 
     for (const user of users) {
-      if (
-        !user.btcAddress ||
-        user.btcAddress.startsWith('xpub') ||
-        user.btcAddress.length < 26
-      ) continue;
+      // ✅ FIX: Skip invalid addresses to prevent 400 errors
+      if (!isValidBtcAddress(user.btcAddress)) {
+        // Silent skip for "test" data, or log once
+        continue;
+      }
 
       try {
-        // ✅ FIXED BlockCypher endpoint
-        const res = await axios.get(
-          `https://api.blockcypher.com/v1/btc/main/addrs/${user.btcAddress}/balance`
-        );
+        const res = await axios.get(`${MEMPOOL}/address/${user.btcAddress}/txs`);
+        
+        // Handle case where address has no transactions (Mempool might return empty array)
+        if (!res.data || !Array.isArray(res.data)) continue;
 
-        const confirmedSatoshis = res.data.balance; // confirmed only
-        const onChainBtc = confirmedSatoshis / 1e8;
+        for (const tx of res.data) {
+          if (!tx.status.confirmed) continue;
 
-        const storedBtc = user.balances.get('BTC') || 0;
+          const confirmations = currentHeight - tx.status.block_height + 1;
+          if (confirmations < MIN_CONFIRMATIONS) continue;
 
-        // Only credit confirmed NEW deposits
-        if (onChainBtc > storedBtc) {
-          const newBtc = onChainBtc - storedBtc;
-          const eurValue = newBtc * btcToEurPrice;
+          for (const vout of tx.vout) {
+            if (vout.scriptpubkey_address !== user.btcAddress) continue;
 
-          user.balances.set('BTC', onChainBtc);
+            const amountSats = vout.value;
+            const amountBtc = amountSats / 1e8;
+            const amountEur = amountBtc * btcToEur;
 
-          const currentEur = user.balances.get('EUR') || 0;
-          user.balances.set('EUR', currentEur + eurValue);
+            // Check if already credited
+            const alreadyExists = user.btcDeposits.some(d => d.txid === tx.txid && d.vout === vout.n);
+            if (alreadyExists) continue;
 
-          user.ledger.push({
-            amount: eurValue,
-            currency: 'EUR',
-            type: 'deposit',
-            status: 'completed',
-            description: `On-chain BTC Deposit: +${newBtc.toFixed(6)} BTC`,
-            createdAt: new Date()
-          });
-
-          user.markModified('balances');
-          user.markModified('ledger');
-          await user.save();
-
-          console.log(
-            `✅ [BTC_SYNC] ${user.email}: +€${eurValue.toFixed(2)} credited.`
-          );
+            // Atomic update
+            await User.updateOne(
+              { _id: user._id },
+              {
+                $push: {
+                  btcDeposits: {
+                    txid: tx.txid,
+                    vout: vout.n,
+                    amountSats,
+                    amountBtc,
+                    amountEur,
+                    blockHeight: tx.status.block_height,
+                    status: 'credited',
+                    creditedAt: new Date()
+                  },
+                  ledger: {
+                    amount: amountEur,
+                    currency: 'EUR',
+                    type: 'deposit',
+                    status: 'completed',
+                    description: `BTC Deposit +${amountBtc.toFixed(8)} BTC`,
+                    createdAt: new Date()
+                  }
+                },
+                $inc: {
+                  'balances.BTC': amountBtc,
+                  'balances.EUR': amountEur
+                }
+              }
+            );
+            console.log(`✅ [CREDITED] ${user.email}: +${amountBtc} BTC`);
+          }
         }
-
-        // Prevent rate limits
-        await new Promise(r => setTimeout(r, 1100));
+        
+        // Wait 1.5s to respect Mempool public rate limits
+        await sleep(1500); 
 
       } catch (err) {
-        if (err.response?.status !== 404) {
-          console.error(`⚠️ [SYNC_SKIP] ${user.email}: ${err.message}`);
+        if (err.response?.status === 429) {
+          console.warn("🛑 [RATE_LIMIT] Mempool hit. Ending cycle.");
+          return;
+        }
+        // Specific log for the 400 error we were seeing
+        if (err.response?.status === 400) {
+          console.error(`⚠️ [BAD_ADDRESS] ${user.email} has invalid address: ${user.btcAddress}`);
+        } else {
+          console.error(`❌ [SYNC_ERROR] ${user.email}:`, err.message);
         }
       }
     }
-
   } catch (err) {
-    console.error(`❌ [CRITICAL_WATCHER_ERROR]`, err.message);
+    console.error("❌ [FATAL_WATCHER_ERROR]:", err.message);
   }
 }
 
-/**
- * 🚀 DAEMON
- */
-export const startBtcDaemon = (minutes = 5) => {
+export const startBtcDaemon = (minutes = 10) => {
   setInterval(checkBtcDeposits, minutes * 60 * 1000);
   setTimeout(checkBtcDeposits, 5000);
-  console.log(`[SYSTEM] BTC Node Watcher initialized: ${minutes}m cycle.`);
+  console.log(`🚀 BTC Watcher: ${minutes}m cycle.`);
 };
+

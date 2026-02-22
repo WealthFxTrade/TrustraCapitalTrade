@@ -1,132 +1,96 @@
-import mongoose from 'mongoose';
 import User from '../models/User.js';
 import { PLAN_DATA } from '../config/plans.js';
-import AuditLog from '../models/AuditLog.js';
+import axios from 'axios';
 
 /**
- * @desc   Get all active investments
- * @route  GET /api/investments/active
+ * 🔄 EXCHANGE BTC TO EUR
+ * Allows users to convert their watched BTC deposits into EUR for plans
  */
-export const getActiveInvestments = async (req, res) => {
+export const exchangeBtcToEur = async (req, res) => {
   try {
-    const users = await User.find({ isPlanActive: true, banned: false })
-      .select('fullName email plan investedAmount balances lastProfitDate');
+    const { btcAmount } = req.body;
+    const user = await User.findById(req.user.id);
 
-    res.status(200).json({ success: true, users });
+    const userBtc = user.balances.get('BTC') || 0;
+    if (userBtc < btcAmount) return res.status(400).json({ success: false, message: "Insufficient BTC" });
+
+    // Fetch live price
+    const priceRes = await axios.get('https://api.coingecko.com');
+    const btcPrice = priceRes.data.bitcoin.eur;
+    const eurValue = Number((btcAmount * btcPrice).toFixed(2));
+
+    // Update Map Balances
+    user.balances.set('BTC', Number((userBtc - btcAmount).toFixed(8)));
+    user.balances.set('EUR', Number(((user.balances.get('EUR') || 0) + eurValue).toFixed(2)));
+
+    user.ledger.push({
+      amount: eurValue,
+      currency: 'EUR',
+      type: 'exchange',
+      status: 'completed',
+      description: `Exchanged ${btcAmount} BTC to EUR @ €${btcPrice}`
+    });
+
+    user.markModified('balances');
+    await user.save();
+
+    res.json({ success: true, message: "Exchange successful", balances: Object.fromEntries(user.balances) });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
 /**
- * @desc   Manually distribute profit (Admin bypass)
- */
-export const distributeProfit = async (req, res) => {
-  const session = await mongoose.startSession();
-  try {
-    const { userId } = req.body;
-    session.startTransaction();
-
-    const user = await User.findById(userId).session(session);
-    if (!user || !user.isPlanActive || user.banned) {
-      throw new Error('User not eligible or banned');
-    }
-
-    const today = new Date().setHours(0, 0, 0, 0);
-    const lastPaid = user.lastProfitDate ? new Date(user.lastProfitDate).setHours(0, 0, 0, 0) : null;
-    if (lastPaid === today) throw new Error('Profit already distributed today');
-
-    // Sync: Uses 'plan' to match User.js model
-    const planConfig = PLAN_DATA[user.plan]; 
-    if (!planConfig) throw new Error('Invalid plan configuration');
-
-    const profit = user.investedAmount * planConfig.dailyROI;
-    
-    user.balances.set('EUR', (user.balances.get('EUR') || 0) + profit);
-    user.ledger.push({
-      amount: profit,
-      currency: 'EUR',
-      type: 'roi_profit',
-      status: 'completed',
-      description: `Manual ROI: ${planConfig.name}`
-    });
-
-    user.lastProfitDate = new Date();
-    user.markModified('balances');
-    await user.save({ session });
-
-    await AuditLog.create([{
-      admin: req.user?._id || null,
-      action: 'MANUAL_PROFIT_DISTRIBUTION',
-      targetId: user._id,
-      targetModel: 'User',
-      metadata: { profit, plan: planConfig.name },
-      ip: req.ip
-    }], { session });
-
-    await session.commitTransaction();
-    res.json({ success: true, profit, newBalance: user.balances.get('EUR') });
-  } catch (err) {
-    await session.abortTransaction();
-    res.status(400).json({ success: false, message: err.message });
-  } finally {
-    session.endSession();
-  }
-};
-
-/**
- * @desc   Activate a plan (Deducts balance & starts ROI)
+ * 🚀 ACTIVATE PLAN (User Self-Service)
  */
 export const activatePlan = async (req, res) => {
-  const session = await mongoose.startSession();
   try {
-    const { userId, planKey, amount } = req.body;
-    const plan = PLAN_DATA[planKey];
-    
-    if (!plan) throw new Error('Invalid plan key');
-    if (amount < plan.min) throw new Error(`Minimum is ${plan.min} EUR`);
+    const { planKey, amount } = req.body;
+    const plan = PLAN_DATA[planKey.toLowerCase()];
 
-    session.startTransaction();
-    const user = await User.findById(userId).session(session);
-    if (!user) throw new Error('User not found');
+    if (!plan) return res.status(400).json({ message: 'Invalid plan selected' });
+    if (amount < plan.min) return res.status(400).json({ message: `Minimum investment is ${plan.min} EUR` });
 
-    const currentBalance = user.balances.get('EUR') || 0;
-    if (currentBalance < amount) throw new Error('Insufficient EUR balance');
+    const user = await User.findById(req.user.id);
+    const currentEur = user.balances.get('EUR') || 0;
 
-    // Deduct and Activate
-    user.balances.set('EUR', currentBalance - amount);
-    user.plan = planKey; // Match model field 'plan'
+    if (currentEur < amount) return res.status(400).json({ message: 'Insufficient EUR balance' });
+
+    // Deduct and Start ROI
+    user.balances.set('EUR', Number((currentEur - amount).toFixed(2)));
+    user.plan = planKey.toLowerCase();
     user.investedAmount = amount;
+    user.dailyRoiRate = plan.dailyROI / 100; // Store as decimal for cron
     user.isPlanActive = true;
-    user.lastProfitDate = new Date(); // Prevents instant cron payout on same day
+    user.planDaysServed = 0;
+    user.lastProfitDate = new Date();
 
     user.ledger.push({
       amount: -amount,
       currency: 'EUR',
       type: 'investment',
       status: 'completed',
-      description: `Activated ${plan.name}`
+      description: `Activated ${plan.name} Plan`
     });
 
     user.markModified('balances');
-    await user.save({ session });
+    await user.save();
 
-    await AuditLog.create([{
-      admin: req.user?._id || null,
-      action: 'ACTIVATE_PLAN',
-      targetId: user._id,
-      targetModel: 'User',
-      metadata: { planKey, amount },
-      ip: req.ip
-    }], { session });
-
-    await session.commitTransaction();
-    res.json({ success: true, message: `Plan ${plan.name} activated`, newBalance: user.balances.get('EUR') });
+    res.json({ success: true, message: `${plan.name} activated!`, balances: Object.fromEntries(user.balances) });
   } catch (err) {
-    await session.abortTransaction();
-    res.status(400).json({ success: false, message: err.message });
-  } finally {
-    session.endSession();
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * 🛡️ ADMIN: GET ALL ACTIVE
+ */
+export const getActiveInvestments = async (req, res) => {
+  try {
+    const users = await User.find({ isPlanActive: true }).select('fullName email plan investedAmount');
+    res.json({ success: true, users });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 };
 
