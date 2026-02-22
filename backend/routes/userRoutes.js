@@ -1,19 +1,15 @@
-// routes/userRoutes.js
 import express from 'express';
 import {
-  getUserDashboard,
-  getUserBalances,
+  getUserStats,        // Renamed to match frontend call
+  getUserProfile,      // Added for the profile view
   getUserLedger,
   updateUserProfile,
   approveDeposit,
   getUsers,
   updateUserBalance,
+  distributeProfit,    // Added for Admin.jsx build fix
   banUser,
   unbanUser,
-  // getUserById,          // ← add this once you implement it in controller
-  // deleteUser,           // ← add this once implemented
-  // verifyUserEmail,
-  // resendVerificationEmail,
 } from '../controllers/userController.js';
 
 import { protect, admin } from '../middleware/authMiddleware.js';
@@ -21,33 +17,40 @@ import { protect, admin } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 // ────────────── USER ROUTES (authenticated users only) ──────────────
-router.get('/dashboard', protect, getUserDashboard);
+
+// Matches Dashboard.jsx: api.get('/user/stats')
+router.get('/stats', protect, getUserStats); 
+
+// Matches AuthContext.jsx: api.get('/auth/profile') or api.get('/user/profile')
+router.get('/profile', protect, getUserProfile);
 
 router.route('/me')
-  .get(protect, getUserDashboard)      // use dashboard as profile for now
+  .get(protect, getUserProfile)
   .put(protect, updateUserProfile);
 
-router.get('/balance', protect, getUserBalances);
+// Matches UserContext.jsx: api.get('/user/transactions')
 router.get('/transactions', protect, getUserLedger);
 
-// Verification routes (if you implement them later)
-// router.post('/verify/resend', protect, resendVerificationEmail);
-// router.get('/verify/:token', verifyUserEmail);
 
 // ────────────── ADMIN ROUTES (admin only) ──────────────
+
+// Matches Admin.jsx: api.get('/user')
+router.get('/', protect, admin, getUsers);
+
+// Matches Admin.jsx: api.put(`/user/distribute/${id}`, payload)
+router.put('/distribute/:id', protect, admin, distributeProfit);
+
+// Standard Admin Updates
 router.post('/approve-deposit', protect, admin, approveDeposit);
 
-router.route('/')
-  .get(protect, admin, getUsers);
-
 router.route('/:id')
-  .get(protect, admin, getUserDashboard)   // temporary – replace with getUserById when added
-  .put(protect, admin, updateUserBalance)   // admin balance update
-  .delete(protect, admin, () => res.status(501).json({ message: 'Delete not implemented yet' })); // placeholder
+  .get(protect, admin, getUserStats) 
+  .put(protect, admin, updateUserBalance)
+  .delete(protect, admin, (req, res) => res.status(501).json({ message: 'Delete not implemented' }));
 
-// Admin user actions
-router.put('/:id/balance', protect, admin, updateUserBalance);
+// Specific Admin Actions
 router.put('/:id/ban', protect, admin, banUser);
 router.put('/:id/unban', protect, admin, unbanUser);
 
 export default router;
+

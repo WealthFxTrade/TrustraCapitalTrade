@@ -1,71 +1,51 @@
-// backend/server.js
 import dotenv from 'dotenv';
 dotenv.config();
-
 import mongoose from 'mongoose';
 import { Server } from 'socket.io';
 import app from './app.js';
 import initCronJobs from './utils/cronJob.js';
+import { startBtcDaemon } from './services/btcWatcher.js';
 
 const PORT = process.env.PORT || 10000;
-const MONGO_URI = process.env.MONGO_URI;
 
 const startServer = async () => {
   try {
-    // 1️⃣ Connect to MongoDB
-    await mongoose.connect(MONGO_URI, {
-      autoIndex: true
-    });
-    console.log('✅ MongoDB Connected: Cluster Synchronized');
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('✅ MongoDB Connected');
 
-    // 2️⃣ Start Cron Jobs
-    initCronJobs();
-    console.log('🕒 Profit Cron Job Initialized: Daily ROI Drops Active');
-
-    // 3️⃣ Start Express server
+    // 🚀 Start Express first to get the server instance
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Trustra Backend running on port ${PORT}`);
     });
 
-    // 4️⃣ Initialize Socket.io
+    // 📡 Initialize Socket.io
     const io = new Server(server, {
-      pingTimeout: 60000,
       cors: {
-        origin: [
-          'https://trustra-capital-trade.vercel.app',
-          'http://localhost:5173',
-          'http://127.0.0.1:5173'
-        ],
+        origin: ["https://trustra-capital-trade.vercel.app", "http://localhost:5173"],
         credentials: true
       },
       transports: ['websocket'],
     });
 
-    io.on('connection', (socket) => {
-      console.log(`📡 Socket Connected: ${socket.id}`);
+    // 🕒 Start Background Jobs (Passing 'io' for real-time updates)
+    initCronJobs(io); 
+    startBtcDaemon(5); 
 
+    io.on('connection', (socket) => {
       socket.on('join_room', (userId) => {
         socket.join(userId);
-        console.log(`🔒 User ${userId} secured in private socket room`);
-      });
-
-      socket.on('disconnect', () => {
-        console.log(`🔌 Socket Disconnected: ${socket.id}`);
+        console.log(`🔒 Secure Socket: User ${userId}`);
       });
     });
 
-    // 5️⃣ Share Socket.io globally
+    // Share 'io' globally for controllers
     app.set('socketio', io);
 
-    // 6️⃣ Initialize Deposit Scanner last
-    import('./workers/depositScanner.js').then(() => {
-      console.log('💰 Deposit Scanner Initialized');
-    });
-
   } catch (err) {
-    console.error('❌ Critical Startup Error:', err.message);
+    console.error('❌ Startup Error:', err.message);
     process.exit(1);
   }
 };
 
 startServer();
+

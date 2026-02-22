@@ -1,76 +1,74 @@
 import User from '../models/User.js';
 import axios from 'axios';
-import toast from 'react-hot-toast'; // Optional for server-side logging/alerts
 
 /**
- * Checks BlockCypher for deposits to active BTC addresses.
- * Updates the User's Map-based balance and the Ledger history.
+ * ₿ BTC WATCHER: Syncs on-chain deposits and converts value to EUR
  */
 export async function checkBtcDeposits() {
   try {
-    // 1. Fetch only users who have a BTC deposit address generated
-    const users = await User.find({ "depositAddresses.BTC": { $exists: true } });
-    
-    console.log(`[BTC_WATCHER] Scanning ${users.length} active deployment nodes...`);
+    // SYNC: Matches your User model field 'btcAddress'
+    const users = await User.find({ btcAddress: { $exists: true } });
+
+    // 1. Get current BTC price once per scan to save API calls
+    const priceRes = await axios.get('https://api.coingecko.com');
+    const btcToEurPrice = priceRes.data.bitcoin.eur;
 
     for (const user of users) {
-      const address = user.depositAddresses.get('BTC');
-      
+      const address = user.btcAddress;
+
       try {
-        // 2. Fetch balance from BlockCypher (Satoshi units)
-        // Note: final_balance includes confirmed transactions.
+        // 2. Fetch from BlockCypher (Satoshi units)
         const res = await axios.get(`https://api.blockcypher.com/v1/btc/main/addrs/${address}/balance`);
-        const confirmedSatoshis = res.data.final_balance;
-        
-        if (confirmedSatoshis > 0) {
-          const btcAmount = confirmedSatoshis / 1e8; // Convert to BTC
-          const currentBtcBalance = user.balances.get('BTC') || 0;
+        const onChainSats = res.data.final_balance;
+        const onChainBtc = onChainSats / 1e8;
 
-          // 3. Only update if there is a NEW deposit (On-chain > DB)
-          if (btcAmount > currentBtcBalance) {
-            const difference = btcAmount - currentBtcBalance;
+        const currentBtcBalance = user.balances.get('BTC') || 0;
 
-            // 4. Update Balance (Atomic Map update)
-            user.balances.set('BTC', btcAmount);
+        // 3. Detect NEW Deposit
+        if (onChainBtc > currentBtcBalance) {
+          const newBtcAmount = onChainBtc - currentBtcBalance;
+          const eurValue = newBtcAmount * btcToEurPrice;
 
-            // 5. Add to Ledger for UI history
-            user.ledger.push({
-              amount: difference,
-              currency: 'BTC',
-              type: 'deposit',
-              status: 'completed',
-              description: `On-chain BTC Node Sync: ${address.slice(0, 6)}...`,
-              createdAt: new Date()
-            });
+          // 4. Update Balances (BTC & EUR Equity)
+          user.balances.set('BTC', onChainBtc);
+          
+          const currentEur = user.balances.get('EUR') || 0;
+          user.balances.set('EUR', currentEur + eurValue);
 
-            // 6. Save changes
-            user.markModified('balances');
-            user.markModified('ledger');
-            await user.save();
+          // 5. Log to Ledger (Dashboard Visibility)
+          user.ledger.push({
+            amount: eurValue,
+            currency: 'EUR',
+            type: 'deposit',
+            status: 'completed',
+            description: `On-chain Sync: +${newBtcAmount.toFixed(6)} BTC (@ €${btcToEurPrice.toLocaleString()})`,
+            createdAt: new Date()
+          });
 
-            console.log(`[BTC_DEPOSIT_SYNCED] User: ${user.email}, Amount: +${difference} BTC`);
-          }
+          user.markModified('balances');
+          user.markModified('ledger');
+          await user.save();
+
+          console.log(`[BTC_SYNC] ${user.email}: +${newBtcAmount} BTC (Value: €${eurValue.toFixed(2)})`);
         }
+
+        // Sleep 500ms to avoid BlockCypher 429 Rate Limits
+        await new Promise(r => setTimeout(r, 500));
+
       } catch (err) {
-        // Handle BlockCypher rate limits (3 requests/sec for free tier)
         if (err.response?.status === 429) {
-          console.warn(`[BTC_WATCHER] Rate limited. Sleeping...`);
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        } else {
-          console.error(`[BTC_SYNC_FAILED] Address: ${address}`, err.message);
+          await new Promise(r => setTimeout(r, 5000)); // Long sleep if rate limited
         }
       }
     }
-  } catch (globalErr) {
-    console.error(`[BTC_WATCHER_CRITICAL]`, globalErr.message);
+  } catch (err) {
+    console.error(`[CRITICAL_WATCHER_ERROR]`, err.message);
   }
 }
 
-/**
- * Recurring Daemon for Server.js
- */
 export const startBtcDaemon = (minutes = 10) => {
   setInterval(checkBtcDeposits, minutes * 60 * 1000);
+  checkBtcDeposits(); // Run once on boot
   console.log(`[SYSTEM] BTC Node Watcher initialized: ${minutes}m cycle.`);
 };
 
