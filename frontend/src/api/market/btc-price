@@ -1,0 +1,40 @@
+import api from '../utils/api'; // Your Axios instance
+
+/**
+ * Fetch all available investment plans
+ * @returns {Promise<{ success: boolean, count: number, data: Array, message?: string }>}
+ */
+export const fetchPlans = async () => {
+  try {
+    const res = await api.get('/plan');
+    return res.data; // { success, count, data }
+  } catch (err) {
+    console.error('Error fetching plans:', err);
+    // Return standardized fallback
+    return {
+      success: false,
+      count: 0,
+      data: [],
+      message: err.message || 'Failed to fetch investment plans',
+    };
+  }
+};
+
+/**
+ * Fetch a specific plan by its ID
+ * @param {string} id
+ * @returns {Promise<{ success: boolean, data: object, message?: string }>}
+ */
+export const fetchPlanById = async (id) => {
+  try {
+    const res = await api.get(`/plan/${id}`);
+    return res.data; // { success, data }
+  } catch (err) {
+    console.error(`Error fetching plan ${id}:`, err);
+    return {
+      success: false,
+      data: null,
+      message: err.message || 'Failed to fetch plan',
+    };
+  }
+};
