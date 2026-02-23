@@ -1,4 +1,93 @@
-node_modules
+# ══════════════════════════════════════════════
+# TRUSTRA CAPITAL — ROOT .gitignore
+# ══════════════════════════════════════════════
+
+# ──────────────────────────────────────────────
+# ENVIRONMENT FILES — NEVER COMMIT SECRETS
+# ──────────────────────────────────────────────
 .env
-dist
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.*.local
+
+# ✅ Whitelist .env.example at any depth
+!**/.env.example
+
+# ──────────────────────────────────────────────
+# DEPENDENCIES
+# ──────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# ──────────────────────────────────────────────
+# BUILD OUTPUT
+# ──────────────────────────────────────────────
+dist/
+build/
+.next/
+.nuxt/
+.output/
+*.tsbuildinfo
+
+# ──────────────────────────────────────────────
+# BACKEND
+# ──────────────────────────────────────────────
+backend/logs/
+backend/uploads/
+backend/tmp/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ──────────────────────────────────────────────
+# FRONTEND
+# ──────────────────────────────────────────────
+frontend/dist/
+frontend/.cache/
+frontend/coverage/
+*.local
+
+# ──────────────────────────────────────────────
+# IDE / EDITOR
+# ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ──────────────────────────────────────────────
+# OS JUNK
+# ──────────────────────────────────────────────
 .DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+._*
+
+# ──────────────────────────────────────────────
+# TESTING / COVERAGE
+# ──────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+
+# ──────────────────────────────────────────────
+# MISC
+# ──────────────────────────────────────────────
+*.tgz
+.eslintcache
+.cache

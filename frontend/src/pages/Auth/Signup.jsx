@@ -1,11 +1,35 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useMemo, useCallback, useRef } from 'react';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
+import { useBtcPrice } from '../../hooks/useBtcPrice';
 import api from '../../api/api';
 import {
-  Mail, Lock, User, Phone, RefreshCw, ChevronRight, ShieldCheck
+  Mail, Lock, User, Phone, RefreshCw, ChevronRight, ShieldCheck,
+  Check, X
 } from 'lucide-react';
+
+// ──────────────────────────────────────────────
+// CONSTANTS
+// ──────────────────────────────────────────────
+
+const PASSWORD_MIN_LENGTH = 8;
+
+const PASSWORD_RULES = [
+  { label: 'At least 8 characters', test: (p) => p.length >= PASSWORD_MIN_LENGTH },
+  { label: 'One uppercase letter', test: (p) => /[A-Z]/.test(p) },
+  { label: 'One number', test: (p) => /[0-9]/.test(p) },
+  { label: 'One special character', test: (p) => /[\W_]/.test(p) }
+];
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Strip everything except digits and leading +
+const normalizePhone = (raw) => raw.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '');
+
+// ──────────────────────────────────────────────
+// COMPONENT
+// ──────────────────────────────────────────────
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -16,212 +40,297 @@ export default function Signup() {
     confirmPassword: ''
   });
   const [loading, setLoading] = useState(false);
-  const [btcPrice, setBtcPrice] = useState(null);
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
+  const [errors, setErrors] = useState({});
 
-  // 📈 LIVE BTC PRICE
-  useEffect(() => {
-    const fetchPrice = async () => {
-      try {
-        const res = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur'
-        );
-        const data = await res.json();
-        if (data?.bitcoin?.eur) setBtcPrice(data.bitcoin.eur);
-      } catch {
-        console.warn("BTC oracle sync delayed");
-      }
-    };
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 60000); // every 60s
-    return () => clearInterval(interval);
+  const passwordRef = useRef(null);
+  const { login, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const btcPrice = useBtcPrice(60_000);
+
+  // ── Redirect if already logged in ──
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // ── Memoized price display ──
+  const formattedPrice = useMemo(() => {
+    if (!btcPrice) return null;
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency',
+      currency: 'EUR'
+    }).format(btcPrice);
+  }, [btcPrice]);
+
+  // ── Password strength evaluation ──
+  const passwordStrength = useMemo(() => {
+    return PASSWORD_RULES.map((rule) => ({
+      ...rule,
+      passed: rule.test(formData.password)
+    }));
+  }, [formData.password]);
+
+  const allPasswordRulesPassed = passwordStrength.every((r) => r.passed);
+
+  // ── Input handler ──
+  const handleChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    // Clear field-specific error on change
+    setErrors((prev) => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
   }, []);
 
-  const formattedPrice = btcPrice
-    ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(btcPrice)
-    : null;
-
-  const handleChange = (e) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const validateForm = () => {
+  // ── Validation (returns all errors at once) ──
+  const validateForm = useCallback(() => {
     const { fullName, email, phone, password, confirmPassword } = formData;
+    const errs = {};
 
-    if (!fullName.trim()) return 'Full name is required';
-    if (!/^\S+@\S+\.\S+$/.test(email)) return 'Invalid email address';
-    if (!/^\+?[0-9]{7,15}$/.test(phone)) return 'Invalid phone number';
-    if (password !== confirmPassword) return 'Passwords do not match';
-    if (password.length < 8) return 'Password too short (min 8 chars)';
-    if (!/[A-Z]/.test(password)) return 'Password must contain an uppercase letter';
-    if (!/[0-9]/.test(password)) return 'Password must contain a number';
-    if (!/[\W_]/.test(password)) return 'Password must contain a special character';
-    return null;
-  };
+    if (!fullName.trim()) {
+      errs.fullName = 'Full name is required';
+    }
 
+    if (!EMAIL_REGEX.test(email.trim())) {
+      errs.email = 'Please enter a valid email address';
+    }
+
+    const normalized = normalizePhone(phone);
+    if (normalized.length < 7 || normalized.length > 16) {
+      errs.phone = 'Please enter a valid phone number (7–15 digits)';
+    }
+
+    if (!allPasswordRulesPassed) {
+      errs.password = 'Password does not meet all requirements';
+    }
+
+    if (password !== confirmPassword) {
+      errs.confirmPassword = 'Passwords do not match';
+    }
+
+    return errs;
+  }, [formData, allPasswordRulesPassed]);
+
+  // ── Submit handler ──
   const handleRegister = async (e) => {
     e.preventDefault();
-    const validationError = validateForm();
-    if (validationError) return toast.error(`❌ ${validationError}`);
+
+    const validationErrors = validateForm();
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      // Show first error as toast for immediate feedback
+      const firstError = Object.values(validationErrors)[0];
+      toast.error(firstError);
+      return;
+    }
 
     setLoading(true);
+
+    // Clear passwords from state BEFORE any async work
+    const submitData = {
+      fullName: formData.fullName.trim(),
+      email: formData.email.trim().toLowerCase(),
+      phone: normalizePhone(formData.phone),
+      password: formData.password
+    };
+
+    setFormData((prev) => ({ ...prev, password: '', confirmPassword: '' }));
+
     try {
-      const res = await api.post('/auth/register', {
-        fullName: formData.fullName.trim(),
-        email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.trim(),
-        password: formData.password
-      });
+      const res = await api.post('/auth/register', submitData);
 
       const { user, token } = res.data;
+
+      if (!user || !token) {
+        throw new Error('Invalid server response');
+      }
+
       await login(user, token);
 
-      toast.success('✅ Node initialized and synced successfully!');
+      toast.success('Account created successfully');
       navigate('/dashboard', { replace: true });
-
-      // Clear sensitive fields
-      setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
     } catch (err) {
-      const message = err.response?.data?.message || 'Registration failed';
-      toast.error(`❌ ${message}`);
-      setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
+      const message =
+        err.response?.data?.message ||
+        err.message ||
+        'Registration failed';
+
+      toast.error(message);
+      passwordRef.current?.focus();
     } finally {
       setLoading(false);
     }
   };
 
+  // ── Field error helper ──
+  const fieldError = (name) =>
+    errors[name] ? (
+      <p className="text-red-400 text-[10px] mt-1 pl-14 font-semibold uppercase tracking-wider">
+        {errors[name]}
+      </p>
+    ) : null;
+
   return (
     <div className="min-h-screen bg-[#020617] flex flex-col justify-center py-12 px-6 selection:bg-yellow-500/30">
+      {/* ── Header ── */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
-        <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-2xl flex items-center justify-center font-black text-black text-2xl mx-auto mb-6 shadow-2xl shadow-yellow-500/20">
+        <div
+          className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-2xl flex items-center justify-center font-black text-black text-2xl mx-auto mb-6 shadow-2xl shadow-yellow-500/20"
+          aria-hidden="true"
+        >
           T
         </div>
-        <h2 className="text-3xl font-black uppercase italic text-white tracking-tighter">Initialize Node</h2>
-        <p className="text-slate-500 text-[9px] uppercase tracking-[0.4em] font-black mt-3">
-          ORACLE STATUS: {formattedPrice ? (
+        <h1 className="text-3xl font-black uppercase italic text-white tracking-tighter">
+          Create Account
+        </h1>
+        <p
+          className="text-slate-500 text-xs uppercase tracking-[0.4em] font-black mt-3"
+          aria-live="polite"
+        >
+          Network Status:{' '}
+          {formattedPrice ? (
             <span className="text-yellow-500 font-mono">BTC @ {formattedPrice}</span>
           ) : (
-            <span className="animate-pulse text-slate-700 font-mono uppercase">Syncing...</span>
+            <span className="animate-pulse text-slate-700 font-mono">Synchronizing...</span>
           )}
         </p>
       </div>
 
+      {/* ── Form Card ── */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white/[0.01] p-10 rounded-[2.5rem] border border-white/5 backdrop-blur-3xl shadow-3xl">
-          <form onSubmit={handleRegister} className="space-y-4">
+          <form onSubmit={handleRegister} className="space-y-4" noValidate>
 
             {/* Full Name */}
-            <div className="relative group">
-              <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors" size={18} />
-              <label htmlFor="fullName" className="sr-only">Full Name</label>
-              <input
-                id="fullName"
-                type="text"
-                name="fullName"
-                placeholder="FULL LEGAL NAME"
-                className="w-full bg-black/60 border border-white/5 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest"
-                value={formData.fullName}
-                onChange={handleChange}
-                required
-                aria-label="Full Name"
-              />
+            <div>
+              <div className="relative group">
+                <User
+                  className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors"
+                  size={18}
+                  aria-hidden="true"
+                />
+                <label htmlFor="signup-fullName" className="sr-only">Full name</label>
+                <input
+                  id="signup-fullName"
+                  type="text"
+                  name="fullName"
+                  autoComplete="name"
+                  placeholder="FULL LEGAL NAME"
+                  className={`w-full bg-black/60 border rounded-2xl py-4 pl-14 pr-5 text-white outline-none transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest ${
+                    errors.fullName ? 'border-red-500/50' : 'border-white/5 focus:border-yellow-600/50'
+                  }`}
+                  value={formData.fullName}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                />
+              </div>
+              {fieldError('fullName')}
             </div>
 
             {/* Email */}
-            <div className="relative group">
-              <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors" size={18} />
-              <label htmlFor="email" className="sr-only">Email</label>
-              <input
-                id="email"
-                type="email"
-                name="email"
-                placeholder="INVESTOR EMAIL"
-                className="w-full bg-black/60 border border-white/5 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest"
-                value={formData.email}
-                onChange={handleChange}
-                required
-                aria-label="Email"
-              />
+            <div>
+              <div className="relative group">
+                <Mail
+                  className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors"
+                  size={18}
+                  aria-hidden="true"
+                />
+                <label htmlFor="signup-email" className="sr-only">Email address</label>
+                <input
+                  id="signup-email"
+                  type="email"
+                  name="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="INVESTOR EMAIL"
+                  className={`w-full bg-black/60 border rounded-2xl py-4 pl-14 pr-5 text-white outline-none transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest ${
+                    errors.email ? 'border-red-500/50' : 'border-white/5 focus:border-yellow-600/50'
+                  }`}
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                />
+              </div>
+              {fieldError('email')}
             </div>
 
             {/* Phone */}
-            <div className="relative group">
-              <Phone className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors" size={18} />
-              <label htmlFor="phone" className="sr-only">Phone</label>
-              <input
-                id="phone"
-                type="text"
-                name="phone"
-                placeholder="CONTACT PHONE"
-                className="w-full bg-black/60 border border-white/5 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest"
-                value={formData.phone}
-                onChange={handleChange}
-                required
-                aria-label="Phone"
-              />
+            <div>
+              <div className="relative group">
+                <Phone
+                  className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors"
+                  size={18}
+                  aria-hidden="true"
+                />
+                <label htmlFor="signup-phone" className="sr-only">Phone number</label>
+                <input
+                  id="signup-phone"
+                  type="tel"
+                  name="phone"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  placeholder="CONTACT PHONE"
+                  className={`w-full bg-black/60 border rounded-2xl py-4 pl-14 pr-5 text-white outline-none transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest ${
+                    errors.phone ? 'border-red-500/50' : 'border-white/5 focus:border-yellow-600/50'
+                  }`}
+                  value={formData.phone}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                />
+              </div>
+              {fieldError('phone')}
             </div>
 
             {/* Password */}
-            <div className="relative group">
-              <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors" size={18} />
-              <label htmlFor="password" className="sr-only">Password</label>
-              <input
-                id="password"
-                type="password"
-                name="password"
-                placeholder="ACCESS PASSWORD"
-                className="w-full bg-black/60 border border-white/5 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest"
-                value={formData.password}
-                onChange={handleChange}
-                required
-                aria-label="Password"
-              />
-            </div>
+            <div>
+              <div className="relative group">
+                <Lock
+                  className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors"
+                  size={18}
+                  aria-hidden="true"
+                />
+                <label htmlFor="signup-password" className="sr-only">Password</label>
+                <input
+                  ref={passwordRef}
+                  id="signup-password"
+                  type="password"
+                  name="password"
+                  autoComplete="new-password"
+                  placeholder="ACCESS PASSWORD"
+                  className={`w-full bg-black/60 border rounded-2xl py-4 pl-14 pr-5 text-white outline-none transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest ${
+                    errors.password ? 'border-red-500/50' : 'border-white/5 focus:border-yellow-600/50'
+                  }`}
+                  value={formData.password}
+                  onChange={handleChange}
+                  onFocus={() => setShowPasswordRules(true)}
+                  onBlur={() => setShowPasswordRules(false)}
+                  required
+                  disabled={loading}
+                />
+              </div>
+              {fieldError('password')}
 
-            {/* Confirm Password */}
-            <div className="relative group">
-              <ShieldCheck className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors" size={18} />
-              <label htmlFor="confirmPassword" className="sr-only">Confirm Password</label>
-              <input
-                id="confirmPassword"
-                type="password"
-                name="confirmPassword"
-                placeholder="CONFIRM ACCESS"
-                className="w-full bg-black/60 border border-white/5 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-800 text-[10px] font-black uppercase tracking-widest"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                required
-                aria-label="Confirm Password"
-              />
-            </div>
-
-            {/* Submit */}
-            <div className="pt-4">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-white text-black hover:bg-yellow-500 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
-              >
-                {loading ? (
-                  <><RefreshCw className="animate-spin" size={18} /> INITIALIZING NODE...</>
-                ) : (
-                  <>AUTHORIZE ACCESS <ChevronRight size={16} /></>
-                )}
-              </button>
-            </div>
-          </form>
-
-          <div className="mt-8 text-center border-t border-white/5 pt-8">
-            <Link
-              to="/login"
-              className="text-yellow-600 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
-            >
-              Node Already Active? Sync Session
-            </Link>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+              {/* Live password strength indicators */}
+              {showPasswordRules && formData.password.length > 0 && (
+                <ul className="mt-2 pl-14 space-y-1" aria-label="Password requirements">
+                  {passwordStrength.map((rule) => (
+                    <li
+                      key={rule.label}
+                      className={`flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+                        rule.passed ? 'text-green-400' : 'text-slate-600'
+                      }`}
+                    >
+                      {rule.passed ? (
+                        <Check size={12} aria-hidden="true" />
+                      ) : (
+                        <X size={12} aria-hidden="true" />
+                      )}
+                      {rule.label}
+                    </li>
+                  ))}
