@@ -1,121 +1,81 @@
 import User from '../models/User.js';
 
-/**
- * 👤 USER: REQUEST WITHDRAWAL
- * Deducts from EUR_PROFIT and creates a PENDING entry in the ledger
- */
+// @desc    Request a withdrawal
+// @route   POST /api/withdrawal/request
 export const requestWithdrawal = async (req, res) => {
   try {
-    const { amountEur, btcAddress } = req.body;
+    const { amount, currency, address } = req.body;
     const user = await User.findById(req.user.id);
 
-    const available = user.balances.get('EUR_PROFIT') || 0;
-    if (available < amountEur) {
-      return res.status(400).json({ success: false, message: "Insufficient profit balance" });
+    if (user.balances.EUR_PROFIT < amount) {
+      return res.status(400).json({ success: false, message: 'Insufficient profit balance' });
     }
 
-    // Atomic Deduction
-    user.balances.set('EUR_PROFIT', Number((available - amountEur).toFixed(2)));
-    
-    // Create Ledger Entry
+    // Logic: Deduct balance and add to ledger
+    user.balances.EUR_PROFIT -= amount;
     user.ledger.push({
-      amount: -amountEur,
-      currency: 'EUR',
+      amount,
+      currency: currency || 'EUR',
       type: 'withdrawal',
       status: 'pending',
-      description: `Withdrawal to ${btcAddress}`,
-      createdAt: new Date()
+      description: `Withdrawal request to ${address}`
     });
 
-    user.markModified('balances');
-    user.markModified('ledger');
     await user.save();
-
-    res.json({ success: true, message: "Withdrawal pending approval" });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: 'Withdrawal request submitted' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-/**
- * 👤 USER: GET OWN HISTORY
- */
-export const getUserWithdrawals = async (req, res) => {
+// @desc    Get user's own withdrawals
+export const getMyWithdrawals = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('ledger');
-    const history = user.ledger.filter(item => item.type === 'withdrawal');
-    res.json({ success: true, history });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    const user = await User.findById(req.user.id);
+    const withdrawals = user.ledger.filter(item => item.type === 'withdrawal');
+    res.json({ success: true, data: withdrawals });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-/**
- * 🛡️ ADMIN: GET ALL PENDING
- */
-export const getPendingWithdrawals = async (req, res) => {
+// @desc    Get all withdrawals (Admin only)
+export const getAllWithdrawals = async (req, res) => {
   try {
-    const users = await User.find({ 
-      "ledger.status": "pending", 
-      "ledger.type": "withdrawal" 
-    }).select('email fullName ledger');
+    const users = await User.find({ 'ledger.type': 'withdrawal' });
+    let allWithdrawals = [];
+    users.forEach(u => {
+      u.ledger.forEach(l => {
+        if (l.type === 'withdrawal') {
+          allWithdrawals.push({ ...l.toObject(), userId: u._id, userEmail: u.email });
+        }
+      });
+    });
+    res.json({ success: true, data: allWithdrawals });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update withdrawal status (Admin only)
+export const updateWithdrawalStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const user = await User.findOne({ 'ledger._id': req.params.id });
     
-    res.json({ success: true, users });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
+    if (!user) return res.status(404).json({ success: false, message: 'Transaction not found' });
 
-/**
- * 🛡️ ADMIN: APPROVE (MARK COMPLETED)
- * This clears the 'pending' status after you send the BTC manually
- */
-export const approveWithdrawal = async (req, res) => {
-  try {
-    const { userId, ledgerId } = req.body;
-    const user = await User.findById(userId);
-    const entry = user.ledger.id(ledgerId);
+    const tx = user.ledger.id(req.params.id);
+    tx.status = status;
 
-    if (!entry || entry.status !== 'pending') {
-      return res.status(400).json({ success: false, message: "Invalid or processed record" });
+    // If failed, refund the user
+    if (status === 'failed') {
+      user.balances.EUR_PROFIT += tx.amount;
     }
 
-    entry.status = 'completed';
-    user.markModified('ledger');
     await user.save();
-
-    res.json({ success: true, message: "Withdrawal approved" });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: `Withdrawal marked as ${status}` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
-
-/**
- * 🛡️ ADMIN: REJECT (REFUND)
- * Returns the EUR_PROFIT back to the user's wallet
- */
-export const rejectWithdrawal = async (req, res) => {
-  try {
-    const { userId, ledgerId } = req.body;
-    const user = await User.findById(userId);
-    const entry = user.ledger.id(ledgerId);
-
-    if (!entry || entry.status !== 'pending') {
-      return res.status(400).json({ success: false, message: "Invalid or processed record" });
-    }
-
-    // Refund the EUR_PROFIT balance
-    const currentProfit = user.balances.get('EUR_PROFIT') || 0;
-    user.balances.set('EUR_PROFIT', currentProfit + Math.abs(entry.amount));
-
-    entry.status = 'failed';
-    user.markModified('balances');
-    user.markModified('ledger');
-    await user.save();
-
-    res.json({ success: true, message: "Withdrawal rejected and refunded" });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-};
-

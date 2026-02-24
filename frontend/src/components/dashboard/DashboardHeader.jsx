@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, LogOut, User, ShieldCheck, TrendingUp, Menu, X } from 'lucide-react';
-import { UserContext } from '../context/UserContext.jsx';
-import { useAuth } from '../context/AuthContext.jsx';
+import { UserContext } from '../../context/UserContext.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 
 export default function DashboardHeader() {
   // Access contexts with fallbacks to prevent "Black Screen" crashes

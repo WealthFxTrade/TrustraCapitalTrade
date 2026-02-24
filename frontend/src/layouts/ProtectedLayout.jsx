@@ -2,8 +2,8 @@ import React, { useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useBtcPrice } from '../hooks/useBtcPrice'; // ⚡ Added for Header sync
-import DashboardHeader from '../components/DashboardHeader';
-import LoadingScreen from '../components/LoadingScreen';
+import DashboardHeader from '../components/dashboard/DashboardHeader.jsx';
+import LoadingScreen from '../components/LoadingScreen.jsx';
 
 export default function ProtectedLayout() {
   const { user, initialized } = useAuth();

@@ -6,11 +6,11 @@ import { useSocket } from '../../hooks/useSocket';
 import toast from 'react-hot-toast';
 
 // Components
-import DashboardHeader from '../../components/DashboardHeader';
-import AccountSummary from '../../components/AccountSummary';
-import StatCard from '../../components/StatCard';
-import CopyButton from '../../components/CopyButton';
-import { SkeletonCard } from '../../components/Skeleton'; // Import the skeleton we built
+import DashboardHeader from '../../components/dashboard/DashboardHeader.jsx';
+import AccountSummary from '../../components/dashboard/AccountSummary.jsx';
+import StatCard from '../../components/ui/StatCard.jsx';
+import CopyButton from '../../components/ui/CopyButton.jsx';
+import { SkeletonCard } from '../../components/ui/Skeleton.jsx'; // Import the skeleton we built
 
 const MARKET_POLL_INTERVAL = 60_000;
 

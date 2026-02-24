@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 // ✅ FIXED: Changed from @/components/BtcPriceEUR to the actual file path that exists
-import BtcPriceEUR from '../components/BtcPrice.jsx';
+import BtcPriceEUR from '../components/wallet/BtcPrice.jsx';
 
 const plans = [
   {

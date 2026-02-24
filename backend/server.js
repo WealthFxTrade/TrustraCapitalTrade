@@ -1,11 +1,10 @@
 import dotenv from 'dotenv';
 dotenv.config();
-
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import morgan from 'morgan';
+import morgan from 'morgan';                      
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -14,19 +13,19 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 
 // Config & Middleware
-import { validateEnv } from './config/validateEnv.js';
+import validateEnv from './config/validateEnv.js';
 import { errorHandler, notFound } from './middleware/errorMiddleware.js';
 
-// ── ALL ROUTES FROM YOUR DIRECTORY ──
+// Routes
 import authRoutes from './routes/auth.js';
-import userRoutes from './routes/userRoutes.js';
+import userRoutes from './routes/userRoutes.js';  
 import adminRoutes from './routes/adminRoutes.js';
-import marketRoutes from './routes/market.js';
+import marketRoutes from './routes/market.js';    
 import investmentRoutes from './routes/investmentRoutes.js';
 import withdrawalRoutes from './routes/withdrawalRoutes.js';
 import depositRoutes from './routes/depositRoutes.js';
 import walletRoutes from './routes/walletRoutes.js';
-import transactionRoutes from './routes/transactions.js';
+import transactionRoutes from './routes/transactions.js';                                           
 import bitcoinRoutes from './routes/bitcoin.js';
 import planRoutes from './routes/plan.js';
 import reviewRoutes from './routes/reviews.js';
@@ -44,13 +43,14 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 
 // ── CORS SETUP ──
 const ALLOWED_ORIGINS = [
-  process.env.FRONTEND_URL, // Set this to https://trustra-capital-trade.vercel.app in Render
+  process.env.FRONTEND_URL,
+  process.env.SOCKET_CORS_ORIGIN, // Matches https://trustra-capital-trade.vercel.app
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173'
 ];
 
 function isAllowedOrigin(origin) {
-  if (!origin) return true; 
+  if (!origin) return true;
   if (ALLOWED_ORIGINS.includes(origin)) return true;
   if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return true;
   return false;
@@ -58,8 +58,16 @@ function isAllowedOrigin(origin) {
 
 const app = express();
 
+// ── SECURITY ──
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      "img-src": ["'self'", "data:", "https:"],
+      "script-src": ["'self'", "'unsafe-inline'"],
+      "connect-src": ["'self'", "https:", "wss:", "ws:"],
+    },
+  },
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
@@ -72,8 +80,6 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-app.options('*', cors());
 
 // ── MIDDLEWARE ──
 app.use(compression());
@@ -95,10 +101,20 @@ app.use('/api/bitcoin', bitcoinRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/reviews', reviewRoutes);
 
-// Health Check
 app.get('/health', (_req, res) => {
   res.json({ success: true, status: 'online', env: process.env.NODE_ENV });
 });
+
+// ── FRONTEND SERVING (PRODUCTION) ──
+if (IS_PROD) {
+  const frontendPath = path.join(__dirname, '../frontend/dist');
+  app.use(express.static(frontendPath));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
+}
 
 // ── ERROR HANDLING ──
 app.use(notFound);
@@ -124,7 +140,8 @@ async function startServer() {
       }
     });
 
-    // Socket Auth
+    
+
     io.use((socket, next) => {
       const token = socket.handshake.auth?.token;
       if (!token) return next(new Error('Auth required'));
@@ -139,6 +156,7 @@ async function startServer() {
     });
 
     io.on('connection', (socket) => {
+      console.log(`🔌 User connected: ${socket.userId}`);
       socket.join(socket.userId);
       if (socket.userRole === 'admin') socket.join('admin_room');
     });
@@ -146,7 +164,6 @@ async function startServer() {
     app.set('socketio', io);
     initCronJobs(io);
     startBtcDaemon(10);
-
   } catch (err) {
     console.error('❌ Startup error:', err.message);
     process.exit(1);
@@ -154,4 +171,3 @@ async function startServer() {
 }
 
 startServer();
-

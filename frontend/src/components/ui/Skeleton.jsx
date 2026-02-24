@@ -1,9 +1,17 @@
-export const DashboardSkeleton = () => (
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
-    {[1, 2, 3].map((i) => (
-      <div key={i} className="h-32 bg-white/5 border border-white/10 rounded-2xl" />
-    ))}
-    <div className="md:col-span-3 h-64 bg-white/5 border border-white/10 rounded-2xl" />
+import React from 'react';
+
+// The default export (General purpose)
+const Skeleton = ({ className }) => (
+  <div className={`animate-pulse bg-slate-800/50 rounded ${className}`}></div>
+);
+
+// The named export the Dashboard is asking for
+export const SkeletonCard = () => (
+  <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 space-y-4">
+    <Skeleton className="h-4 w-1/2" />
+    <Skeleton className="h-10 w-full" />
+    <Skeleton className="h-4 w-3/4" />
   </div>
 );
 
+export default Skeleton;

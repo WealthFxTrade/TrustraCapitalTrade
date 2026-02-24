@@ -1,7 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';  
-import LoadingScreen from './components/LoadingScreen';
+import LoadingScreen from './components/LoadingScreen.jsx';
 import ProtectedLayout from './layouts/ProtectedLayout';
 import { publicRoutes, protectedRoutes, adminRoutes } from './routes';
 

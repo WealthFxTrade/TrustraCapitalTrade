@@ -1,6 +1,6 @@
 import express from 'express';
 import User from '../models/User.js';
-import { protect as verifyToken } from '../middleware/auth.js'; // Ensure this matches your middleware export
+import { protect as verifyToken } from '../middleware/authMiddleware.js'; // Ensure this matches your middleware export
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 const router = express.Router();

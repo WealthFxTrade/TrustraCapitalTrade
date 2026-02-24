@@ -1,19 +1,10 @@
 import express from 'express';
 import { protect, admin } from '../middleware/authMiddleware.js';
-import { 
-  getActiveInvestments, 
-  activatePlan, 
-  exchangeBtcToEur 
-} from '../controllers/investmentController.js';
+import { createInvestment, getMyInvestments } from '../controllers/investmentController.js';
 
 const router = express.Router();
 
-// 👤 USER ACCESSIBLE ROUTES
-router.post('/activate', protect, activatePlan);
-router.post('/exchange', protect, exchangeBtcToEur);
-
-// 🛡️ ADMIN ONLY ROUTES
-router.get('/active', protect, admin, getActiveInvestments);
+router.post('/invest', protect, createInvestment);
+router.get('/my', protect, getMyInvestments);
 
 export default router;
-

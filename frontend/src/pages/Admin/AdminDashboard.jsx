@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/api';
-import MarketIntel from '../../components/Admin/MarketIntel'; 
+import MarketIntel from '../../components/admin/MarketIntel.jsx'; 
 import { 
   Users, 
   Activity, 

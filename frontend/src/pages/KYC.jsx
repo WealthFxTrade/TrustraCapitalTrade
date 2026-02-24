@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { submitKyc } from '../api/api'; 
+import { submitKYC } from '../api/api'; 
 import { ShieldCheck, Upload, Loader2, AlertCircle, ChevronLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -20,7 +20,7 @@ export default function KYC() {
 
     setUploading(true);
     try {
-      await submitKyc(formData);
+      await submitKYC(formData);
       setStatus('pending');
       toast.success("Identity documents transmitted to Trustra Nodes");
     } catch (err) {

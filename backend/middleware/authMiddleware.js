@@ -9,49 +9,58 @@ export const protect = async (req, res, next) => {
   try {
     let token;
 
-    // 1. Extract token from Header
+    // 1. Extract token from Header (Bearer schema)
     if (req.headers.authorization?.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
     }
 
     if (!token) {
-      return res.status(401).json({ success: false, message: 'Not authorized, token missing' });
-    }
-
-    // 2. Verify Token & Validate Payload
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Security Check: Ensure ID is a valid MongoDB ObjectId to prevent server crashes
-    if (!decoded?.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
-      return res.status(401).json({ success: false, message: 'Invalid token payload' });
-    }
-
-    // 3. Fetch User and check permissions
-    const user = await User.findById(decoded.id).select('-password');
-
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'User no longer exists' });
-    }
-
-    // 4. Instant Kill-switch for Banned or Inactive accounts
-    if (user.banned || (user.isActive === false)) {
-      return res.status(403).json({ 
+      return res.status(401).json({ 
         success: false, 
-        message: 'Access denied: Your account has been suspended' 
+        message: 'Not authorized, access token missing' 
       });
     }
 
-    // Attach user to request for use in controllers
+    // 2. Verify Token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // 3. Security Check: Validate MongoDB ID format to prevent casting errors
+    if (!decoded?.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Invalid security credentials' 
+      });
+    }
+
+    // 4. Fetch User and check account state
+    // We exclude the password for security, but we need role and status
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Identity verification failed: User no longer exists' 
+      });
+    }
+
+    // 5. Check if user is banned or inactive (Fintech Kill-switch)
+    if (user.banned || user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Account restricted: Please contact support'
+      });
+    }
+
+    // Attach user to request object
     req.user = user;
     next();
   } catch (error) {
     console.error('[Auth Middleware Error]:', error.message);
-    
-    // Distinguish between expired and malformed tokens for better UX
-    const message = error.name === 'TokenExpiredError' 
-      ? 'Session expired, please login again' 
-      : 'Invalid or expired token';
-      
+
+    const message = error.name === 'TokenExpiredError'
+      ? 'Your session has expired. Please log in again.'
+      : 'Authentication failed. Invalid token.';
+
     return res.status(401).json({ success: false, message });
   }
 };
@@ -60,27 +69,16 @@ export const protect = async (req, res, next) => {
  * @desc Admin only middleware
  */
 export const admin = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
+  if (req.user && (req.user.role === 'admin' || req.user.isAdmin)) {
     return next();
   }
-  return res.status(403).json({ 
-    success: false, 
-    message: 'Access denied: Admin permissions required' 
+  return res.status(403).json({
+    success: false,
+    message: 'Access denied: Administrative clearance required'
   });
 };
 
 /**
- * @desc Flexible role-based authorization (e.g., for 'moderator' or 'support' roles)
+ * @desc Alias for 'protect' to support routes that import { auth }
  */
-export const authorize = (...roles) => {
-  return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Insufficient permissions for this action' 
-      });
-    }
-    next();
-  };
-};
-
+export const auth = protect;

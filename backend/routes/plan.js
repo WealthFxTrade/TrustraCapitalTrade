@@ -1,6 +1,6 @@
 import express from 'express';
-// ✅ FIX: Ensure this path matches your actual file (likely auth.js based on your file list)
-import { protect } from '../middleware/auth.js'; 
+// ✅ FIX: Ensure this path matches your actual file (likely authMiddleware.js based on your file list)
+import { protect } from '../middleware/authMiddleware.js'; 
 import User from '../models/User.js';
 
 const router = express.Router();

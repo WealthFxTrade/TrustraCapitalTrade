@@ -1,120 +1,85 @@
-import User from "../models/User.js";
-import Deposit from "../models/Deposit.js";
-import mongoose from "mongoose";
+import User from '../models/User.js';
 
-const sendResponse = (res, status, success, data = {}, message = null) => {
-  return res.status(status).json({ success, ...(message && { message }), ...data });
-};
-
-/* ================= USER LOGIC ================= */
-
-export const getUserProfile = async (req, res) => {
+// @desc    Get user profile
+// @route   GET /api/user/profile
+export const getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password').lean();
-    if (!user) return sendResponse(res, 404, false, {}, "User not found");
-    return sendResponse(res, 200, true, { user });
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    res.json({ success: true, data: user });
   } catch (error) {
-    return sendResponse(res, 500, false, {}, "Server error");
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const getUserStats = async (req, res) => {
+// @desc    Update user profile
+// @route   PUT /api/user/profile
+export const updateProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).lean();
-    const balances = user.balances instanceof Map ? Object.fromEntries(user.balances) : user.balances || {};
-    const stats = {
-      mainBalance: Number(balances.EUR || 0),
-      profit: Number(balances.EUR_PROFIT || 0),
-      activeNodes: user.isPlanActive ? 1 : 0,
-      dailyROI: (user.investedAmount || 0) * (user.dailyRoiRate || 0),
-      activePlan: user.activePlan || "None",
-    };
-    return sendResponse(res, 200, true, stats);
+    const user = await User.findById(req.user.id);
+    if (user) {
+      user.fullName = req.body.fullName || user.fullName;
+      user.phone = req.body.phone || user.phone;
+      
+      if (req.body.password) {
+        user.password = req.body.password;
+      }
+
+      const updatedUser = await user.save();
+      res.json({
+        success: true,
+        data: {
+          _id: updatedUser._id,
+          fullName: updatedUser.fullName,
+          email: updatedUser.email,
+          role: updatedUser.role,
+        },
+      });
+    } else {
+      res.status(404).json({ success: false, message: 'User not found' });
+    }
   } catch (error) {
-    return sendResponse(res, 500, false, {}, "Server error");
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const updateUserProfile = async (req, res) => {
+// @desc    Get all users (Admin only)
+export const getAllUsers = async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(req.user.id, { $set: req.body }, { new: true }).select('-password');
-    return sendResponse(res, 200, true, { user }, "Profile updated");
+    const users = await User.find({}).select('-password');
+    res.json({ success: true, data: users });
   } catch (error) {
-    return sendResponse(res, 400, false, {}, error.message);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const getUserLedger = async (req, res) => {
+// @desc    Update user status (Admin only)
+export const updateUserStatus = async (req, res) => {
   try {
-    const deposits = await Deposit.find({ user: req.user.id }).sort({ createdAt: -1 }).lean();
-    return sendResponse(res, 200, true, deposits);
-  } catch (error) {
-    return sendResponse(res, 500, false, {}, "Server error");
-  }
-};
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-/* ================= ADMIN LOGIC ================= */
+    user.isActive = req.body.isActive !== undefined ? req.body.isActive : user.isActive;
+    user.role = req.body.role || user.role;
+    user.banned = req.body.banned !== undefined ? req.body.banned : user.banned;
 
-export const getUsers = async (req, res) => {
-  try {
-    const users = await User.find().select('-password').lean();
-    return sendResponse(res, 200, true, { users });
-  } catch (error) {
-    return sendResponse(res, 500, false, {}, "Server error");
-  }
-};
-
-export const distributeProfit = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { amount } = req.body;
-    const user = await User.findById(id);
-    const current = user.balances.get("EUR_PROFIT") || 0;
-    user.balances.set("EUR_PROFIT", current + Number(amount));
-    user.markModified("balances");
     await user.save();
-    return sendResponse(res, 200, true, {}, "Profit distributed");
+    res.json({ success: true, message: 'User updated successfully' });
   } catch (error) {
-    return sendResponse(res, 400, false, {}, error.message);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 🟢 FIX: This was the missing export causing your SyntaxError
-export const approveDeposit = async (req, res) => {
+// @desc    Delete user (Admin only)
+export const deleteUser = async (req, res) => {
   try {
-    const { depositId } = req.body;
-    const deposit = await Deposit.findByIdAndUpdate(depositId, { status: 'completed' }, { new: true });
-    return sendResponse(res, 200, true, { deposit }, "Deposit approved");
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    await user.deleteOne();
+    res.json({ success: true, message: 'User removed' });
   } catch (error) {
-    return sendResponse(res, 400, false, {}, error.message);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
-
-export const updateUserBalance = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findByIdAndUpdate(id, { $set: req.body }, { new: true });
-    return sendResponse(res, 200, true, { user }, "Balance updated");
-  } catch (error) {
-    return sendResponse(res, 400, false, {}, error.message);
-  }
-};
-
-export const banUser = async (req, res) => {
-  try {
-    await User.findByIdAndUpdate(req.params.id, { banned: true });
-    return sendResponse(res, 200, true, {}, "User banned");
-  } catch (error) {
-    return sendResponse(res, 400, false, {}, error.message);
-  }
-};
-
-export const unbanUser = async (req, res) => {
-  try {
-    await User.findByIdAndUpdate(req.params.id, { banned: false });
-    return sendResponse(res, 200, true, {}, "User unbanned");
-  } catch (error) {
-    return sendResponse(res, 400, false, {}, error.message);
-  }
-};
-
