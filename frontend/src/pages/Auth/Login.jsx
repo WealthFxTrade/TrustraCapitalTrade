@@ -1,56 +1,27 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
+import { useBtcPrice } from '../../hooks/useBtcPrice';
 import api from '../../api/api';
-import { Mail, Lock, RefreshCw } from 'lucide-react';
+import { Mail, Lock, ChevronRight } from 'lucide-react';
 
 // ──────────────────────────────────────────────
 // CONSTANTS
 // ──────────────────────────────────────────────
-const BTC_PRICE_URL = 'https://api.coingecko.com';
-const BTC_POLL_INTERVAL = 60_000; 
 const SAFE_REDIRECT_PATTERN = /^\/(dashboard|portfolio|settings|profile)/;
-
-/**
- * Fetches live BTC/EUR price with abort-safe polling.
- */
-function useBtcPrice(intervalMs = BTC_POLL_INTERVAL) {
-  const [price, setPrice] = useState(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchPrice = async () => {
-      try {
-        const res = await fetch(BTC_PRICE_URL, { signal: controller.signal });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.bitcoin?.eur) setPrice(data.bitcoin.eur);
-      } catch (err) {
-        if (err.name !== 'AbortError') console.warn('BTC price fetch failed:', err.message);
-      }
-    };
-    fetchPrice();
-    const interval = setInterval(fetchPrice, intervalMs);
-    return () => {
-      controller.abort();
-      clearInterval(interval);
-    };
-  }, [intervalMs]);
-  return price;
-}
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-
   const passwordRef = useRef(null);
-  const { login, user, initialized } = useAuth(); // FIX: Use 'user' and 'initialized'
+
+  const { login, user, initialized } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const btcPrice = useBtcPrice();
 
-  // ── Redirect if already logged in (Actual Work Fix) ──
+  // ── Redirect if already logged in ──
   useEffect(() => {
     if (initialized && user) {
       const from = location.state?.from?.pathname;
@@ -66,41 +37,32 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (loading) return;
 
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail || !password) return toast.error('Email and password are required');
 
-    setLoading(true);
-
     try {
-      // 1. Direct API call to Render
+      // API call triggers nProgress via interceptor automatically
       const res = await api.post('/auth/login', { email: trimmedEmail, password });
-
-      // 2. Validate response structure
+      
       const userData = res.data.user || res.data.data;
       const token = res.data.token;
 
       if (!userData || !token) throw new Error('Invalid server response');
 
-      setPassword(''); // Security: clear local state
+      // Clear local password for security
+      setPassword(''); 
 
-      // 3. Update Global Auth State (Context handles localStorage & Headers)
-      login(userData, token); 
-      
+      // Update Global Auth State
+      login(userData, token);
       toast.success('Access granted');
-      // Navigation is handled by the useEffect redirect above
     } catch (err) {
+      // Local cleanup only. Global api.js interceptor handles the error toast.
       setPassword('');
-      const message = err.response?.data?.message || err.message || 'Invalid credentials';
-      toast.error(message);
       passwordRef.current?.focus();
-    } finally {
-      setLoading(false);
     }
   };
 
-  // Prevent form flicker while checking session
   if (!initialized) return null;
 
   return (
@@ -127,11 +89,10 @@ export default function Login() {
               <input
                 id="login-email"
                 type="email"
-                placeholder="investor@trustra.com"
-                className="w-full bg-black/60 border border-white/5 rounded-2xl py-5 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-700"
+                placeholder="INVESTOR@TRUSTRA.COM"
+                className="w-full bg-black/60 border border-white/5 rounded-2xl py-5 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-700 text-[10px] font-black uppercase tracking-widest"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
               />
             </div>
 
@@ -142,29 +103,27 @@ export default function Login() {
                 id="login-password"
                 type="password"
                 placeholder="••••••••"
-                className="w-full bg-black/60 border border-white/5 rounded-2xl py-5 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-700"
+                className="w-full bg-black/60 border border-white/5 rounded-2xl py-5 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 transition-all placeholder:text-slate-700 text-[10px] font-black uppercase tracking-widest"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
               />
             </div>
 
-            <div className="text-right">
-              <Link to="/forgot-password" size="xs" className="text-slate-600 text-[10px] font-bold uppercase tracking-widest hover:text-yellow-500 transition-colors">
+            <div className="flex justify-between items-center px-1">
+              <Link to="/signup" className="text-slate-600 text-[8px] font-bold uppercase tracking-[0.2em] hover:text-white transition-colors">
+                New Investor? <span className="text-yellow-500">Join</span>
+              </Link>
+              <Link to="/forgot-password" size="xs" className="text-slate-600 text-[8px] font-bold uppercase tracking-[0.2em] hover:text-yellow-500 transition-colors">
                 Forgot password?
               </Link>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-white text-black hover:bg-yellow-500 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 transition-all disabled:opacity-50 active:scale-95"
+              className="w-full bg-white text-black hover:bg-yellow-500 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 transition-all active:scale-95"
             >
-              {loading ? (
-                <><RefreshCw className="animate-spin" size={18} /><span>Verifying...</span></>
-              ) : (
-                <><span>Authenticate Access</span></>
-              )}
+              <span>Authenticate Access</span>
+              <ChevronRight size={14} />
             </button>
           </form>
         </div>
@@ -172,4 +131,3 @@ export default function Login() {
     </div>
   );
 }
-

@@ -4,9 +4,8 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
 import { useBtcPrice } from '../../hooks/useBtcPrice';
 import api from '../../api/api';
-import {
-  Mail, Lock, User, Phone, RefreshCw, ChevronRight, ShieldCheck,
-  Check, X
+import { 
+  Mail, Lock, User, Phone, ChevronRight, ShieldCheck, Check, X 
 } from 'lucide-react';
 
 // ──────────────────────────────────────────────
@@ -30,11 +29,10 @@ export default function Signup() {
     password: '',
     confirmPassword: ''
   });
-  const [loading, setLoading] = useState(false);
-  const [showPasswordRules, setShowPasswordRules] = useState(false);
-  const [errors, setErrors] = useState({});
 
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
   const passwordRef = useRef(null);
+  
   const { login, user, initialized } = useAuth();
   const navigate = useNavigate();
   const btcPrice = useBtcPrice(60_000);
@@ -60,24 +58,16 @@ export default function Signup() {
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
   }, []);
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (loading) return;
 
-    // Validation logic
+    // 1. Client-side Validation (Keep for instant feedback)
     if (!formData.fullName.trim()) return toast.error('Full legal name is required');
     if (!EMAIL_REGEX.test(formData.email)) return toast.error('Invalid email address');
     if (!allRulesPassed) return toast.error('Password requirements not met');
     if (formData.password !== formData.confirmPassword) return toast.error('Passwords do not match');
-
-    setLoading(true);
 
     const submitData = {
       fullName: formData.fullName.trim(),
@@ -87,6 +77,7 @@ export default function Signup() {
     };
 
     try {
+      // API call triggers NProgress loading bar via interceptor
       const res = await api.post('/auth/register', submitData);
       
       const userData = res.data.user || res.data.data;
@@ -94,16 +85,14 @@ export default function Signup() {
 
       if (!userData || !token) throw new Error('Registration succeeded but session failed');
 
-      // Sync Global Auth State & LocalStorage
-      login(userData, token); 
+      // Sync Global Auth State
+      login(userData, token);
       toast.success('Portfolio Established Successfully');
     } catch (err) {
-      const message = err.response?.data?.message || err.message || 'Verification failed';
-      toast.error(message);
+      // NOTE: Error toasts (400, 401, 500) are handled globally in api.js.
+      // We only handle component-specific cleanup here.
       setFormData(prev => ({ ...prev, password: '', confirmPassword: '' }));
       passwordRef.current?.focus();
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -122,7 +111,6 @@ export default function Signup() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white/[0.01] p-10 rounded-[2.5rem] border border-white/5 backdrop-blur-3xl shadow-3xl">
           <form onSubmit={handleRegister} className="space-y-4" noValidate>
-            
             {/* Full Name */}
             <div className="relative group">
               <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600 group-focus-within:text-yellow-500 transition-colors" size={18} />
@@ -165,8 +153,9 @@ export default function Signup() {
               <input name="confirmPassword" type="password" placeholder="CONFIRM ACCESS KEY" className="w-full bg-black/60 border border-white/5 rounded-2xl py-4 pl-14 pr-5 text-white outline-none focus:border-yellow-600/50 text-[10px] font-black uppercase tracking-widest" value={formData.confirmPassword} onChange={handleChange} />
             </div>
 
-            <button type="submit" disabled={loading} className="w-full bg-white text-black hover:bg-yellow-500 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50">
-              {loading ? <RefreshCw className="animate-spin" size={18} /> : <><span>Establish Portfolio</span><ChevronRight size={14} /></>}
+            <button type="submit" className="w-full bg-white text-black hover:bg-yellow-500 py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 transition-all active:scale-95">
+              <span>Establish Portfolio</span>
+              <ChevronRight size={14} />
             </button>
 
             <div className="text-center mt-6">
@@ -178,4 +167,3 @@ export default function Signup() {
     </div>
   );
 }
-

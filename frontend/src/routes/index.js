@@ -25,19 +25,21 @@ import AuditLogs from '../pages/Admin/AuditLogs';
 import AdminSecurityLogs from '../pages/Admin/AdminSecurityLogs';
 
 /**
- * Public Routes: Accessible by everyone
+ * Public Routes: Accessible by everyone.
+ * Logged-in users are redirected away from Auth pages via App.jsx logic.
  */
 export const publicRoutes = [
   { path: '/', element: <Landing /> },
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Signup /> },
+  { path: '/signup', element: <Signup /> }, // Alias for convenience
   { path: '/forgot-password', element: <ForgotPassword /> },
   { path: '/plans', element: <Plans /> },
   { path: '/reviews', element: <Reviews /> },
 ];
 
 /**
- * Protected Routes: Accessible only after Login
+ * Protected Routes: Accessible only to authenticated investors.
  */
 export const protectedRoutes = [
   { path: '/dashboard', element: <Dashboard /> },
@@ -47,13 +49,12 @@ export const protectedRoutes = [
   { path: '/withdraw', element: <Withdraw /> },
   { path: '/profile', element: <Profile /> },
   { path: '/exchange', element: <WalletExchange /> },
-  { path: '/investments', element: <Invest /> },
-  { path: '/transactions', element: <Deposit /> }, 
+  { path: '/investments', element: <Invest /> }, 
+  { path: '/transactions', element: <Deposit /> },
 ];
 
 /**
- * Admin Routes: Separated for App.jsx import
- * This fixes the "adminRoutes is not exported" error
+ * Admin Routes: Accessible only to users with role 'admin'.
  */
 export const adminRoutes = [
   { path: '/admin', element: <Admin /> },
@@ -64,9 +65,6 @@ export const adminRoutes = [
   { path: '/admin/security', element: <AdminSecurityLogs /> },
 ];
 
-/**
- * Fallback Route
- */
 export const fallbackRoute = {
   path: '*',
   element: <NotFoundPage />,
