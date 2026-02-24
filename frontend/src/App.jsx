@@ -6,41 +6,50 @@ import ProtectedLayout from './layouts/ProtectedLayout';
 import { publicRoutes, protectedRoutes, adminRoutes } from './routes';
 
 export default function App() {
-  // ⚡ SYNCED: Using 'initialized' from AuthContext
-  const { initialized, user } = useAuth(); 
+  const { initialized, user } = useAuth();
   const location = useLocation();
 
-  // 🛡️ LOADING GATE: Stops guests from seeing the spinner forever
+  // 1. Loading Gate
   if (!initialized) {
     return <LoadingScreen message="Securing Trustra Node..." />;
   }
 
   return (
     <Routes location={location} key={location.pathname}>
-      {/* 🟢 Public Routes */}
+      
+      {/* 🟢 Public Routes: Redirects logged-in users away from Auth pages */}
       {publicRoutes.map((route) => (
-        <Route key={route.path} path={route.path} element={
-          user && (route.path === '/login' || route.path === '/register')
-            ? <Navigate to="/dashboard" replace />
-            : route.element
-        } />
+        <Route 
+          key={route.path} 
+          path={route.path} 
+          element={
+            user && (route.path === '/login' || route.path === '/register')
+              ? <Navigate to="/dashboard" replace />
+              : route.element
+          } 
+        />
       ))}
 
-      {/* 🔒 Protected Routes */}
+      {/* 🔒 Protected Routes: Standard User Access */}
       <Route element={user ? <ProtectedLayout /> : <Navigate to="/login" replace state={{ from: location }} />}>
         {protectedRoutes.map((route) => (
           <Route key={route.path} path={route.path} element={route.element} />
         ))}
       </Route>
 
-      {/* 👑 Admin Routes */}
-      <Route element={(user?.role === 'admin') ? <ProtectedLayout /> : <Navigate to="/" replace />}>
+      {/* 👑 Admin Routes: Strict Role Check */}
+      <Route element={
+        (user && user.role === 'admin') 
+          ? <ProtectedLayout /> 
+          : <Navigate to="/dashboard" replace /> // Redirect non-admins to user dashboard, not home
+      }>
         {adminRoutes.map((route) => (
           <Route key={route.path} path={route.path} element={route.element} />
         ))}
       </Route>
 
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* 404 Fallback */}
+      <Route path="*" element={<Navigate to={user ? "/dashboard" : "/login"} replace />} />
     </Routes>
   );
 }

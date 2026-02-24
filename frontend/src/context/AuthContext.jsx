@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api/api';
+import api from '../api/api'; // Ensure this points to the file with the interceptor
 
 const AuthContext = createContext(null);
 
@@ -8,7 +8,7 @@ const initialState = {
   user: null,
   token: localStorage.getItem('token') || null,
   loading: true,
-  initialized: false, // 🔑 The gatekeeper
+  initialized: false, 
   error: null,
 };
 
@@ -19,7 +19,9 @@ function authReducer(state, action) {
     case 'AUTH_FAILED':
       return { ...state, user: null, token: null, loading: false, initialized: true, error: action.payload };
     case 'LOGOUT':
-      return { ...initialState, token: null, loading: false, initialized: true };
+      return { ...state, user: null, token: null, loading: false, initialized: true, error: null };
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload };
     default:
       return state;
   }
@@ -27,7 +29,7 @@ function authReducer(state, action) {
 
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
-  const [systemStatus, setSystemStatus] = useState({ maintenanceMode: false });
+  const [systemStatus] = useState({ maintenanceMode: false });
   const navigate = useNavigate();
   const hasInitialized = useRef(false);
 
@@ -37,41 +39,73 @@ export function AuthProvider({ children }) {
 
     const storedToken = localStorage.getItem('token');
 
-    // ⚡ GUEST CHECK: No token? Initialize immediately so landing page shows.
     if (!storedToken) {
-      dispatch({ type: 'AUTH_FAILED', payload: 'Guest Session' });
+      dispatch({ type: 'AUTH_FAILED', payload: null });
       return;
     }
 
     try {
+      // Logic: The interceptor in api.js will automatically pick up storedToken
       const res = await api.get('/auth/profile');
+      
+      // Handle different backend response structures
+      const userData = res.data.user || res.data.data || res.data;
+      
       dispatch({
         type: 'AUTH_SUCCESS',
-        payload: { user: res.data.user || res.data, token: storedToken }
+        payload: { user: userData, token: storedToken }
       });
     } catch (err) {
-      if (err.response?.status === 401) localStorage.removeItem('token');
+      console.error("Auth Init Error:", err.response?.data?.message || err.message);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+      }
       dispatch({ type: 'AUTH_FAILED', payload: 'Session expired' });
     }
   }, []);
 
   useEffect(() => { initAuth(); }, [initAuth]);
 
+  /**
+   * FIXED LOGIN: 
+   * Must accept the full response data to ensure user object is saved.
+   */
   const login = (user, token) => {
     localStorage.setItem('token', token);
-    dispatch({ type: 'AUTH_SUCCESS', payload: { user, token } });
-    navigate('/dashboard');
+    // Crucial: Update the user object in state immediately
+    dispatch({ 
+      type: 'AUTH_SUCCESS', 
+      payload: { user, token } 
+    });
+    
+    // Use replace: true to prevent user from going back to login page
+    navigate('/dashboard', { replace: true });
   };
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user'); // Clean up any other fragments
     dispatch({ type: 'LOGOUT' });
-    navigate('/login');
-  };
+    navigate('/login', { replace: true });
+  }, [navigate]);
+
+  // Sync state with Axios (Extra safety layer)
+  useEffect(() => {
+    if (state.token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${state.token}`;
+    } else {
+      delete api.defaults.headers.common['Authorization'];
+    }
+  }, [state.token]);
 
   return (
     <AuthContext.Provider value={{ ...state, login, logout, systemStatus }}>
-      {children}
+      {/* 🔑 Prevent flickering: Don't render children until we know auth status */}
+      {state.initialized ? children : (
+        <div className="loading-screen">
+          <p>Trustra Capital - Initializing Security...</p>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }
