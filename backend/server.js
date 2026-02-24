@@ -5,13 +5,12 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';                      
-import rateLimit from 'express-rate-limit';
 import path from 'path';                          
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import https from 'https'; // Added for Keep-Alive
+import https from 'https';
 
 // Config & Middleware
 import validateEnv from './config/validateEnv.js';
@@ -128,7 +127,7 @@ if (IS_PROD) {
     }).on('error', (err) => {
       console.error('❌ Keep-alive ping failed:', err.message);
     });
-  }, 600000); // 10 minutes
+  }, 600000); 
 }
 
 // ── SERVER & SOCKETS ──
@@ -136,6 +135,7 @@ async function startServer() {
   try {
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ MongoDB connected');
+    
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`✅ Server running on port ${PORT}`);
     });
@@ -150,6 +150,7 @@ async function startServer() {
       }
     });                                               
 
+    // Socket Auth Middleware
     io.use((socket, next) => {
       const token = socket.handshake.auth?.token;
       if (!token) return next(new Error('Auth required'));
@@ -163,15 +164,29 @@ async function startServer() {
       }
     });
 
+    // Admin Notification Helper
+    const notifyAdmins = (event, data) => {
+      io.to('admin_room').emit('admin_notification', {
+        event,
+        data,
+        timestamp: new Date()
+      });
+    };
+
     io.on('connection', (socket) => {
       console.log(`🔌 User connected: ${socket.userId}`);
       socket.join(socket.userId);
-      if (socket.userRole === 'admin') socket.join('admin_room');
+      
+      if (socket.userRole === 'admin') {
+        socket.join('admin_room');
+        notifyAdmins('ADMIN_LOGGED_IN', { adminId: socket.userId });
+      }
     });
 
     app.set('socketio', io);
     initCronJobs(io);                                 
     startBtcDaemon(10);
+    
   } catch (err) {
     console.error('❌ Startup error:', err.message);                                                    
     process.exit(1);                                
