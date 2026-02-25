@@ -2,9 +2,8 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '../../context/AuthContext';
-// Assuming useBtcPrice is a custom hook you've created
-import { useBtcPrice } from '../../hooks/useBtcPrice'; 
-import api from '../../api/api';
+import { useBtcPrice } from '../../hooks/useBtcPrice';
+import api, { login as loginApi } from '../../api/api'; // ✅ Import login function
 import { Mail, Lock, ChevronRight, Activity } from 'lucide-react';
 
 export default function Login() {
@@ -12,51 +11,35 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const passwordRef = useRef(null);
-
   const { login } = useAuth();
 
-  // Price Oracle logic
-  const btcPrice = useBtcPrice(60000); 
+  const btcPrice = useBtcPrice(60000);
   const formattedPrice = btcPrice
     ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(btcPrice)
     : 'SYNCHRONIZING...';
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
-    if (!email.trim() || !password) {
-      return toast.error('Credentials required');
-    }
+    if (!email.trim() || !password) return toast.error('Credentials required');
 
     setIsSubmitting(true);
-
     try {
-      const res = await api.post('/auth/login', {
-        email: email.trim().toLowerCase(),
-        password,
-      });
+      // ✅ Use api.js login function
+      const res = await loginApi(email.trim().toLowerCase(), password);
 
-      // Safely extract user and token from nested response
-      const userData = res.data.user || res.data.data || res.data;
-      const token = res.data.token;
+      const userData = res.user || res.data || res;
+      const token = res.token;
 
-      if (!userData || !token) {
-        throw new Error('Invalid server response: Missing user or token');
-      }
+      if (!userData || !token) throw new Error('Invalid server response: Missing user or token');
 
-      // login() in AuthContext handles: 
-      // 1. localStorage.setItem
-      // 2. State update
-      // 3. navigate('/dashboard')
-      login(userData, token); 
-      
+      login(userData, token); // AuthContext handles localStorage & navigation
       toast.success('Access Granted');
     } catch (err) {
       console.error('[Login Error]', err);
       setPassword('');
       passwordRef.current?.focus();
-      
-      const errorMsg = err.response?.data?.message || 'Authentication Failed';
+
+      const errorMsg = err.response?.data?.message || err.message || 'Authentication Failed';
       toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
@@ -68,6 +51,7 @@ export default function Login() {
       {/* Background Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-yellow-500/5 blur-[120px] rounded-full -z-10" />
 
+      {/* Header */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
         <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-2xl flex items-center justify-center font-black text-black text-2xl mx-auto mb-6 shadow-2xl shadow-yellow-500/20">
           T
@@ -79,6 +63,7 @@ export default function Login() {
         </p>
       </div>
 
+      {/* Form */}
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white/[0.02] p-10 rounded-[2.5rem] border border-white/5 backdrop-blur-3xl shadow-3xl">
           <form onSubmit={handleLogin} className="space-y-5">
@@ -119,7 +104,7 @@ export default function Login() {
               {!isSubmitting && <ChevronRight size={14} />}
             </button>
 
-            {/* Redirect to Register (Updated Path) */}
+            {/* Redirect to Register */}
             <div className="text-center mt-6">
               <Link to="/register" className="text-slate-600 text-[10px] font-bold uppercase tracking-widest hover:text-white transition-colors">
                 New investor? <span className="text-yellow-500 underline underline-offset-4">Create Account</span>
@@ -127,8 +112,8 @@ export default function Login() {
             </div>
           </form>
         </div>
-        
-        {/* Security Footer */}
+
+        {/* Footer */}
         <p className="text-center text-[8px] text-white/20 uppercase tracking-[0.5em] mt-8">
           Encrypted Node Connection • Zurich Hub v8.4.1
         </p>
@@ -136,4 +121,3 @@ export default function Login() {
     </div>
   );
 }
-

@@ -1,88 +1,136 @@
-import React, { useEffect, useState } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import api from '../../api/api';
-
-// Components from your directory
-import DashboardHeader from '../../components/dashboard/DashboardHeader';
-import AccountSummary from './AccountSummary';
-import NodeMarketplace from './NodeMarketplace';
-import TransactionLedger from './TransactionLedger';
-import SchemaLogs from './SchemaLogs'; // Security/Activity Logs
-import WithdrawalForm from './WithdrawalForm';
+import { useEffect, useState } from 'react';
+import { toast } from 'react-hot-toast';
+import {
+  fetchUserProfile,
+  fetchWallets,
+  fetchInvestments,
+  fetchUsers,
+  distributeProfit,
+  deleteUser,
+} from '../../api/api';
 
 export default function Dashboard() {
-  const { user, initialized } = useAuth();
-  const [stats, setStats] = useState(null);
+  const [user, setUser] = useState(null);
+  const [wallets, setWallets] = useState([]);
+  const [investments, setInvestments] = useState([]);
+  const [users, setUsers] = useState([]); // Admin only
   const [loading, setLoading] = useState(true);
 
-  // 1. Centralized Data Fetching
   useEffect(() => {
-    if (!user) return;
-
-    const fetchDashboardData = async () => {
+    const loadData = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-        // Fetches main balance, profit, and active plan in one go
-        const res = await api.get('/dashboard/stats');
-        setStats(res.data || {});
+        // 1️⃣ Fetch user profile
+        const userProfile = await fetchUserProfile();
+        setUser(userProfile);
+
+        // 2️⃣ Fetch wallets
+        const walletData = await fetchWallets();
+        setWallets(walletData);
+
+        // 3️⃣ Fetch investments
+        const investmentData = await fetchInvestments();
+        setInvestments(investmentData);
+
+        // 4️⃣ If admin, fetch users
+        if (userProfile.role === 'admin') {
+          const userList = await fetchUsers();
+          setUsers(userList);
+        }
       } catch (err) {
-        console.error('[Dashboard Sync Error]:', err.message);
+        console.error('[Dashboard Load Error]', err);
+        toast.error('Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDashboardData();
-  }, [user]);
+    loadData();
+  }, []);
 
-  // 2. Security Guard
-  if (!initialized) return null;
-  if (!user) return <Navigate to="/login" replace />;
+  const handleDistributeProfit = async () => {
+    try {
+      await distributeProfit({ amount: 1000 }); // Example data
+      toast.success('Profit distributed successfully');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to distribute profit');
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+    try {
+      await deleteUser(userId);
+      setUsers((prev) => prev.filter((u) => u._id !== userId));
+      toast.success('User deleted');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to delete user');
+    }
+  };
+
+  if (loading) return <p>Loading dashboard...</p>;
 
   return (
-    <div className="min-h-screen bg-[#020617] text-white selection:bg-yellow-500/30">
-      
-      {/* ─── GLOBAL HEADER ─── */}
-      {/* We pass stats here so the balance in the header updates live */}
-      <DashboardHeader stats={stats} loading={loading} />
+    <div className="p-6 space-y-8">
+      {/* User Info */}
+      <div>
+        <h2 className="text-xl font-bold">Welcome, {user.name}</h2>
+        <p>Email: {user.email}</p>
+        <p>Role: {user.role}</p>
+      </div>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-10 py-12">
-        <Routes>
-          {/* ─── HOME: OVERVIEW ─── */}
-          <Route 
-            path="/" 
-            element={<AccountSummary stats={stats} loading={loading} />} 
-          />
+      {/* Wallets */}
+      <div>
+        <h3 className="font-semibold">Wallets</h3>
+        <ul>
+          {wallets.map((w) => (
+            <li key={w._id}>
+              {w.currency}: {w.balance}
+            </li>
+          ))}
+        </ul>
+      </div>
 
-          {/* ─── NODES: DEPLOYMENT ─── */}
-          <Route 
-            path="/nodes" 
-            element={<NodeMarketplace userBalance={stats?.mainBalance} />} 
-          />
+      {/* Investments */}
+      <div>
+        <h3 className="font-semibold">Investments</h3>
+        <ul>
+          {investments.map((i) => (
+            <li key={i._id}>
+              {i.planName}: {i.amount} ({i.status})
+            </li>
+          ))}
+        </ul>
+      </div>
 
-          {/* ─── FINANCE: LEDGER & WITHDRAWALS ─── */}
-          <Route path="/history" element={<TransactionLedger />} />
-          <Route 
-            path="/withdraw" 
-            element={<WithdrawalForm availableBalance={stats?.mainBalance} />} 
-          />
+      {/* Admin Section */}
+      {user.role === 'admin' && (
+        <div>
+          <h3 className="font-semibold">Admin Panel</h3>
+          <button
+            onClick={handleDistributeProfit}
+            className="bg-yellow-500 text-black px-4 py-2 rounded mr-2"
+          >
+            Distribute Profit
+          </button>
 
-          {/* ─── SECURITY: SYSTEM LOGS ─── */}
-          <Route path="/logs" element={<SchemaLogs />} />
-
-          {/* ─── FALLBACK ─── */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </main>
-
-      {/* ─── NETWORK FOOTER ─── */}
-      <footer className="max-w-7xl mx-auto px-10 py-8 border-t border-white/5 opacity-20 text-center">
-        <p className="text-[8px] font-black uppercase tracking-[0.5em]">
-          Zurich Financial Hub • Secure Node Connection Active • v8.4.1
-        </p>
-      </footer>
+          <ul className="mt-4">
+            {users.map((u) => (
+              <li key={u._id} className="flex justify-between items-center">
+                <span>{u.email} ({u.role})</span>
+                <button
+                  onClick={() => handleDeleteUser(u._id)}
+                  className="bg-red-500 text-white px-2 py-1 rounded"
+                >
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
-
