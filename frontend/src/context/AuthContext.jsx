@@ -5,8 +5,8 @@ import api from '../api/api';
 const AuthContext = createContext(null);
 
 const initialState = {
-  user: null,
-  token: localStorage.getItem('token') || null,
+  user: null,       // ❌ do NOT preload token here
+  token: null,
   loading: true,
   initialized: false,
   error: null,
@@ -15,18 +15,31 @@ const initialState = {
 function authReducer(state, action) {
   switch (action.type) {
     case 'AUTH_SUCCESS':
-      return { 
-        ...state, 
-        user: action.payload.user, 
-        token: action.payload.token, 
-        loading: false, 
-        initialized: true, 
-        error: null 
+      return {
+        ...state,
+        user: action.payload.user,
+        token: action.payload.token,
+        loading: false,
+        initialized: true,
+        error: null,
       };
     case 'AUTH_FAILED':
-      return { ...state, user: null, token: null, loading: false, initialized: true, error: action.payload };
+      return {
+        ...state,
+        user: null,
+        token: null,
+        loading: false,
+        initialized: true,
+        error: action.payload,
+      };
     case 'LOGOUT':
-      return { ...state, user: null, token: null, loading: false, initialized: true };
+      return {
+        ...state,
+        user: null,
+        token: null,
+        loading: false,
+        initialized: true,
+      };
     default:
       return state;
   }
@@ -48,34 +61,28 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      // The interceptor in api.js will automatically attach the token from localStorage
+      // Interceptor attaches token automatically
       const res = await api.get('/auth/profile');
       const userData = res.data.user || res.data.data || res.data;
-      
-      dispatch({
-        type: 'AUTH_SUCCESS',
-        payload: { user: userData, token: storedToken }
-      });
+
+      // Only set user if valid profile returned
+      if (!userData || !userData.id) throw new Error('Invalid user');
+
+      dispatch({ type: 'AUTH_SUCCESS', payload: { user: userData, token: storedToken } });
     } catch (err) {
       localStorage.removeItem('token');
       dispatch({ type: 'AUTH_FAILED', payload: 'Session expired' });
     }
   }, []);
 
-  useEffect(() => { initAuth(); }, [initAuth]);
+  useEffect(() => {
+    initAuth();
+  }, [initAuth]);
 
   const login = useCallback((userData, token) => {
-    // 1. Critical: Update LocalStorage first
+    if (!userData || !userData.id) return;
     localStorage.setItem('token', token);
-    
-    // 2. Update Context State
-    dispatch({
-      type: 'AUTH_SUCCESS',
-      payload: { user: userData, token }
-    });
-
-    // 3. Navigation is handled here, but App.jsx routes will also now unlock
-    // replace: true prevents going back to the login screen
+    dispatch({ type: 'AUTH_SUCCESS', payload: { user: userData, token } });
     navigate('/dashboard', { replace: true });
   }, [navigate]);
 
@@ -87,7 +94,9 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{ ...state, login, logout }}>
-      {state.initialized ? children : (
+      {state.initialized ? (
+        children
+      ) : (
         <div className="min-h-screen bg-[#020617] flex items-center justify-center text-yellow-500 font-black uppercase tracking-[0.3em] text-[10px]">
           Trustra Node: Initializing...
         </div>
