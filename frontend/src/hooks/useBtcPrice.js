@@ -1,63 +1,35 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 
-export const useBtcPrice = (updateInterval = 60000) => {
-  const [price, setPrice] = useState(null);
-  const [rawPrice, setRawPrice] = useState(102345); // fallback baseline
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+/**
+ * Custom hook to fetch BTC price in EUR.
+ * @param {number} intervalMs - Polling interval in milliseconds.
+ * @returns {number|null} btcPrice
+ */
+export function useBtcPrice(intervalMs = 60_000) {
+  const [btcPrice, setBtcPrice] = useState(null);
 
-  const fetchPrice = async () => {
+  const fetchBtcPrice = async () => {
     try {
-      const response = await axios.get(
-        'https://api.coingecko.com/api/v3/simple/price',
-        {
-          params: {
-            ids: 'bitcoin',
-            vs_currencies: 'eur'
-          }
-        }
-      );
-
-      const btcEur = response.data.bitcoin.eur;
-
-      setRawPrice(btcEur);
-      setPrice(
-        btcEur.toLocaleString('en-IE', {
-          style: 'currency',
-          currency: 'EUR',
-          maximumFractionDigits: 0
-        })
-      );
-
-      setError(null);
-    } catch (err) {
-      console.warn('CoinGecko fetch failed. Using fallback price.');
-
-      const fallback = 102450;
-
-      setRawPrice(fallback);
-      setPrice(
-        fallback.toLocaleString('en-IE', {
-          style: 'currency',
-          currency: 'EUR',
-          maximumFractionDigits: 0
-        })
-      );
-
-      if (!price) {
-        setError('Live feed reconnecting...');
+      const res = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+        params: { ids: 'bitcoin', vs_currencies: 'eur' },
+      });
+      const price = res?.data?.bitcoin?.eur;
+      if (typeof price === 'number') {
+        setBtcPrice(price);
       }
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      console.error('BTC price fetch failed:', err);
+      setBtcPrice(null); // fallback
     }
   };
 
   useEffect(() => {
-    fetchPrice();
-    const intervalId = setInterval(fetchPrice, updateInterval);
-    return () => clearInterval(intervalId);
-  }, [updateInterval]);
+    fetchBtcPrice(); // fetch immediately
+    const timer = setInterval(fetchBtcPrice, intervalMs);
 
-  return { price, rawPrice, loading, error };
-};
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+
+  return btcPrice;
+}

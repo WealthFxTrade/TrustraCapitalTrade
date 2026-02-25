@@ -1,17 +1,12 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, LogOut, User, ShieldCheck, TrendingUp, Menu, X } from 'lucide-react';
-import { UserContext } from '../../context/UserContext.jsx';
+import { ChevronDown, X, LogOut, User, ShieldCheck, TrendingUp, Activity } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext.jsx';
 
-export default function DashboardHeader() {
-  // Access contexts with fallbacks to prevent "Black Screen" crashes
-  const userContext = useContext(UserContext) || {};
-  const { stats, loading: statsLoading } = userContext;
-  
+// Accept 'stats' and 'loading' as props from the parent Dashboard
+export default function DashboardHeader({ stats, loading: statsLoading }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -20,102 +15,108 @@ export default function DashboardHeader() {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
     };
-    if (menuOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    if (menuOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [menuOpen]);
 
   const handleLogout = () => {
     setMenuOpen(false);
-    logout();
+    logout(); 
+    // AuthContext handles the redirect, but navigate('/login') is a safe backup
     navigate('/login');
   };
 
   // Safe data extraction
-  const displayName = user?.fullName || user?.name || "Investor";
-  const plan = stats?.activePlan || "Standard Node";
+  const displayName = user?.fullName || user?.name || 'Investor';
+  const plan = stats?.activePlan || 'Standard Node';
   const mainBalance = stats?.mainBalance || 0;
-
-  // Generate initials for the avatar
+  
   const initials = displayName
     .split(/\s+/)
+    .filter(Boolean)
     .map((n) => n[0])
     .join('')
     .slice(0, 2)
     .toUpperCase();
 
   return (
-    <header className="bg-slate-900/90 backdrop-blur-md px-4 sm:px-10 py-4 rounded-2xl border border-slate-800 shadow-2xl sticky top-4 z-[100] mx-4 sm:mx-10 transition-all duration-300">
+    <header className="bg-slate-900/40 backdrop-blur-xl px-4 sm:px-8 py-4 rounded-[2rem] border border-white/5 shadow-2xl sticky top-6 z-[100] transition-all duration-300">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         
-        {/* Left Section: Branding & Profile Sync */}
-        <div className="flex items-center gap-3 sm:gap-4 overflow-hidden">
-          <div className="min-w-[40px] w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-lg shadow-lg border border-white/10">
+        {/* LEFT: USER PROFILE BUBBLE */}
+        <div className="flex items-center gap-4 overflow-hidden">
+          <div className="min-w-[44px] w-11 h-11 rounded-2xl bg-gradient-to-br from-yellow-500 to-yellow-700 flex items-center justify-center text-black font-black text-lg shadow-lg border border-yellow-400/20">
             {initials}
           </div>
           <div className="truncate">
-            <h1 className="text-white font-bold text-sm sm:text-lg tracking-tight flex items-center gap-2 truncate">
+            <h1 className="text-white font-black text-sm uppercase tracking-tighter flex items-center gap-2 truncate">
               {displayName}
-              {user?.role === 'admin' && <ShieldCheck size={14} className="text-blue-500 shrink-0" />}
+              {user?.role === 'admin' && <ShieldCheck size={14} className="text-yellow-500 shrink-0" />}
             </h1>
-            <p className="text-slate-400 text-[9px] sm:text-xs uppercase font-black tracking-widest flex items-center gap-2">
+            <div className="text-slate-400 text-[9px] uppercase font-black tracking-[0.2em] flex items-center gap-2">
               {statsLoading ? (
-                <span className="animate-pulse text-blue-500">Syncing...</span>
+                <span className="flex items-center gap-1 text-blue-500 animate-pulse">
+                  <Activity size={10} /> Syncing Nodes...
+                </span>
               ) : (
                 <>
-                  <span className="truncate">{plan}</span>
-                  <span className="text-emerald-400 font-mono">€{mainBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                  <span className="truncate text-white/40">{plan}</span>
+                  <span className="text-emerald-400 font-mono">
+                    €{mainBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
                 </>
               )}
-            </p>
+            </div>
           </div>
         </div>
 
-        {/* Right Section: Interactive Account Menu */}
+        {/* RIGHT: MENU TOGGLE */}
         <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className={`flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 border rounded-xl text-white text-[10px] sm:text-xs font-black uppercase tracking-widest transition-all ${
-              menuOpen ? 'bg-blue-600 border-blue-500 shadow-blue-500/20' : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700'
+            className={`flex items-center gap-3 px-5 py-2.5 border rounded-2xl text-white text-[10px] font-black uppercase tracking-[0.3em] transition-all ${
+              menuOpen
+                ? 'bg-yellow-600 border-yellow-500 text-black shadow-lg shadow-yellow-500/20'
+                : 'bg-white/5 border-white/10 hover:bg-white/10'
             }`}
           >
-            {/* "MENU" label added to mobile to prevent confusion with generic 3 lines */}
             <span>{menuOpen ? 'Close' : 'Menu'}</span>
-            {menuOpen ? <X size={14} /> : <ChevronDown className="h-4 w-4" />}
+            {menuOpen ? <X size={14} /> : <ChevronDown size={14} />}
           </button>
 
-          {/* Dropdown Menu (Z-Index fix for Mobile) */}
+          {/* DROPDOWN MENU */}
           {menuOpen && (
-            <div className="absolute right-0 mt-4 w-60 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-[110] animate-in fade-in zoom-in-95 duration-200">
-              <div className="p-3 space-y-1">
+            <div className="absolute right-0 mt-4 w-64 bg-[#0a0f1e] border border-white/10 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden z-[110] animate-in fade-in zoom-in-95 duration-200">
+              <div className="p-4 space-y-1">
                 <Link
                   to="/dashboard"
-                  className="flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 hover:bg-white/5 rounded-xl transition"
+                  className="flex items-center gap-4 px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-yellow-500 hover:bg-white/5 rounded-2xl transition"
                   onClick={() => setMenuOpen(false)}
                 >
-                  <TrendingUp className="h-4 w-4 text-blue-500" /> Dashboard
+                  <TrendingUp size={16} className="text-yellow-600" /> Command Center
                 </Link>
                 <Link
-                  to="/profile"
-                  className="flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-300 hover:bg-white/5 rounded-xl transition"
+                  to="/dashboard/profile"
+                  className="flex items-center gap-4 px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-yellow-500 hover:bg-white/5 rounded-2xl transition"
                   onClick={() => setMenuOpen(false)}
                 >
-                  <User className="h-4 w-4 text-blue-500" /> Profile & Security
+                  <User size={16} className="text-yellow-600" /> Security & Identity
                 </Link>
                 
-                <div className="h-px bg-slate-800 mx-2 my-2" />
+                <div className="h-px bg-white/5 mx-2 my-3" />
                 
                 <button
                   onClick={handleLogout}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-red-400 hover:bg-red-500/10 rounded-xl transition text-left"
+                  className="w-full flex items-center gap-4 px-4 py-4 text-[10px] font-black uppercase tracking-widest text-red-500/60 hover:text-red-500 hover:bg-red-500/5 rounded-2xl text-left transition"
                 >
-                  <LogOut className="h-4 w-4" /> Terminate Session
+                  <LogOut size={16} /> Terminate Session
                 </button>
               </div>
-              
-              {/* Optional footer for the menu */}
-              <div className="bg-slate-950/50 p-3 text-center border-t border-slate-800">
-                <p className="text-[8px] font-bold text-slate-600 uppercase tracking-widest">Trustra Secure Gateway v8.4.1</p>
+              <div className="bg-black/40 p-4 text-center border-t border-white/5">
+                <p className="text-[8px] font-bold text-white/20 uppercase tracking-[0.4em]">
+                  Trustra Secure Gateway v8.4.1
+                </p>
               </div>
             </div>
           )}

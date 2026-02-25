@@ -1,71 +1,37 @@
-import React from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
-import LoadingScreen from './components/LoadingScreen.jsx';
-import ProtectedLayout from './layouts/ProtectedLayout';
-import { publicRoutes, protectedRoutes, adminRoutes } from './routes';
+import { Routes, Route, Navigate } from "react-router-dom";
+import Dashboard from "./pages/Dashboard/Dashboard.jsx";
+import Login from "./pages/Auth/Login.jsx";
+import Signup from "./pages/Auth/Signup.jsx";
+import LandingPage from "./pages/Landing.jsx";
+import { useAuth } from "./context/AuthContext.jsx";
 
 export default function App() {
-  const { initialized, user } = useAuth();
-  const location = useLocation();
+  const { user, initialized } = useAuth();
 
-  // Fully authenticated only if user exists and has a valid id
-  const isAuthenticated = user && user.id;
-
-  // Show loading while auth initialization is in progress
-  if (!initialized) {
-    return <LoadingScreen message="Securing Trustra Node..." />;
-  }
+  // Prevents the "Flash of Unauthenticated Content"
+  if (!initialized) return null; 
 
   return (
-    <Routes location={location} key={location.pathname}>
-
-      {/* 🟢 Public Routes: Login, Signup, Landing */}
-      {publicRoutes.map((route) => (
-        <Route
-          key={route.path}
-          path={route.path}
-          element={
-            isAuthenticated &&
-            (route.path === '/login' || route.path === '/signup' || route.path === '/register')
-              ? <Navigate to="/dashboard" replace />
-              : route.element
-          }
-        />
-      ))}
-
-      {/* 🔒 Protected Routes: Standard Investor Access */}
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      
       <Route
-        element={
-          isAuthenticated
-            ? <ProtectedLayout />
-            : <Navigate to="/login" replace state={{ from: location }} />
-        }
-      >
-        {protectedRoutes.map((route) => (
-          <Route key={route.path} path={route.path} element={route.element} />
-        ))}
-      </Route>
-
-      {/* 👑 Admin Routes: Strict Authority Check */}
+        path="/login"
+        element={user ? <Navigate to="/dashboard" replace /> : <Login />}
+      />
       <Route
-        element={
-          isAuthenticated && (user.role === 'admin' || user.isAdmin)
-            ? <ProtectedLayout />
-            : <Navigate to="/dashboard" replace />
-        }
-      >
-        {adminRoutes.map((route) => (
-          <Route key={route.path} path={route.path} element={route.element} />
-        ))}
-      </Route>
-
-      {/* 🧭 Global Redirect / 404 */}
-      <Route
-        path="*"
-        element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />}
+        path="/register"
+        element={user ? <Navigate to="/dashboard" replace /> : <Signup />}
       />
 
+      {/* Protected Dashboard - Uses wildcard * for nested sub-routes */}
+      <Route
+        path="/dashboard/*"
+        element={user ? <Dashboard /> : <Navigate to="/login" replace />}
+      />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
+

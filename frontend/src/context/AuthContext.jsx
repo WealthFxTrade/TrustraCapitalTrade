@@ -1,17 +1,20 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/api';
 
 const AuthContext = createContext(null);
 
 const initialState = {
-  user: null,       // ❌ do NOT preload token here
+  user: null,
   token: null,
   loading: true,
   initialized: false,
   error: null,
 };
 
+// ──────────────────────────────────────────────
+// Reducer
+// ──────────────────────────────────────────────
 function authReducer(state, action) {
   switch (action.type) {
     case 'AUTH_SUCCESS':
@@ -45,32 +48,38 @@ function authReducer(state, action) {
   }
 }
 
+// ──────────────────────────────────────────────
+// AuthProvider
+// ──────────────────────────────────────────────
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
   const navigate = useNavigate();
-  const hasInitialized = useRef(false);
+  const tokenKey = 'token';
 
+  // Normalize user id (_id vs id)
+  const normalizeUser = (userData) => {
+    if (!userData) return null;
+    return { ...userData, id: userData.id || userData._id };
+  };
+
+  // Initialize auth on mount
   const initAuth = useCallback(async () => {
-    if (hasInitialized.current) return;
-    hasInitialized.current = true;
-
-    const storedToken = localStorage.getItem('token');
+    const storedToken = localStorage.getItem(tokenKey);
     if (!storedToken) {
       dispatch({ type: 'AUTH_FAILED' });
       return;
     }
 
     try {
-      // Interceptor attaches token automatically
-      const res = await api.get('/auth/profile');
-      const userData = res.data.user || res.data.data || res.data;
-
-      // Only set user if valid profile returned
+      const res = await api.get('/auth/profile', {
+        headers: { Authorization: `Bearer ${storedToken}` },
+      });
+      const userData = normalizeUser(res.data.user || res.data.data || res.data);
       if (!userData || !userData.id) throw new Error('Invalid user');
-
       dispatch({ type: 'AUTH_SUCCESS', payload: { user: userData, token: storedToken } });
     } catch (err) {
-      localStorage.removeItem('token');
+      console.warn('[AuthContext] initAuth failed:', err.message);
+      localStorage.removeItem(tokenKey);
       dispatch({ type: 'AUTH_FAILED', payload: 'Session expired' });
     }
   }, []);
@@ -79,15 +88,18 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
+  // Login
   const login = useCallback((userData, token) => {
-    if (!userData || !userData.id) return;
-    localStorage.setItem('token', token);
-    dispatch({ type: 'AUTH_SUCCESS', payload: { user: userData, token } });
+    const normalized = normalizeUser(userData);
+    if (!normalized || !normalized.id) return;
+    localStorage.setItem(tokenKey, token);
+    dispatch({ type: 'AUTH_SUCCESS', payload: { user: normalized, token } });
     navigate('/dashboard', { replace: true });
   }, [navigate]);
 
+  // Logout
   const logout = useCallback(() => {
-    localStorage.removeItem('token');
+    localStorage.removeItem(tokenKey);
     dispatch({ type: 'LOGOUT' });
     navigate('/login', { replace: true });
   }, [navigate]);
@@ -105,8 +117,9 @@ export function AuthProvider({ children }) {
   );
 }
 
+// Hook
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
 };
