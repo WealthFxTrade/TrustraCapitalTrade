@@ -36,4 +36,6 @@ router.post('/login', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// CRITICAL FIX: Add this line
 export default router;
+
