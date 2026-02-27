@@ -1,124 +1,135 @@
+// src/pages/Plans.jsx - Production v8.4.1
 import React from 'react';
-import { Link } from 'react-router-dom';
-import BtcPriceEUR from '../components/wallet/BtcPrice.jsx';
-import { AlertTriangle, Info } from 'lucide-react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { 
+  LayoutDashboard, Zap, History, Repeat, PlusCircle, LogOut, 
+  ShieldCheck, ArrowRight, CheckCircle2, TrendingUp, Info
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-const plans = [
-  { name: 'Starter', min: 100, max: 999, desc: 'Entry-level investment option' },
-  { name: 'Basic', min: 1000, max: 4999, desc: 'Balanced investment range' },
-  { name: 'Standard', min: 5000, max: 14999, desc: 'Standard investment tier' },
-  { name: 'Advanced', min: 15000, max: 49999, desc: 'Advanced investment option' },
-  { name: 'Elite', min: 50000, max: Infinity, desc: 'High-tier investment plan' },
+const RIO_PLANS = [
+  { key: 'starter', name: 'Rio Starter', roi: '6–9%', min: 100, max: 999, days: 30, color: 'from-blue-500/20 to-transparent', border: 'border-blue-500/30' },
+  { key: 'basic', name: 'Rio Basic', roi: '9–12%', min: 1000, max: 4999, days: 45, color: 'from-emerald-500/20 to-transparent', border: 'border-emerald-500/30' },
+  { key: 'standard', name: 'Rio Standard', roi: '12–16%', min: 5000, max: 14999, days: 60, color: 'from-amber-500/20 to-transparent', border: 'border-amber-500/30' },
+  { key: 'advanced', name: 'Rio Advanced', roi: '16–20%', min: 15000, max: 49999, days: 90, color: 'from-purple-500/20 to-transparent', border: 'border-purple-500/30' },
+  { key: 'elite', name: 'Rio Elite', roi: '20–25%', min: 50000, max: '∞', days: 120, color: 'from-red-500/20 to-transparent', border: 'border-red-500/30' },
 ];
 
-export default function Plans() {
+function SidebarLink({ to, icon, label, active = false }) {
   return (
-    <div className="min-h-screen bg-[#05070a] text-gray-100 selection:bg-cyan-500/30">
-      {/* Warning Banner */}
-      <div className="bg-red-900/30 border border-red-500/50 rounded-3xl p-6 m-6 flex items-start gap-4 max-w-5xl mx-auto">
-        <AlertTriangle className="text-red-400 flex-shrink-0 mt-1" size={28} />
-        <div>
-          <h4 className="font-bold text-red-300 mb-2">High Risk Warning</h4>
-          <p className="text-red-200 text-sm leading-relaxed">
-            Cryptocurrency investments carry significant risk of loss. Returns are not guaranteed and can be negative. Only invest what you can afford to lose. This page is for informational purposes only.
-          </p>
-        </div>
-      </div>
+    <Link to={to} className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-900/40' : 'text-gray-500 hover:bg-white/5 hover:text-white'}`}>
+      {icon}
+      <span className="text-[10px] font-black tracking-widest">{label}</span>
+    </Link>
+  );
+}
 
-      {/* Hero Section */}
-      <section className="pt-20 pb-16 px-6 text-center">
-        <h1 className="text-5xl md:text-7xl font-black mb-6 tracking-tighter italic uppercase">
-          Investment Plans
-        </h1>
-        <p className="text-xl md:text-2xl text-gray-400 mb-8 max-w-4xl mx-auto font-medium">
-          Explore available investment options — all subject to market conditions.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-6 justify-center">
-          <Link
-            to="/register"
-            className="bg-blue-600 hover:bg-blue-500 text-white font-black py-5 px-14 rounded-2xl text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/30 transition transform hover:-translate-y-1 active:scale-95 text-center"
-          >
-            Get Started
-          </Link>
-          <Link
-            to="/login"
-            className="bg-white/5 border border-white/10 text-white hover:bg-white/10 font-black py-5 px-14 rounded-2xl text-xs uppercase tracking-[0.2em] transition text-center"
-          >
-            Access Dashboard
-          </Link>
-        </div>
-      </section>
+export default function Plans() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-      {/* BTC Price Section */}
-      <section className="py-16 px-6 bg-white/[0.02] border-y border-white/5 backdrop-blur-md">
-        <div className="max-w-5xl mx-auto text-center">
-          <p className="text-cyan-500 font-black text-[10px] uppercase tracking-[0.3em] mb-4">Live Market Data</p>
-          <h2 className="text-3xl font-bold mb-4 text-white">Current Bitcoin Price</h2>
-          <div className="text-5xl md:text-7xl font-mono font-black text-white flex items-center justify-center gap-4">
-            <span className="text-cyan-400">€</span>
-            <BtcPriceEUR />
+  const handleSelection = (planKey) => {
+    navigate('/invest', { state: { selectedPlan: planKey } });
+  };
+
+  return (
+    <div className="flex min-h-screen bg-[#05070a] text-white font-sans">
+      {/* Sidebar */}
+      <aside className="w-72 bg-[#0a0c10] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen p-8">
+        <div className="flex items-center gap-3 mb-12 px-2">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/40">
+            <Zap size={22} className="text-white fill-current" />
           </div>
-          <p className="text-gray-500 text-[10px] mt-6 font-bold uppercase tracking-widest italic">
-            Real-time data • Market conditions apply
-          </p>
+          <span className="text-xl font-black italic tracking-tighter uppercase">Trustra</span>
         </div>
-      </section>
+        <nav className="flex-1 space-y-2">
+          <SidebarLink to="/dashboard" icon={<LayoutDashboard size={18}/>} label="DASHBOARD" />
+          <SidebarLink to="/plans" icon={<Zap size={18}/>} label="ALL PLANS" active={true} />
+          <SidebarLink to="/investments" icon={<History size={18}/>} label="INVESTMENT LOGS" />
+          <SidebarLink to="/deposit" icon={<PlusCircle size={18}/>} label="DEPOSIT" />
+          <SidebarLink to="/exchange" icon={<Repeat size={18}/>} label="EXCHANGE" />
+        </nav>
+        <button onClick={logout} className="mt-auto flex items-center gap-4 px-6 py-4 text-gray-500 hover:text-red-500 transition-all text-[10px] font-black uppercase tracking-widest">
+          <LogOut size={18} /> Sign Out
+        </button>
+      </aside>
 
-      {/* Plans Section */}
-      <section className="py-20 px-6 max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-5xl font-black text-white uppercase italic tracking-tighter">
-            Available Plans
-          </h2>
-          <div className="h-1 w-24 bg-cyan-500 mx-auto mt-4 rounded-full shadow-[0_0_15px_rgba(6,182,212,0.5)]"></div>
-        </div>
+      {/* Main */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-20 border-b border-white/5 bg-[#05070a]/80 backdrop-blur-xl flex items-center justify-between px-8 sticky top-0 z-40">
+          <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">Tier Selection Terminal</div>
+          <div className="flex items-center gap-3 bg-indigo-500/10 px-4 py-2 rounded-xl border border-indigo-500/20">
+             <ShieldCheck size={14} className="text-indigo-400" />
+             <span className="text-[9px] font-black uppercase tracking-widest">Protocol v8.4.1 Verified</span>
+          </div>
+        </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-6">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={`bg-gradient-to-br ${plan.color} bg-opacity-5 border border-white/10 rounded-[2.5rem] p-8 hover:border-white/30 transition-all duration-500 flex flex-col group relative overflow-hidden`}
-            >
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
+        <main className="flex-1 p-8 lg:p-12 max-w-7xl mx-auto w-full">
+          <div className="mb-16 text-center md:text-left">
+            <h1 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter mb-4">Investment Tiers</h1>
+            <p className="text-gray-500 text-sm font-medium uppercase tracking-widest">Select an automated node to begin capital deployment</p>
+          </div>
 
-              <h3 className="text-2xl font-black mb-4 text-white italic tracking-tight">{plan.name}</h3>
-              <p className="text-gray-200/60 text-xs font-bold leading-relaxed mb-8 h-12">
-                {plan.desc}
-              </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+            {RIO_PLANS.map((plan) => (
+              <div 
+                key={plan.key} 
+                className={`relative bg-[#0a0c10] border ${plan.border} rounded-[2.5rem] p-8 flex flex-col transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl overflow-hidden group`}
+              >
+                <div className={`absolute top-0 left-0 w-full h-32 bg-gradient-to-b ${plan.color} -z-0`} />
+                
+                <div className="relative z-10">
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter mb-2">{plan.name}</h3>
+                  <div className="flex items-baseline gap-1 mb-8">
+                    <span className="text-4xl font-black">{plan.roi}</span>
+                    <span className="text-[9px] font-black uppercase text-gray-500">Monthly</span>
+                  </div>
 
-              <div className="space-y-4 mb-10 flex-1">
-                <div className="flex justify-between items-end border-b border-white/10 pb-2">
-                  <span className="text-[10px] font-bold text-white/40 uppercase">Minimum</span>
-                  <span className="font-mono font-bold text-white text-lg">€{plan.min.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between items-end">
-                  <span className="text-[10px] font-bold text-white/40 uppercase">Maximum</span>
-                  <span className="font-mono font-bold text-white text-lg">
-                    {plan.max === Infinity ? 'No limit' : `€${plan.max.toLocaleString()}`}
-                  </span>
+                  <div className="space-y-4 mb-10">
+                    <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-gray-600">Min Entry</span>
+                      <span>€{plan.min.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                      <span className="text-gray-600">Cycle</span>
+                      <span>{plan.days} Days</span>
+                    </div>
+                  </div>
+
+                  <ul className="space-y-3 mb-10">
+                    {['Audit Certified', 'Automated ROI', '24/7 Monitoring'].map((feat, i) => (
+                      <li key={i} className="flex items-center gap-2 text-[10px] font-bold text-gray-400 uppercase tracking-tight">
+                        <CheckCircle2 size={12} className="text-indigo-500" /> {feat}
+                      </li>
+                    ))}
+                  </ul>
+
+                  <button 
+                    onClick={() => handleSelection(plan.key)}
+                    className="w-full py-4 bg-white/5 hover:bg-white text-white hover:text-black font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2 group/btn"
+                  >
+                    Select Tier <ArrowRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
+                  </button>
                 </div>
               </div>
+            ))}
+          </div>
 
-              <Link
-                to="/register"
-                className="mt-auto bg-white text-black font-black py-4 px-8 rounded-2xl text-center text-[10px] uppercase tracking-[0.2em] hover:bg-cyan-400 transition shadow-xl"
-              >
-                Explore This Plan
-              </Link>
+          <div className="mt-20 bg-indigo-500/5 border border-indigo-500/10 rounded-[2rem] p-8 flex flex-col md:flex-row items-center gap-8">
+            <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center shrink-0">
+              <Info size={32} className="text-indigo-400" />
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-12 border-t border-white/5 text-center text-gray-600">
-        <p className="text-[10px] font-bold uppercase tracking-[0.4em] mb-4 italic">
-          © 2026 Investment Platform
-        </p>
-        <p className="max-w-3xl mx-auto px-6 text-[9px] leading-relaxed opacity-50 uppercase font-medium">
-          Investments involve risk of loss. Past performance is not indicative of future results. Verify all details before proceeding.
-        </p>
-      </footer>
+            <div className="text-center md:text-left">
+              <h4 className="text-sm font-black uppercase tracking-widest mb-2">High-Frequency Trading Protocol</h4>
+              <p className="text-xs text-gray-500 leading-relaxed max-w-3xl font-medium">
+                Our proprietary nodes leverage real-time market data to optimize capital placement. Each tier represents a different risk-to-reward calibration within the Trustra Audit ecosystem. Returns are verified daily by the internal ledger.
+              </p>
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
+

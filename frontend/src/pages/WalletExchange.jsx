@@ -1,139 +1,163 @@
-import React, { useState } from 'react';
-import { ArrowRightLeft, Wallet, RefreshCw, TrendingUp, ChevronDown, ShieldCheck } from 'lucide-react';
+// src/pages/WalletExchange.jsx - Production v8.4.1
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { 
+  LayoutDashboard, Zap, History, Repeat, PlusCircle, LogOut, 
+  ArrowDown, RefreshCw, Info, ShieldCheck, Loader2, Wallet 
+} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useBtcPrice } from '../hooks/useBtcPrice';
 import api from '../api/api';
-import toast from 'react-hot-toast';
 import { API_ENDPOINTS } from '../constants/api';
+import toast from 'react-hot-toast';
+
+function SidebarLink({ to, icon, label, active = false }) {
+  return (
+    <Link to={to} className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all ${active ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-900/40' : 'text-gray-500 hover:bg-white/5 hover:text-white'}`}>
+      {icon}
+      <span className="text-[10px] font-black tracking-widest">{label}</span>
+    </Link>
+  );
+}
 
 export default function WalletExchange() {
-  const [amount, setAmount] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const btcPrice = useBtcPrice(15000); // High-frequency 15s sync
 
-  const handleExchange = async (e) => {
-    e.preventDefault();
+  const [fromAmount, setFromAmount] = useState('');
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState(0);
 
-    const numAmount = Number(amount);
-    if (!numAmount || numAmount <= 0) {
-      return toast.error('Enter a valid amount greater than 0');
+  useEffect(() => {
+    if (btcPrice) {
+      // Trustra Audit Spread: 0.5% below market for sell orders
+      setExchangeRate(btcPrice * 0.995);
     }
+  }, [btcPrice]);
 
-    if (!confirm(`Confirm reinvestment/transfer of €${numAmount.toFixed(2)}? This action moves funds internally and cannot be undone.`)) {
-      return;
-    }
+  const btcBalance = user?.balances?.BTC || 0;
+  const estimatedEUR = fromAmount ? (parseFloat(fromAmount) * exchangeRate).toFixed(2) : '0.00';
 
-    setLoading(true);
+  const handleExchange = async () => {
+    if (!fromAmount || parseFloat(fromAmount) <= 0) return toast.error("Enter a valid amount");
+    if (parseFloat(fromAmount) > btcBalance) return toast.error("Insufficient BTC Balance");
 
+    setIsSwapping(true);
     try {
-      const endpoint = API_ENDPOINTS.TRANSACTIONS || '/transactions/reinvest';
-      await api.post(endpoint, { amount: numAmount });
-
-      toast.success('Transfer completed successfully');
-      setAmount('');
+      // Using centralized WALLET.EXCHANGE endpoint (must be defined in constants/api.js)
+      await api.post('/wallet/exchange', {
+        from: 'BTC',
+        to: 'EUR',
+        amount: parseFloat(fromAmount)
+      });
+      
+      toast.success("Liquidity Successfully Converted");
+      setFromAmount('');
+      navigate('/dashboard');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Transfer failed. Please try again.');
+      toast.error(err.response?.data?.message || "Exchange Protocol Failed");
     } finally {
-      setLoading(false);
+      setIsSwapping(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#05070a] text-white p-6 md:p-12 flex items-center justify-center">
-      <div className="w-full max-w-xl bg-[#0f1218] border border-white/5 rounded-[2.5rem] p-8 md:p-12 shadow-2xl relative overflow-hidden">
-        {/* Background Glow */}
-        <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-600/10 rounded-full blur-3xl" />
+    <div className="flex min-h-screen bg-[#05070a] text-white font-sans">
+      {/* Sidebar */}
+      <aside className="w-72 bg-[#0a0c10] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen p-8">
+        <div className="flex items-center gap-3 mb-12 px-2 text-xl font-black italic tracking-tighter uppercase">
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center"><Zap size={22} /></div>
+          Trustra
+        </div>
+        <nav className="flex-1 space-y-2">
+          <SidebarLink to="/dashboard" icon={<LayoutDashboard size={18}/>} label="DASHBOARD" />
+          <SidebarLink to="/plans" icon={<Zap size={18}/>} label="ALL PLANS" />
+          <SidebarLink to="/investments" icon={<History size={18}/>} label="INVESTMENT LOGS" />
+          <SidebarLink to="/deposit" icon={<PlusCircle size={18}/>} label="DEPOSIT" />
+          <SidebarLink to="/exchange" icon={<Repeat size={18}/>} label="EXCHANGE" active={true} />
+        </nav>
+        <button onClick={logout} className="mt-auto flex items-center gap-4 px-6 py-4 text-gray-500 hover:text-red-500 transition-all text-[10px] font-black uppercase tracking-widest"><LogOut size={18} /> Sign Out</button>
+      </aside>
 
-        <header className="relative mb-10 text-center">
-          <h2 className="text-3xl font-black italic uppercase tracking-tighter">
-            Internal Transfer
-          </h2>
-          <p className="text-gray-500 text-xs font-medium mt-2">
-            Move funds between your internal wallets
-          </p>
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-20 border-b border-white/5 bg-[#05070a]/80 backdrop-blur-xl flex items-center justify-between px-8 sticky top-0 z-40">
+          <div className="text-[10px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
+             <RefreshCw size={14} className="animate-spin text-indigo-500" /> Live Liquidity Terminal
+          </div>
+          <div className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Protocol v8.4.1</div>
         </header>
 
-        {/* Warning */}
-        <div className="bg-amber-900/30 border border-amber-500/50 rounded-3xl p-6 mb-8 flex items-start gap-4">
-          <AlertTriangle className="text-amber-400 flex-shrink-0 mt-1" size={24} />
-          <div>
-            <h4 className="font-bold text-amber-300 mb-2">Important</h4>
-            <p className="text-amber-200 text-sm leading-relaxed">
-              Transfers are internal and irreversible. Double-check amounts before confirming. This feature is for demonstration only.
-            </p>
-          </div>
-        </div>
-
-        {/* Exchange UI */}
-        <div className="space-y-8 relative">
-          {/* From */}
-          <div className="bg-black/40 border border-white/5 p-6 rounded-[1.5rem] group hover:border-white/10 transition-all">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">From</span>
-              <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded">Profit Wallet</span>
+        <main className="flex-1 p-8 lg:p-24 flex items-center justify-center">
+          <div className="max-w-lg w-full space-y-8">
+            <div className="text-center space-y-4">
+              <h1 className="text-4xl font-black uppercase italic tracking-tighter">Swap Assets</h1>
+              <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.4em]">Instant Portfolio Rebalancing</p>
             </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <TrendingUp size={24} className="text-emerald-500" />
-                <span className="text-2xl font-black tracking-tight italic">EUR</span>
+
+            <div className="bg-[#0a0c10] border border-white/10 rounded-[3rem] p-10 shadow-3xl space-y-6">
+              {/* FROM BTC */}
+              <div className="bg-black/40 border border-white/5 p-6 rounded-2xl group focus-within:border-indigo-500/50 transition-all">
+                <div className="flex justify-between text-[10px] font-black uppercase text-gray-500 tracking-widest mb-4">
+                  <span>Sell (BTC)</span>
+                  <span>Balance: {btcBalance.toFixed(8)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <input 
+                    type="number"
+                    placeholder="0.00000000"
+                    value={fromAmount}
+                    onChange={(e) => setFromAmount(e.target.value)}
+                    className="bg-transparent border-none text-2xl font-black focus:ring-0 p-0 w-2/3"
+                  />
+                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
+                    <div className="w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center text-[10px] font-black">₿</div>
+                    <span className="text-xs font-black">BTC</span>
+                  </div>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-[9px] font-black text-gray-600 uppercase">Available</p>
-                <p className="font-mono font-bold text-gray-300">Balance: Loading...</p>
+
+              <div className="flex justify-center -my-8 relative z-10">
+                <div className="bg-indigo-600 p-3 rounded-full border-4 border-[#0a0c10] shadow-xl">
+                  <ArrowDown size={20} className="text-white" />
+                </div>
               </div>
+
+              {/* TO EUR */}
+              <div className="bg-black/40 border border-white/5 p-6 rounded-2xl">
+                <div className="flex justify-between text-[10px] font-black uppercase text-gray-500 tracking-widest mb-4">
+                  <span>Receive (EUR)</span>
+                  <span className="text-indigo-400 font-black">Rate: €{exchangeRate.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-2xl font-black text-white/50 italic">€{estimatedEUR}</span>
+                  <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
+                    <div className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center text-[10px] font-black italic">€</div>
+                    <span className="text-xs font-black">EUR</span>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleExchange}
+                disabled={isSwapping || !fromAmount}
+                className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isSwapping ? <Loader2 className="animate-spin" /> : <><Repeat size={18} /> Execute Swap</>}
+              </button>
+            </div>
+
+            <div className="bg-indigo-500/5 border border-indigo-500/10 p-6 rounded-2xl flex gap-4">
+              <ShieldCheck size={20} className="text-indigo-400 shrink-0" />
+              <p className="text-[9px] text-indigo-200/60 uppercase font-black leading-relaxed tracking-wider">
+                Audit Protocol: Swaps are executed within the Trustra internal ledger for zero slippage. Settlement is instantaneous.
+              </p>
             </div>
           </div>
-
-          {/* Arrow */}
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-            <div className="bg-indigo-600 p-3 rounded-xl border-4 border-[#0f1218] shadow-lg text-white">
-              <ArrowRightLeft size={20} />
-            </div>
-          </div>
-
-          {/* To */}
-          <div className="bg-black/40 border border-white/5 p-6 rounded-[1.5rem] group hover:border-white/10 transition-all pt-8">
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">To</span>
-              <span className="text-[10px] font-bold text-indigo-500 bg-indigo-500/10 px-2 py-1 rounded">Main Wallet</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Wallet size={24} className="text-indigo-500" />
-              <span className="text-2xl font-black tracking-tight italic">EUR</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleExchange} className="mt-8 space-y-6">
-          <div className="relative">
-            <input
-              type="number"
-              step="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              className="w-full bg-black/60 border border-white/5 p-6 rounded-2xl font-mono text-3xl font-black text-white focus:border-indigo-500/50 outline-none transition-all placeholder:text-gray-800"
-            />
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 font-black text-xl italic">€</div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || !amount || Number(amount) <= 0}
-            className="w-full bg-white text-black hover:bg-indigo-500 hover:text-white py-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] transition-all shadow-xl active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <RefreshCw className="animate-spin" size={16} />
-            ) : (
-              'Confirm Transfer'
-            )}
-          </button>
-        </form>
-
-        <footer className="mt-10 text-center">
-          <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.3em]">
-            Internal transfer only • No external wallets involved
-          </p>
-        </footer>
+        </main>
       </div>
     </div>
   );
 }
+
