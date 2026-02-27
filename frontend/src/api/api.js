@@ -1,20 +1,28 @@
+// src/api/api.js
 import axios from 'axios';
 import nProgress from 'nprogress';
 import { toast } from 'react-hot-toast';
 import 'nprogress/nprogress.css';
+import { API_ENDPOINTS } from '../constants/api';
 
+// ─── Axios Instance Configuration ───────────────────────────────────────
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api', // ✅ /api prefix
+  baseURL: import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api',
   withCredentials: true,
   timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// ── REQUEST INTERCEPTOR ──
+// ─── Request Interceptor ─────────────────────────────────────────────────
 api.interceptors.request.use(
   (config) => {
     nProgress.start();
     const token = localStorage.getItem('token');
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
     return config;
   },
   (error) => {
@@ -23,7 +31,7 @@ api.interceptors.request.use(
   }
 );
 
-// ── RESPONSE INTERCEPTOR ──
+// ─── Response Interceptor ────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => {
     nProgress.done();
@@ -32,116 +40,60 @@ api.interceptors.response.use(
   (error) => {
     nProgress.done();
     const status = error.response?.status;
-    if (status === 401) localStorage.removeItem('token');
-    else if (error.response?.data?.message) toast.error(error.response.data.message);
-    else if (!error.response) toast.error('Network error. Please check your connection.');
+    
+    if (status === 401) {
+      localStorage.removeItem('token');
+      // Only toast if we aren't already on the login page to avoid spam
+      if (!window.location.pathname.includes('/login')) {
+        toast.error('Session expired. Please log in.');
+      }
+    }
     return Promise.reject(error);
   }
 );
 
-export default api;
-
-// ── AUTH ENDPOINTS ──
+// ─── AUTHENTICATION ──────────────────────────────────────────────────────
 export const login = async (email, password) => {
-  const res = await api.post('/auth/login', { email, password });
+  const res = await api.post(API_ENDPOINTS.AUTH.LOGIN, { email, password });
+  // Ensure token is persisted immediately
+  if (res.data.token) localStorage.setItem('token', res.data.token);
   return res.data;
 };
 
 export const register = async (data) => {
-  const res = await api.post('/auth/register', data);
+  const res = await api.post(API_ENDPOINTS.AUTH.REGISTER, data);
+  // Ensure token is persisted immediately
+  if (res.data.token) localStorage.setItem('token', res.data.token);
   return res.data;
 };
 
 export const logout = async () => {
-  const res = await api.post('/auth/logout');
-  return res.data;
+  try {
+    await api.post(API_ENDPOINTS.AUTH.LOGOUT);
+  } finally {
+    // Always clear local storage even if the network call fails
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  }
 };
 
-// ── USER ENDPOINTS ──
+// ─── USER PROFILE ────────────────────────────────────────────────────────
 export const fetchUserProfile = async () => {
-  const res = await api.get('/user/profile');
-  return res.data;
+  const res = await api.get(API_ENDPOINTS.USER.PROFILE);
+  // Flattening response to return data directly for the Dashboard
+  return res.data.user || res.data;
 };
 
 export const updateUserProfile = async (data) => {
-  const res = await api.put('/user/profile', data);
+  const res = await api.put(API_ENDPOINTS.USER.UPDATE_PROFILE, data);
   return res.data;
 };
 
-// ── ADMIN ENDPOINTS ──
+// ─── ADMIN ───────────────────────────────────────────────────────────────
 export const fetchUsers = async () => {
-  const res = await api.get('/admin/users');
-  return res.data;
+  const res = await api.get(API_ENDPOINTS.ADMIN.USERS);
+  return res.data.users || res.data;
 };
 
-export const updateUser = async (id, data) => {
-  const res = await api.put(`/admin/users/${id}`, data);
-  return res.data;
-};
+export default api;
 
-export const deleteUser = async (id) => {
-  const res = await api.delete(`/admin/users/${id}`);
-  return res.data;
-};
-
-export const distributeProfit = async (data) => {
-  const res = await api.post('/admin/distribute-profit', data);
-  return res.data;
-};
-
-// ── KYC ENDPOINTS ──
-export const submitKYC = async (formData) => {
-  const res = await api.post('/kyc/submit', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-  return res.data;
-};
-
-// ── INVESTMENT ENDPOINTS ──
-export const fetchInvestments = async () => {
-  const res = await api.get('/investment');
-  return res.data;
-};
-
-export const createInvestment = async (data) => {
-  const res = await api.post('/investment', data);
-  return res.data;
-};
-
-// ── DEPOSIT & WITHDRAWAL ENDPOINTS ──
-export const createDeposit = async (data) => {
-  const res = await api.post('/deposit', data);
-  return res.data;
-};
-
-export const createWithdrawal = async (data) => {
-  const res = await api.post('/withdrawal', data);
-  return res.data;
-};
-
-// ── WALLET & TRANSACTION ENDPOINTS ──
-export const fetchWallets = async () => {
-  const res = await api.get('/wallet');
-  return res.data;
-};
-
-export const fetchTransactions = async () => {
-  const res = await api.get('/transactions');
-  return res.data;
-};
-
-// ── BITCOIN ENDPOINT ──
-export const fetchBitcoinPrice = async () => {
-  const res = await api.get('/bitcoin/price');
-  return res.data;
-};
-
-// ── PLAN ENDPOINT ──
-export const fetchPlans = async () => {
-  const res = await api.get('/plans');
-  return res.data;
-};
-
-// ── REVIEWS ENDPOINT ──
-export const submitReview = async (data) => {
-  const res = await api.post('/reviews', data);
-  return res.data;
-};

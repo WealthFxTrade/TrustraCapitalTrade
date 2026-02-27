@@ -1,9 +1,9 @@
-// components/Layout.jsx
+// src/components/layout/Layout.jsx
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext.jsx';
+import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
-import { TrendingUp, LayoutDashboard, LineChart, Wallet, History, LogOut, User } from 'lucide-react';
+import { TrendingUp, LayoutDashboard, LineChart, Wallet, History, LogOut } from 'lucide-react';
 
 export default function Layout() {
   const { user, logout } = useAuth();
@@ -83,10 +83,10 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
-        <Outlet /> {/* This renders the child pages: Dashboard, Plans, Invest, Deposit */}
+        <Outlet /> {/* Renders child pages: Landing, Dashboard, Invest, etc. */}
       </main>
 
-      {/* Optional Footer */}
+      {/* Footer */}
       <footer className="border-t border-white/5 py-6 text-center text-xs text-slate-600">
         © 2016–2026 Trustra Capital Trade • All investments carry risk
       </footer>

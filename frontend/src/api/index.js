@@ -1,37 +1,26 @@
 // src/api/index.js
-// Central API export point – re-exports the unified, safe api instance
-import api from './api';  // ← points to api.jsx (the good one)
-
-/**
- * TRUSTRA CAPITAL - CORE API (2026 PRODUCTION)
- * Unified endpoint manifest to resolve all build dependencies.
- */
+import api from './api';
+import { API_ENDPOINTS } from '../constants/api';
 
 // ─── AUTH & PROFILE ───
-export const login = (data) => api.post('/auth/login', data);
-export const register = (data) => api.post('/auth/register', data);
-export const getProfile = () => api.get('/user/me');
-export const updateProfile = (data) => api.put('/user/me', data);
+export const login = (data) => api.post(API_ENDPOINTS.LOGIN, data);
+export const register = (data) => api.post(API_ENDPOINTS.REGISTER, data);
+export const getProfile = () => api.get(API_ENDPOINTS.PROFILE);
+export const updateProfile = (data) => api.put(API_ENDPOINTS.PROFILE, data);
 
 // ─── USER & DASHBOARD ───
-export const getUserStats = () => api.get('/user/dashboard').then(res => res.data);
-export const getUserTransactions = () => api.get('/transactions/my').then(res => res.data);
+export const getUserStats = () => api.get(API_ENDPOINTS.USER_DASHBOARD).then(res => res.data);
+export const getUserTransactions = () => api.get(API_ENDPOINTS.USER_TRANSACTIONS).then(res => res.data);
 
-// ─── WALLET & KYC OPERATIONS ───
-export const generateAddress = (asset) => api.post(`/wallet/generate/${asset}`);
-export const getDepositAddress = (asset) => api.get(`/wallet/address/${asset}`);
-export const withdrawFunds = (data) => api.post('/transactions/withdraw', data);
+// ─── WALLET & TRANSACTIONS ───
+export const generateAddress = (asset) => api.post(API_ENDPOINTS.WALLET_GENERATE(asset));
+export const getDepositAddress = (asset) => api.get(API_ENDPOINTS.WALLET_ADDRESS(asset));
+export const withdrawFunds = (data) => api.post(API_ENDPOINTS.WITHDRAWAL, data);
 
-// ─── KYC SUBMISSION ───
-export const submitKyc = (data) => api.post('/user/kyc', data);
+// ─── KYC ───
+export const submitKyc = (data) => api.post(API_ENDPOINTS.KYC_SUBMIT, data);
 
-// ─── ADMIN OPERATIONS ───
-export const adminStats = () => api.get('/admin/stats');
-export const adminKyc = () => api.get('/admin/kyc');
-export const adminApproveKyc = (userId) => api.post(`/admin/verify/${userId}`);
-export const adminUpdateBalance = (data) => api.post('/admin/users/update-balance', data);
-
-// Default export (for "import api from '@/api'" style usage)
+// ... keep other exports
 export default {
   login,
   register,
@@ -43,8 +32,5 @@ export default {
   getDepositAddress,
   withdrawFunds,
   submitKyc,
-  adminStats,
-  adminKyc,
-  adminApproveKyc,
-  adminUpdateBalance,
+  // add more as needed
 };

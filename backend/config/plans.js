@@ -1,66 +1,133 @@
-/**
- * 📊 Trustra Capital - Investment Plans (Rio Series 2026)
- * These match the "Rio" nodes in Landing.jsx
- */
+// config/plans.js
+// Safe, realistic, and educational investment plan configuration
+// IMPORTANT: No fixed or guaranteed returns are ever promised.
+// Real yield must come from verifiable external sources (staking, trading, etc.).
+// All investments carry risk of total loss.
 
 export const PLAN_DATA = {
-  rioStarter: {
-    name: "Rio Starter",
+  starter: {
+    key: 'starter',
+    name: 'Starter',
     min: 100,
     max: 999,
-    monthlyROI: "6–9%",
-    dailyROI: 0.002,     // 0.2% daily = ~6% monthly
-    duration: 30,        // Days
-    color: "#3b82f6"     // Blue
+    description: 'Entry-level investment option for learning and small-scale participation.',
+    durationDays: 30,
+    features: [
+      'Basic access to platform',
+      'Educational resources',
+      'Market updates',
+    ],
+    riskLevel: 'High',
+    color: '#3b82f6', // Blue
   },
-  rioBasic: {
-    name: "Rio Basic",
+
+  basic: {
+    key: 'basic',
+    name: 'Basic',
     min: 1000,
     max: 4999,
-    monthlyROI: "9–12%",
-    dailyROI: 0.0035,    // 0.35% daily = ~10.5% monthly
-    duration: 30,
-    color: "#10b981"     // Green
+    description: 'Balanced plan suitable for moderate risk tolerance.',
+    durationDays: 45,
+    features: [
+      'Standard platform access',
+      'Market insights',
+      'Priority email support',
+    ],
+    riskLevel: 'High',
+    color: '#10b981', // Green
   },
-  rioStandard: {
-    name: "Rio Standard",
+
+  standard: {
+    key: 'standard',
+    name: 'Standard',
     min: 5000,
     max: 14999,
-    monthlyROI: "12–16%",
-    dailyROI: 0.005,     // 0.5% daily = ~15% monthly
-    duration: 60,
-    color: "#f59e0b"     // Amber
+    description: 'Standard tier for more active participation.',
+    durationDays: 60,
+    features: [
+      'Advanced analytics',
+      'Priority support',
+      'Monthly performance reports',
+    ],
+    riskLevel: 'High',
+    color: '#f59e0b', // Amber
   },
-  rioAdvanced: {
-    name: "Rio Advanced",
+
+  advanced: {
+    key: 'advanced',
+    name: 'Advanced',
     min: 15000,
     max: 49999,
-    monthlyROI: "16–20%",
-    dailyROI: 0.0065,    // 0.65% daily = ~19.5% monthly
-    duration: 90,
-    color: "#8b5cf6"     // Purple
+    description: 'Advanced plan for experienced participants.',
+    durationDays: 90,
+    features: [
+      'Premium analytics & tools',
+      'Personalized insights',
+      'Dedicated support channel',
+    ],
+    riskLevel: 'High',
+    color: '#8b5cf6', // Purple
   },
-  rioElite: {
-    name: "Rio Elite",
+
+  elite: {
+    key: 'elite',
+    name: 'Elite',
     min: 50000,
     max: Infinity,
-    monthlyROI: "20–25%",
-    dailyROI: 0.008,     // 0.8% daily = ~24% monthly
-    duration: 120,
-    color: "#ef4444"     // Red
-  }
+    description: 'High-tier plan for significant participation.',
+    durationDays: 120,
+    features: [
+      'VIP access & tools',
+      'Custom strategy sessions',
+      'Exclusive market briefings',
+    ],
+    riskLevel: 'High',
+    color: '#ef4444', // Red
+  },
 };
 
 /**
- * ✅ Helpers
+ * Get plan configuration by key (case-insensitive)
+ * @param {string} key - e.g. 'starter', 'basic'
+ * @returns {Object|null} Plan config or null
  */
-export const getPlan = (planKey) => PLAN_DATA[planKey] || null;
+export function getPlan(key) {
+  if (!key) return null;
+  return PLAN_DATA[key.toLowerCase()] || null;
+}
 
-// Returns the correct plan key based on an amount
-export const findPlanByAmount = (amount) => {
-  return Object.keys(PLAN_DATA).find(key => 
-    amount >= PLAN_DATA[key].min && amount <= PLAN_DATA[key].max
-  ) || 'none';
-};
+/**
+ * Find the most appropriate plan based on investment amount
+ * @param {number} amount - Investment amount in EUR
+ * @returns {string} Plan key ('starter', 'basic', etc.) or 'none'
+ */
+export function findPlanByAmount(amount) {
+  if (typeof amount !== 'number' || amount < 0) return 'none';
 
-export default PLAN_DATA;
+  for (const [key, plan] of Object.entries(PLAN_DATA)) {
+    if (amount >= plan.min && (plan.max === Infinity || amount <= plan.max)) {
+      return key;
+    }
+  }
+  return 'none';
+}
+
+/**
+ * IMPORTANT LEGAL & RISK DISCLOSURE
+ * Must be displayed prominently wherever plans are shown
+ */
+export const RISK_DISCLOSURE = `
+  Cryptocurrency and digital asset investments carry significant risk of loss.
+  No returns are guaranteed. Past performance is not indicative of future results.
+  You may lose all invested capital. Only invest what you can afford to lose.
+  This platform is for informational and educational purposes only.
+  Always conduct your own research and consult qualified financial advisors.
+`;
+
+/**
+ * Helper: Get all plan keys
+ * @returns {string[]} Array of plan keys
+ */
+export function getAllPlanKeys() {
+  return Object.keys(PLAN_DATA);
+}

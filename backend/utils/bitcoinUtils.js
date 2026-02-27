@@ -1,3 +1,4 @@
+// utils/bitcoinUtils.js
 import * as bitcoin from 'bitcoinjs-lib';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
@@ -5,127 +6,130 @@ import axios from 'axios';
 
 const bip32 = BIP32Factory(ecc);
 
-// ─── Mempool.space base URL ────────────────────────────────────
-const getMempoolBase = () => {
-  const isMainnet = detectNetwork(process.env.BITCOIN_XPUB) === bitcoin.networks.bitcoin;
-  return isMainnet
-    ? 'https://mempool.space/api'
-    : 'https://mempool.space/testnet/api';
-};
+// ─── Configuration ─────────────────────────────────────────────
+const MEMPOOL_MAINNET = 'https://mempool.space/api';
+const MEMPOOL_TESTNET = 'https://mempool.space/testnet/api';
+const DEFAULT_TIMEOUT = 10000; // 10 seconds
 
-// ─── Auto-detect network from key prefix ───────────────────────
-const detectNetwork = (xpub) => {
-  if (!xpub) throw new Error('BITCOIN_XPUB is missing from environment variables');
+/**
+ * Detect Bitcoin network from XPUB/YPUB/ZPUB prefix
+ * @param {string} xpub - Extended public key
+ * @returns {bitcoin.Network} bitcoin.networks.bitcoin or testnet
+ * @throws {Error} if prefix is invalid or xpub missing
+ */
+export function detectNetwork(xpub) {
+  if (!xpub || typeof xpub !== 'string') {
+    throw new Error('XPUB is missing or invalid');
+  }
 
-  // Mainnet prefixes: xpub (BIP44), ypub (BIP49), zpub (BIP84)
-  if (xpub.startsWith('xpub') || xpub.startsWith('ypub') || xpub.startsWith('zpub')) {
+  const prefix = xpub.slice(0, 4);
+
+  // Mainnet
+  if (['xpub', 'ypub', 'zpub'].includes(prefix)) {
     return bitcoin.networks.bitcoin;
   }
 
-  // Testnet prefixes: tpub (BIP44), upub (BIP49), vpub (BIP84)
-  if (xpub.startsWith('tpub') || xpub.startsWith('upub') || xpub.startsWith('vpub')) {
+  // Testnet
+  if (['tpub', 'upub', 'vpub'].includes(prefix)) {
     return bitcoin.networks.testnet;
   }
 
-  throw new Error(`Unrecognized xpub prefix: ${xpub.substring(0, 4)}`);
-};
+  throw new Error(`Unrecognized XPUB prefix: ${prefix}`);
+}
 
 /**
- * 🛠️ 1. ADDRESS DERIVATION (BIP84 SegWit P2WPKH)
- *    Derives a receive address at path: m/0/{index}
+ * Get Mempool.space API base URL based on network
+ * @param {string} xpub - Used to detect network
+ * @returns {string} API base URL
  */
-export const deriveBtcAddress = (xpub, index) => {
+function getMempoolBase(xpub) {
+  const network = detectNetwork(xpub);
+  return network === bitcoin.networks.bitcoin ? MEMPOOL_MAINNET : MEMPOOL_TESTNET;
+}
+
+/**
+ * Derive a SegWit (P2WPKH) receive address from XPUB at path m/84'/0'/0'/0/index
+ * @param {string} xpub - Extended public key
+ * @param {number} index - Change=0, receive index (0,1,2...)
+ * @returns {string} bc1q... address
+ * @throws {Error} on invalid input or derivation failure
+ */
+export function deriveBtcAddress(xpub, index) {
+  if (!xpub) throw new Error('XPUB is required');
+  if (!Number.isInteger(index) || index < 0) {
+    throw new Error(`Invalid derivation index: ${index} (must be non-negative integer)`);
+  }
+
   try {
-    if (!xpub) {
-      throw new Error('BITCOIN_XPUB is missing from environment variables');
-    }
-
-    if (index === undefined || index === null || !Number.isInteger(index) || index < 0) {
-      throw new Error(`Invalid derivation index: ${index}`);
-    }
-
     const network = detectNetwork(xpub);
     const node = bip32.fromBase58(xpub, network);
 
-    // Standard Receive Path: m/0/index
-    const child = node.derive(0).derive(index);
+    // BIP84: m/84'/0'/0'/0/index (native SegWit)
+    const child = node.derive(84 + network.bip32.hardened).derive(0).derive(0).derive(0).derive(index);
 
     const { address } = bitcoin.payments.p2wpkh({
       pubkey: child.publicKey,
       network,
     });
 
-    if (!address) {
-      throw new Error(`Failed to derive address at index ${index}`);
-    }
+    if (!address) throw new Error('Failed to derive address');
 
-    console.log(`✅ [BTC_DERIVED] Index ${index} → ${address}`);
     return address;
-  } catch (error) {
-    console.error('❌ [BTC_DERIVATION_ERROR]:', error.message);
-    throw error;
+  } catch (err) {
+    throw new Error(`Address derivation failed: ${err.message}`);
   }
-};
+}
 
 /**
- * 💰 2. BALANCE CHECKING (via Mempool.space)
- *    Returns balance in BTC (not satoshis)
+ * Get BTC balance for an address (chain_stats only)
+ * @param {string} address - Bitcoin address
+ * @param {string} [xpub] - Optional XPUB for network detection (defaults to mainnet)
+ * @returns {number} Balance in BTC
  */
-export const getBtcBalance = async (address) => {
+export async function getBtcBalance(address, xpub = null) {
+  if (!address || typeof address !== 'string') return 0;
+
   try {
-    if (!address) {
-      console.warn('⚠️ [BALANCE_CHECK] No address provided');
-      return 0;
-    }
+    const base = xpub ? getMempoolBase(xpub) : MEMPOOL_MAINNET;
+    const res = await axios.get(`\( {base}/address/ \){address}`, { timeout: DEFAULT_TIMEOUT });
 
-    const base = getMempoolBase();
-    const response = await axios.get(`${base}/address/${address}`, {
-      timeout: 10000,
-    });
-
-    const { funded_txo_sum, spent_txo_sum } = response.data.chain_stats;
+    const { funded_txo_sum, spent_txo_sum } = res.data.chain_stats;
     const balanceSats = funded_txo_sum - spent_txo_sum;
-    const balanceBtc = balanceSats / 1e8;
-
-    console.log(`💰 [BALANCE] ${address}: ${balanceBtc} BTC`);
-    return balanceBtc;
-  } catch (error) {
-    console.error(`⚠️ [BALANCE_FETCH_FAILED] ${address}:`, error.message);
+    return balanceSats / 1e8; // BTC
+  } catch (err) {
+    console.warn(`Balance fetch failed for ${address}:`, err.message);
     return 0;
   }
-};
+}
 
 /**
- * 🛰️ 3. CONFIRMATION CHECKER (via Mempool.space)
- *    Returns number of confirmations for a given txid
+ * Get number of confirmations for a transaction
+ * @param {string} txid - Transaction ID
+ * @param {string} [xpub] - Optional XPUB for network detection
+ * @returns {number} Confirmations (0 if unconfirmed or not found)
  */
-export const getBtcTxConfirmations = async (txid) => {
-  try {
-    if (!txid) {
-      console.warn('⚠️ [CONFIRM_CHECK] No txid provided');
-      return 0;
-    }
+export async function getBtcTxConfirmations(txid, xpub = null) {
+  if (!txid || typeof txid !== 'string') return 0;
 
-    const base = getMempoolBase();
+  try {
+    const base = xpub ? getMempoolBase(xpub) : MEMPOOL_MAINNET;
+
     const [txRes, tipRes] = await Promise.all([
-      axios.get(`${base}/tx/${txid}`, { timeout: 10000 }),
-      axios.get(`${base}/blocks/tip/height`, { timeout: 10000 }),
+      axios.get(`\( {base}/tx/ \){txid}`, { timeout: DEFAULT_TIMEOUT }),
+      axios.get(`${base}/blocks/tip/height`, { timeout: DEFAULT_TIMEOUT }),
     ]);
 
-    if (!txRes.data.status.confirmed) return 0;
+    if (!txRes.data?.status?.confirmed) return 0;
 
     const currentHeight = tipRes.data;
     const txHeight = txRes.data.status.block_height;
-    const confirmations = currentHeight - txHeight + 1;
-
-    console.log(`🛰️ [CONFIRMATIONS] ${txid}: ${confirmations}`);
-    return confirmations;
-  } catch (error) {
-    console.warn(`⚠️ [CONFIRM_CHECK_FAILED] TXID: ${txid}:`, error.message);
+    return currentHeight - txHeight + 1;
+  } catch (err) {
+    console.warn(`Confirmation check failed for tx ${txid}:`, err.message);
     return 0;
   }
-};
+}
 
-// 🔗 SYNCED ALIASES
+// ─── Aliases for backward compatibility ────────────────────────────
 export const deriveAddressFromXpub = deriveBtcAddress;
 export const generateBitcoinAddress = deriveBtcAddress;

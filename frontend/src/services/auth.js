@@ -1,14 +1,7 @@
-// src/services/auth.js
-import { API_URL } from "../constants/api";
+import { API_URL, API_ENDPOINTS } from "../constants/api";
 
-/**
- * Signup new user
- * @param {string} name
- * @param {string} email
- * @param {string} password
- */
 export async function signup(name, email, password) {
-  const res = await fetch(`${API_URL}/auth/signup`, {
+  const res = await fetch(`\( {API_URL} \){API_ENDPOINTS.REGISTER}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, email, password }),
@@ -19,16 +12,11 @@ export async function signup(name, email, password) {
     throw new Error(errorData.message || "Signup failed");
   }
 
-  return await res.json(); // returns user data + token
+  return await res.json();
 }
 
-/**
- * Login existing user
- * @param {string} email
- * @param {string} password
- */
 export async function login(email, password) {
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await fetch(`\( {API_URL} \){API_ENDPOINTS.LOGIN}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
@@ -39,5 +27,5 @@ export async function login(email, password) {
     throw new Error(errorData.message || "Login failed");
   }
 
-  return await res.json(); // returns user data + token
+  return await res.json();
 }

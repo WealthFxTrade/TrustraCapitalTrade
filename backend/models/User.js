@@ -1,133 +1,68 @@
+// models/User.js
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-// ──────────────────────────────────────────────
-// SUB-SCHEMAS
-// ──────────────────────────────────────────────
-const btcDepositSchema = new mongoose.Schema({
-  txid: { type: String, required: true },
-  vout: { type: Number, default: 0 },
-  amountSats: { type: Number, required: true },
-  amountBtc: { type: Number, required: true },
-  amountEur: { type: Number, default: 0 },
-  blockHeight: { type: Number },
-  status: {
-    type: String,
-    enum: ['pending', 'confirmed', 'credited', 'failed'],
-    default: 'credited'
-  },
-  creditedAt: { type: Date, default: Date.now }
-});
-
-const ledgerSchema = new mongoose.Schema({
-  amount: { type: Number, required: true },
-  currency: { type: String, default: 'EUR' },
-  type: {
-    type: String,
-    enum: ['deposit', 'withdrawal', 'investment', 'profit', 'roi_profit', 'bonus', 'exchange'],
-    required: true
-  },
-  status: {
-    type: String,
-    enum: ['pending', 'completed', 'failed', 'cancelled'],
-    default: 'completed'
-  },
-  description: { type: String, default: '' },
-  createdAt: { type: Date, default: Date.now }
-});
-
-// ──────────────────────────────────────────────
-// USER SCHEMA
-// ──────────────────────────────────────────────
 const userSchema = new mongoose.Schema({
-  isCounter: { type: Boolean, default: false, select: false },
   fullName: {
     type: String,
-    required: function () { return !this.isCounter; },
-    trim: true
+    required: true,
+    trim: true,
   },
   email: {
     type: String,
     unique: true,
-    sparse: true,
     lowercase: true,
     trim: true,
+    required: true,
     validate: {
-      validator(v) {
-        if (!v) return true;
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-      },
-      message: 'Invalid email format'
+      validator: v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+      message: 'Invalid email format',
     },
-    set: (v) => (v && v.trim() !== '' ? v.trim().toLowerCase() : undefined)
   },
   password: {
     type: String,
-    required: function () { return !this.isCounter; },
-    select: false
+    required: true,
+    select: false,
   },
-  phone: { type: String, trim: true },
+  phone: {
+    type: String,
+    trim: true,
+  },
   role: {
     type: String,
     enum: ['user', 'admin'],
-    default: 'user'
+    default: 'user',
   },
-  plan: { type: String, default: 'none' },
-  investedAmount: { type: Number, default: 0 },
-  dailyRoiRate: { type: Number, default: 0 },
-  planDaysServed: { type: Number, default: 0 },
-  planDuration: { type: Number, default: 0 },
-  lastProfitDate: { type: Date },
   balances: {
-    BTC: { type: Number, default: 0 },
-    EUR: { type: Number, default: 0 },
-    EUR_PROFIT: { type: Number, default: 0 },
-    USDT: { type: Number, default: 0 }
+    type: Map,
+    of: Number,
+    default: () => new Map([['EUR', 0]]),
   },
-  btcAddress: { type: String, sparse: true },
-  btcDeposits: {
-    type: [btcDepositSchema],
-    default: []
-  },
-  ledger: {
-    type: [ledgerSchema],
-    default: []
-  },
+  ledger: [{
+    amount: Number,
+    currency: { type: String, default: 'EUR' },
+    type: String,
+    status: String,
+    description: String,
+    createdAt: { type: Date, default: Date.now },
+  }],
   isActive: { type: Boolean, default: true },
-  banned: { type: Boolean, default: false }
+  banned: { type: Boolean, default: false },
 }, {
   timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
 });
 
-userSchema.virtual('isAdmin').get(function () {
-  return this.role === 'admin';
-});
-
-// ──────────────────────────────────────────────
-// PRE-SAVE HOOK
-// ──────────────────────────────────────────────
+// Hash password before save
 userSchema.pre('save', async function (next) {
-  try {
-    if (this.isCounter) return next();
-
-    if (this.isModified('password') && this.password) {
-      const isAlreadyHashed = /^$2[aby]$\d{2}$/.test(this.password);
-      if (!isAlreadyHashed) {
-        const salt = await bcrypt.genSalt(12);
-        this.password = await bcrypt.hash(this.password, salt);
-      }
-    }
-    next();
-  } catch (err) {
-    next(err);
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 12);
   }
+  next();
 });
 
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+// Compare password method
+userSchema.methods.comparePassword = async function (candidate) {
+  return bcrypt.compare(candidate, this.password);
 };
 
-const User = mongoose.model('User', userSchema);
-export default User;
+export default mongoose.model('User', userSchema);

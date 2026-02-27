@@ -1,134 +1,110 @@
 import React, { useState } from 'react';
-import { useUser } from '../context/UserContext';
-import { 
-  Users, 
-  Link as LinkIcon, 
-  Copy, 
-  Check, 
-  TrendingUp, 
-  Award, 
-  ChevronRight,
-  ShieldCheck 
+import { useAuth } from '../context/AuthContext';
+import {
+  Users,
+  Link as LinkIcon,
+  Copy,
+  Check,
+  AlertTriangle,
+  Info,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Referrals() {
-  const { stats, user } = useUser();
+  const { user } = useAuth();
   const [copied, setCopied] = useState(false);
-  
-  const referralLink = `${window.location.origin}/register?ref=${user?.username || user?._id}`;
+
+  // Safe referral link generation (only if user exists)
+  const referralLink = user?._id || user?.username
+    ? `\( {window.location.origin}/register?ref= \){user._id || user.username}`
+    : '';
 
   const handleCopy = () => {
+    if (!referralLink) {
+      return toast.error('No referral link available');
+    }
+
     navigator.clipboard.writeText(referralLink);
     setCopied(true);
-    toast.success("Referral Link Cached");
+    toast.success('Referral link copied');
     setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className="space-y-10 animate-fade-in pb-20">
-      <header>
-        <div className="flex items-center gap-2 mb-2 text-indigo-500">
-          <Users size={14} className="animate-pulse" />
-          <span className="text-[10px] font-black uppercase tracking-[0.4em]">Network Expansion</span>
+    <div className="min-h-screen bg-[#05070a] text-white p-6 md:p-12 space-y-10">
+      {/* Warning Banner – very important for referral pages */}
+      <div className="bg-red-900/30 border border-red-500/50 rounded-3xl p-6 flex items-start gap-4 max-w-4xl mx-auto">
+        <AlertTriangle className="text-red-400 flex-shrink-0 mt-1" size={28} />
+        <div>
+          <h4 className="font-bold text-red-300 mb-2">Important Warning</h4>
+          <p className="text-red-200 text-sm leading-relaxed">
+            Referral programs can resemble pyramid schemes and carry significant risk. Earnings are not guaranteed. Never pay money to join or promote a referral program. If anyone asks for fees or promises high returns from referrals, it may be fraudulent. Report suspicious activity.
+          </p>
         </div>
-        <h2 className="text-3xl font-black text-white tracking-tight italic uppercase">
-          Affiliate <span className="text-indigo-500">/</span> Terminal
-        </h2>
+      </div>
+
+      <header className="text-center">
+        <div className="flex items-center justify-center gap-2 mb-2 text-indigo-500">
+          <Users size={14} className="animate-pulse" />
+          <span className="text-[10px] font-black uppercase tracking-[0.4em]">Network Sharing</span>
+        </div>
+        <h1 className="text-4xl font-black italic uppercase tracking-tighter">
+          Refer a Friend
+        </h1>
+        <p className="text-gray-500 text-sm mt-2 max-w-xl mx-auto">
+          Share your unique link with others. This is an optional feature with no guaranteed benefits.
+        </p>
       </header>
 
-      {/* 1. Referral Link Console */}
-      <div className="glass-card p-8 border-l-4 border-l-indigo-500 bg-gradient-to-br from-indigo-500/5 to-transparent">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="space-y-2">
-            <h4 className="text-sm font-black uppercase tracking-widest text-white">Unique Invitation Endpoint</h4>
-            <p className="text-xs text-slate-500 font-bold leading-relaxed">
-              Expand the Trustra network. For every node leased via your link, you receive <span className="text-indigo-400">10% commission</span>.
-            </p>
-          </div>
-          <div className="flex w-full md:w-auto gap-2">
-            <div className="flex-1 md:w-80 bg-black/40 border border-slate-800 rounded-xl px-4 py-3 font-mono text-[11px] text-indigo-400 truncate flex items-center">
-              {referralLink}
-            </div>
-            <button 
-              onClick={handleCopy}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 rounded-xl transition-all active:scale-95 flex items-center gap-2 text-[10px] font-black uppercase"
-            >
-              {copied ? <Check size={16} /> : <Copy size={16} />} 
-              {copied ? "Link Copied" : "Copy Link"}
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* Referral Link Section */}
+      <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 md:p-12 shadow-2xl relative overflow-hidden max-w-2xl mx-auto">
+        <div className="absolute -top-24 -left-24 w-48 h-48 bg-indigo-600/5 rounded-full blur-3xl" />
 
-      {/* 2. Performance Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {[
-          { label: 'Network Size', value: stats?.referralCount || 0, icon: <Users />, color: 'text-blue-500' },
-          { label: 'Protocol Earnings', value: `€${(stats?.referralEarnings || 0).toLocaleString()}`, icon: <Award />, color: 'text-emerald-500' },
-          { label: 'Conversion Rate', value: '12.5%', icon: <TrendingUp />, color: 'text-indigo-500' },
-        ].map((s, i) => (
-          <div key={i} className="glass-card p-6 border-slate-800 group hover:border-indigo-500/30 transition-all">
-            <div className={`p-3 bg-slate-950 rounded-xl w-fit mb-4 border border-slate-800 group-hover:scale-110 transition-transform ${s.color}`}>
-              {s.icon}
-            </div>
-            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-1">{s.label}</p>
-            <h3 className="text-2xl font-black text-white font-mono">{s.value}</h3>
-          </div>
-        ))}
-      </div>
-
-      {/* 3. Team Roster (Downlines) */}
-      <div className="glass-card overflow-hidden">
-        <div className="p-6 border-b border-slate-800 bg-white/5 flex items-center justify-between">
-          <h3 className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-2">
-            <ShieldCheck size={16} className="text-indigo-500" /> Linked Nodes
+        <div className="space-y-6 text-center">
+          <h3 className="text-xl font-black uppercase tracking-tight">
+            Your Personal Referral Link
           </h3>
-          <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Active Downlines</span>
+
+          {referralLink ? (
+            <>
+              <div className="bg-black/60 border border-white/10 rounded-2xl p-6 font-mono text-sm text-indigo-400 break-all relative group">
+                {referralLink}
+                <button
+                  onClick={handleCopy}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-white transition-all active:scale-90"
+                >
+                  {copied ? <Check size={18} /> : <Copy size={18} />}
+                </button>
+              </div>
+
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                Share this link to invite others to the platform. No rewards or commissions are guaranteed.
+              </p>
+            </>
+          ) : (
+            <p className="text-red-400 text-sm">
+              You must be logged in with a valid account to generate a referral link.
+            </p>
+          )}
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-slate-900/50 text-[9px] font-black uppercase tracking-widest text-slate-500">
-              <tr>
-                <th className="px-6 py-4">Investor</th>
-                <th className="px-6 py-4">Node Tier</th>
-                <th className="px-6 py-4">Join Date</th>
-                <th className="px-6 py-4 text-right">Commission</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {(stats?.referrals || []).length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="px-6 py-20 text-center text-slate-600 text-[10px] font-black uppercase tracking-widest">
-                    No linked nodes detected in the current buffer.
-                  </td>
-                </tr>
-              ) : (
-                stats.referrals.map((ref, idx) => (
-                  <tr key={idx} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-indigo-600/10 flex items-center justify-center text-indigo-500 font-bold text-[10px]">
-                        {ref.fullName[0]}
-                      </div>
-                      <span className="text-xs font-bold text-white">{ref.fullName}</span>
-                    </td>
-                    <td className="px-6 py-4 text-[10px] font-black uppercase text-slate-400">
-                      {ref.activePlan || 'Standard'}
-                    </td>
-                    <td className="px-6 py-4 text-[10px] text-slate-500 font-mono">
-                      {new Date(ref.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 text-right text-emerald-400 font-bold font-mono">
-                      +€{(ref.commissionAmount || 0).toFixed(2)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      </div>
+
+      {/* Additional Info */}
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="p-6 bg-white/5 border border-white/5 rounded-[2rem] flex gap-4">
+          <Info className="text-indigo-400 shrink-0" size={20} />
+          <p className="text-[9px] text-gray-500 leading-relaxed uppercase tracking-widest font-bold">
+            Referral links are for informational sharing only. Do not promise earnings or bonuses. Misrepresentation may violate platform terms or local laws.
+          </p>
+        </div>
+
+        <div className="p-6 bg-amber-500/5 border border-amber-500/10 rounded-[2rem] flex gap-4">
+          <AlertTriangle className="text-amber-400 shrink-0" size={20} />
+          <p className="text-[9px] text-amber-300 leading-relaxed uppercase tracking-widest font-bold">
+            Beware of scams: Anyone promising referral commissions or requiring payment to join is likely fraudulent.
+          </p>
         </div>
       </div>
     </div>
   );
 }
-

@@ -5,8 +5,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -36,56 +34,41 @@ import { startBtcDaemon } from './services/btcWatcher.js';
 
 validateEnv();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const PORT = parseInt(process.env.PORT, 10) || 5000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 // ── CORS SETUP ──
 const ALLOWED_ORIGINS = [
   process.env.FRONTEND_URL,
-  process.env.SOCKET_CORS_ORIGIN,
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173'
 ];
 
-function isAllowedOrigin(origin) {
-  if (!origin) return true;
-  if (ALLOWED_ORIGINS.includes(origin)) return true;
-  if (/^https:\/\/.*\.vercel\.app$/.test(origin)) return true;
-  return false;
-}
-
-const app = express();
-
-// ── SECURITY ──
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "img-src": ["'self'", "data:", "https:"],
-        "script-src": ["'self'", "'unsafe-inline'"],
-        "connect-src": ["'self'", "https:", "wss:", "ws:"],
-      },
-    },
-    crossOriginResourcePolicy: { policy: 'cross-origin' },
-  })
-);
-
-// ── MIDDLEWARE ──
-app.use(cors({
-  origin: (origin, cb) => isAllowedOrigin(origin) ? cb(null, true) : cb(new Error('Not allowed by CORS')),
+const corsOptions = {
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
-}));
+};
+
+const app = express();
+
+// ── SECURITY & MIDDLEWARE ──
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors(corsOptions));
 app.use(compression());
 app.use(express.json({ limit: '5mb' }));
-app.use(express.urlencoded({ extended: true }));
 app.use(morgan(IS_PROD ? 'combined' : 'dev'));
 
-// ── API ENDPOINTS ──
+// ── API ROUTES ──
+app.get('/health', (_req, res) => res.json({ status: 'online', timestamp: new Date() }));
+
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
@@ -99,32 +82,17 @@ app.use('/api/bitcoin', bitcoinRoutes);
 app.use('/api/plans', planRoutes);
 app.use('/api/reviews', reviewRoutes);
 
-// Health check
-app.get('/health', (_req, res) => {
-  res.json({ success: true, status: 'online', env: process.env.NODE_ENV });
-});
-
-// ── FRONTEND SERVING (PRODUCTION) ──
-if (IS_PROD) {
-  const frontendPath = path.join(__dirname, '../frontend/dist');
-  app.use(express.static(frontendPath));
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
-    res.sendFile(path.join(frontendPath, 'index.html'));
-  });
-}
-
 // ── ERROR HANDLING ──
 app.use(notFound);
 app.use(errorHandler);
 
-// ── KEEP ALIVE (Self-Ping every 10 mins) ──
+// ── KEEP ALIVE (Self-Ping for Render Free Tier) ──
 if (IS_PROD) {
   setInterval(() => {
-    https.get("https://trustracapitaltrade-backend.onrender.com/health", (res) => {
-      if (res.statusCode === 200) console.log('♻️ Keep-alive ping successful');
-    }).on('error', (err) => console.error('❌ Keep-alive ping failed:', err.message));
-  }, 600000);
+    https.get("https://trustracapitaltrade-backend.onrender.com", (res) => {
+      if (res.statusCode === 200) console.log('♻️ Keep-alive successful');
+    }).on('error', (err) => console.error('❌ Keep-alive failed:', err.message));
+  }, 600000); // 10 minutes
 }
 
 // ── SERVER & SOCKETS ──
@@ -134,14 +102,12 @@ async function startServer() {
     console.log('✅ MongoDB connected');
 
     const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✅ Server running on port ${PORT}`);
+      console.log(`✅ API Server running on port ${PORT}`);
     });
 
     const io = new Server(server, {
-      cors: {
-        origin: (origin, cb) => isAllowedOrigin(origin) ? cb(null, true) : cb(new Error('Socket CORS rejected')),
-        credentials: true
-      }
+      pingTimeout: 60000,
+      cors: corsOptions
     });
 
     io.use((socket, next) => {
@@ -157,17 +123,10 @@ async function startServer() {
       }
     });
 
-    const notifyAdmins = (event, data) => {
-      io.to('admin_room').emit('admin_notification', { event, data, timestamp: new Date() });
-    };
-
     io.on('connection', (socket) => {
-      console.log(`🔌 User connected: ${socket.userId}`);
       socket.join(socket.userId);
-      if (socket.userRole === 'admin') {
-        socket.join('admin_room');
-        notifyAdmins('ADMIN_LOGGED_IN', { adminId: socket.userId });
-      }
+      if (socket.userRole === 'admin') socket.join('admin_room');
+      console.log(`🔌 Socket connected: ${socket.userId}`);
     });
 
     app.set('socketio', io);
@@ -181,3 +140,4 @@ async function startServer() {
 }
 
 startServer();
+

@@ -1,52 +1,90 @@
+// backend/cron/dailyRioProfit.js (SAFE / AUDIT-ONLY VERSION)
+// This cron job now ONLY reviews and logs theoretical daily yields — NO balances are modified.
+
 import cron from 'node-cron';
 import User from '../models/User.js';
-import { PLAN_DATA } from '../config/plans.js'; // The file you just provided
+import Investment from '../models/Investment.js';
+import AuditLog from '../models/AuditLog.js'; // optional — for audit trail
 
+/**
+ * Daily ROI Review Cron (Audit / Demo Mode)
+ * - Runs at midnight every day
+ * - Calculates theoretical daily profit for active plans
+ * - Logs results only — does NOT credit any balances
+ * - Can be extended later for real external yield sources (staking, trading, etc.)
+ */
 cron.schedule('0 0 * * *', async () => {
-  console.log('🕒 Processing Rio Profit Distribution...');
-  const today = new Date().setHours(0, 0, 0, 0);
+  console.log('🕒 Starting daily ROI review (AUDIT MODE - no balance changes)');
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let reviewed = 0;
+  let skipped = 0;
+  let errors = 0;
 
   try {
-    const activeInvestors = await User.find({ isPlanActive: true, banned: false });
+    // Find all active investments
+    const activePlans = await Investment.find({ status: 'active' })
+      .populate('user', 'email fullName')
+      .lean(); // faster read-only query
 
-    for (let user of activeInvestors) {
-      // 1. Double-payment protection
-      const lastPaid = user.lastProfitDate ? new Date(user.lastProfitDate).setHours(0, 0, 0, 0) : null;
-      if (lastPaid === today) continue;
+    console.log(`Found ${activePlans.length} active investment plans`);
 
-      // 2. Fetch Plan Config from your PLAN_DATA
-      const planConfig = PLAN_DATA[user.planKey];
-      if (!planConfig) {
-        console.error(`⚠️ No plan config for key: ${user.planKey} (User: ${user.email})`);
+    for (const plan of activePlans) {
+      // Skip if already reviewed today (double-processing protection)
+      const lastReviewed = plan.lastRoiAt
+        ? new Date(plan.lastRoiAt).setHours(0, 0, 0, 0)
+        : null;
+
+      if (lastReviewed === today.getTime()) {
+        skipped++;
         continue;
       }
 
-      // 3. Calculate Daily Profit (Invested * dailyROI)
-      const profit = user.investedAmount * planConfig.dailyROI;
+      // Get plan config (assuming PLAN_DATA is imported or available)
+      const planConfig = PLAN_DATA?.[plan.planKey || plan.planName];
+      if (!planConfig) {
+        console.warn(`No config found for plan \( {plan.planName || plan.planKey} (user: \){plan.user?.email})`);
+        errors++;
+        continue;
+      }
 
-      if (profit > 0) {
-        // Update EUR Balance
-        const currentBalance = user.balances.get('EUR') || 0;
-        user.balances.set('EUR', currentBalance + profit);
+      // Calculate theoretical daily profit (for logging only)
+      const theoreticalDaily = plan.amount * planConfig.dailyROI;
 
-        // Record in Ledger
-        user.ledger.push({
-          amount: profit,
-          currency: 'EUR',
-          type: 'roi_profit',
-          status: 'completed',
-          description: `Daily ROI: ${planConfig.name}`
+      if (theoreticalDaily > 0) {
+        console.log(
+          `User: ${plan.user?.email || 'unknown'} | ` +
+          `Plan: ${plan.planName} | ` +
+          `Invested: €${plan.amount.toFixed(2)} | ` +
+          `Theoretical daily yield: €${theoreticalDaily.toFixed(2)}`
+        );
+
+        // Optional: Log for admin audit trail
+        await AuditLog.create({
+          admin: null, // system cron
+          action: 'roi_review',
+          target: plan.user?._id,
+          details: {
+            investmentId: plan._id,
+            planName: plan.planName,
+            investedAmount: plan.amount,
+            theoreticalDaily,
+            lastRoiAt: plan.lastRoiAt,
+            userEmail: plan.user?.email,
+          },
         });
 
-        // Save progress
-        user.lastProfitDate = new Date();
-        user.markModified('balances'); // Required for Mongoose Map
-        await user.save();
+        reviewed++;
       }
     }
-    console.log('✅ Daily Rio Profits Distributed.');
+
+    console.log(
+      `Daily ROI review complete: ${reviewed} plans reviewed, ` +
+      `\( {skipped} skipped (already processed today), \){errors} errors`
+    );
   } catch (err) {
-    console.error('❌ Cron Job Failed:', err.message);
+    console.error('Daily ROI review failed:', err.message);
   }
 });
-
