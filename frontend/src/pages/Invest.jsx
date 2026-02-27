@@ -1,9 +1,9 @@
 // src/pages/Invest.jsx - Production v8.4.1
 import React, { useState } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Wallet, ChevronRight, AlertCircle, Info, Zap } from 'lucide-react';
+import { ArrowLeft, Wallet, ChevronRight, AlertCircle, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import PLAN_DATA from '../config/plans'; // Ensure frontend has access to this config
+import { PLAN_DATA } from '../config/plans.js'; // Fixed Import Path
 import toast from 'react-hot-toast';
 
 export default function Invest() {
@@ -11,24 +11,35 @@ export default function Invest() {
   const navigate = useNavigate();
   const { user } = useAuth();
   
+  // Retrieve selected plan from location state or default to starter
   const planKey = location.state?.selectedPlan || 'starter';
   const plan = PLAN_DATA[planKey];
   
   const [amount, setAmount] = useState(plan?.min || 100);
 
   const handleContinue = () => {
-    if (amount < plan.min) return toast.error(`Minimum for ${plan.name} is €${plan.min}`);
-    if (amount > (user?.totalBalance || 0)) return toast.error("Insufficient Portfolio Balance");
+    const numAmount = parseFloat(amount);
+    
+    if (isNaN(numAmount) || numAmount < plan.min) {
+      return toast.error(`Minimum for ${plan.name} is €${plan.min}`);
+    }
+    
+    if (numAmount > (user?.totalBalance || 0)) {
+      return toast.error("Insufficient Portfolio Balance");
+    }
     
     navigate('/invest-confirm', { 
-      state: { planKey, amount: parseFloat(amount) } 
+      state: { planKey, amount: numAmount } 
     });
   };
 
   return (
     <div className="min-h-screen bg-[#05070a] text-white p-6 md:p-12 font-sans flex items-center justify-center">
       <div className="max-w-xl w-full space-y-8">
-        <button onClick={() => navigate('/plans')} className="flex items-center gap-2 text-gray-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest">
+        <button 
+          onClick={() => navigate('/plans')} 
+          className="flex items-center gap-2 text-gray-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest"
+        >
           <ArrowLeft size={16} /> Change Tier
         </button>
 
@@ -38,7 +49,9 @@ export default function Invest() {
           <div className="flex justify-between items-start mb-10">
             <div>
               <h1 className="text-3xl font-black uppercase italic tracking-tighter">Deploy Capital</h1>
-              <p className="text-indigo-400 text-[10px] font-black uppercase tracking-widest mt-1">{plan?.name} Node</p>
+              <p className="text-indigo-400 text-[10px] font-black uppercase tracking-widest mt-1">
+                {plan?.name || 'Standard'} Node
+              </p>
             </div>
             <Zap className="text-indigo-500" size={32} />
           </div>
@@ -50,12 +63,12 @@ export default function Invest() {
                 <span className="text-white">€{user?.totalBalance?.toLocaleString() || '0.00'}</span>
               </div>
               <div className="relative">
-                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-xl font-black text-gray-600">€</span>
+                <span className="absolute left-5 top-1/2 -translate-y-1/2 text-xl font-black text-slate-600">€</span>
                 <input 
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full bg-transparent border-none text-3xl font-black focus:ring-0 p-0 pl-10"
+                  className="w-full bg-transparent border-none text-3xl font-black focus:ring-0 p-0 pl-10 text-white outline-none"
                 />
               </div>
             </div>
@@ -73,7 +86,7 @@ export default function Invest() {
 
             <button 
               onClick={handleContinue}
-              className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-indigo-900/20"
+              className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-sm flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl shadow-indigo-900/40"
             >
               Review Deployment <ChevronRight size={18} />
             </button>
@@ -83,7 +96,7 @@ export default function Invest() {
         <div className="flex items-start gap-4 p-6 bg-amber-500/5 border border-amber-500/10 rounded-2xl italic">
           <AlertCircle size={20} className="text-amber-500 shrink-0" />
           <p className="text-[10px] text-amber-200/60 leading-relaxed uppercase font-bold">
-            Audit Protocol: Capital deployed to automated nodes is locked for the duration of the cycle. Early termination is subject to liquidity constraints.
+            Audit Protocol: Capital deployed to automated nodes is locked for the cycle duration. Early termination subject to v8.4.1 liquidity constraints.
           </p>
         </div>
       </div>

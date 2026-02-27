@@ -14,12 +14,12 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
     required: true,
-    index: true, // Optimized for high-speed login
+    index: true, 
   },
   password: {
     type: String,
     required: true,
-    select: false, // Security: never return password by default
+    select: false, 
   },
   phone: {
     type: String,
@@ -35,8 +35,8 @@ const userSchema = new mongoose.Schema({
   btcAddress: {
     type: String,
     unique: true,
-    sparse: true, // Allows null for the Global Counter document
-    index: true,  // Required for the BTC Watcher to find users by address
+    sparse: true, 
+    index: true,  
   },
   btcIndex: {
     type: Number,
@@ -48,7 +48,7 @@ const userSchema = new mongoose.Schema({
   isCounter: { 
     type: Boolean, 
     default: false,
-    index: true 
+    // FIX: Removed 'index: true' here to stop Mongoose warning
   },
   btcIndexCounter: { 
     type: Number, 
@@ -100,9 +100,13 @@ userSchema.methods.comparePassword = async function (candidate) {
   return bcrypt.compare(candidate, this.password);
 };
 
-// ── VIRTUALS & INDEXES ──
-// Ensure the Global Counter exists on first boot
-userSchema.index({ isCounter: 1 }, { unique: true, partialFilterExpression: { isCounter: true } });
+// ── SCHEMATIC INDEXES ──
+// FIX: This is the ONLY index required for isCounter. 
+// It allows multiple 'false' values but only one 'true' (The Global Counter).
+userSchema.index(
+  { isCounter: 1 }, 
+  { unique: true, partialFilterExpression: { isCounter: true } }
+);
 
 const User = mongoose.model('User', userSchema);
 export default User;
