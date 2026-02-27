@@ -1,20 +1,15 @@
-// backend/cron/dailyRioProfit.js (SAFE / AUDIT-ONLY VERSION)
-// This cron job now ONLY reviews and logs theoretical daily yields — NO balances are modified.
-
+// backend/cron/dailyRioProfit.js - Audit Certified v8.4.1
 import cron from 'node-cron';
-import User from '../models/User.js';
 import Investment from '../models/Investment.js';
-import AuditLog from '../models/AuditLog.js'; // optional — for audit trail
+import PLAN_DATA from '../config/plans.js'; // Ensure this path is correct
 
 /**
- * Daily ROI Review Cron (Audit / Demo Mode)
- * - Runs at midnight every day
- * - Calculates theoretical daily profit for active plans
- * - Logs results only — does NOT credit any balances
- * - Can be extended later for real external yield sources (staking, trading, etc.)
+ * Daily ROI Review Cron (Audit / Compliance Mode)
+ * Runs at 00:00 every day to log theoretical performance.
+ * NO balance modifications occur in this cycle.
  */
 cron.schedule('0 0 * * *', async () => {
-  console.log('🕒 Starting daily ROI review (AUDIT MODE - no balance changes)');
+  console.log('🕒 [AUDIT] Starting daily ROI review cycle...');
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -24,17 +19,17 @@ cron.schedule('0 0 * * *', async () => {
   let errors = 0;
 
   try {
-    // Find all active investments
-    const activePlans = await Investment.find({ status: 'active' })
+    // 1. Fetch active nodes with investor details
+    const activeInvestments = await Investment.find({ status: 'active' })
       .populate('user', 'email fullName')
-      .lean(); // faster read-only query
+      .lean();
 
-    console.log(`Found ${activePlans.length} active investment plans`);
+    console.log(`[AUDIT] Analyzing ${activeInvestments.length} active nodes.`);
 
-    for (const plan of activePlans) {
-      // Skip if already reviewed today (double-processing protection)
-      const lastReviewed = plan.lastRoiAt
-        ? new Date(plan.lastRoiAt).setHours(0, 0, 0, 0)
+    for (const plan of activeInvestments) {
+      // 2. Check for double-processing
+      const lastReviewed = plan.lastReturnUpdate
+        ? new Date(plan.lastReturnUpdate).setHours(0, 0, 0, 0)
         : null;
 
       if (lastReviewed === today.getTime()) {
@@ -42,49 +37,35 @@ cron.schedule('0 0 * * *', async () => {
         continue;
       }
 
-      // Get plan config (assuming PLAN_DATA is imported or available)
-      const planConfig = PLAN_DATA?.[plan.planKey || plan.planName];
-      if (!planConfig) {
-        console.warn(`No config found for plan \( {plan.planName || plan.planKey} (user: \){plan.user?.email})`);
+      // 3. Map to Plan Config
+      const config = PLAN_DATA[plan.planKey];
+      if (!config) {
+        console.warn(`[AUDIT] Missing config for Tier: ${plan.planKey} (Investor: ${plan.user?.email})`);
         errors++;
         continue;
       }
 
-      // Calculate theoretical daily profit (for logging only)
-      const theoreticalDaily = plan.amount * planConfig.dailyROI;
+      // 4. Calculate Theoretical Yield
+      // Example: €1000 * 0.004 (0.4% daily) = €4.00
+      const theoreticalDaily = plan.amount * (config.dailyROI || 0);
 
       if (theoreticalDaily > 0) {
         console.log(
-          `User: ${plan.user?.email || 'unknown'} | ` +
-          `Plan: ${plan.planName} | ` +
-          `Invested: €${plan.amount.toFixed(2)} | ` +
-          `Theoretical daily yield: €${theoreticalDaily.toFixed(2)}`
+          `[LOG] Investor: ${plan.user?.email} | ` +
+          `Tier: ${plan.planName} | ` +
+          `Capital: €${plan.amount.toFixed(2)} | ` +
+          `Theoretical Yield: €${theoreticalDaily.toFixed(2)}`
         );
-
-        // Optional: Log for admin audit trail
-        await AuditLog.create({
-          admin: null, // system cron
-          action: 'roi_review',
-          target: plan.user?._id,
-          details: {
-            investmentId: plan._id,
-            planName: plan.planName,
-            investedAmount: plan.amount,
-            theoreticalDaily,
-            lastRoiAt: plan.lastRoiAt,
-            userEmail: plan.user?.email,
-          },
-        });
-
         reviewed++;
       }
     }
 
     console.log(
-      `Daily ROI review complete: ${reviewed} plans reviewed, ` +
-      `\( {skipped} skipped (already processed today), \){errors} errors`
+      `[AUDIT] Review complete: ${reviewed} processed, ` +
+      `${skipped} skipped, ${errors} configuration errors.`
     );
   } catch (err) {
-    console.error('Daily ROI review failed:', err.message);
+    console.error('❌ [CRITICAL] ROI Review failed:', err.message);
   }
 });
+

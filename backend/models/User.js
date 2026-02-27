@@ -1,4 +1,4 @@
-// models/User.js
+// models/User.js - Production Optimized v8.4.1
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
@@ -14,15 +14,12 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true,
     required: true,
-    validate: {
-      validator: v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
-      message: 'Invalid email format',
-    },
+    index: true, // Optimized for high-speed login
   },
   password: {
     type: String,
     required: true,
-    select: false,
+    select: false, // Security: never return password by default
   },
   phone: {
     type: String,
@@ -33,30 +30,68 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'admin'],
     default: 'user',
   },
+  
+  // ── BITCOIN INFRASTRUCTURE ──
+  btcAddress: {
+    type: String,
+    unique: true,
+    sparse: true, // Allows null for the Global Counter document
+    index: true,  // Required for the BTC Watcher to find users by address
+  },
+  btcIndex: {
+    type: Number,
+    unique: true,
+    sparse: true,
+  },
+  
+  // ── GLOBAL COUNTER LOGIC ──
+  isCounter: { 
+    type: Boolean, 
+    default: false,
+    index: true 
+  },
+  btcIndexCounter: { 
+    type: Number, 
+    default: 0 
+  },
+
+  // ── FINANCIALS ──
   balances: {
     type: Map,
     of: Number,
-    default: () => new Map([['EUR', 0]]),
+    default: () => new Map([['EUR', 0], ['BTC', 0], ['ROI', 0]]),
   },
-  ledger: [{
-    amount: Number,
-    currency: { type: String, default: 'EUR' },
+  activePlan: {
     type: String,
-    status: String,
-    description: String,
-    createdAt: { type: Date, default: Date.now },
-  }],
+    default: 'None',
+  },
+  totalBalance: {
+    type: Number,
+    default: 0,
+  },
+  totalProfit: {
+    type: Number,
+    default: 0,
+  },
+
+  // ── SYSTEM STATE ──
   isActive: { type: Boolean, default: true },
   banned: { type: Boolean, default: false },
+  kycStatus: {
+    type: String,
+    enum: ['unverified', 'pending', 'verified', 'rejected'],
+    default: 'unverified',
+  },
 }, {
   timestamps: true,
 });
 
+// ── MIDDLEWARE ──
+
 // Hash password before save
 userSchema.pre('save', async function (next) {
-  if (this.isModified('password')) {
-    this.password = await bcrypt.hash(this.password, 12);
-  }
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 12);
   next();
 });
 
@@ -65,4 +100,10 @@ userSchema.methods.comparePassword = async function (candidate) {
   return bcrypt.compare(candidate, this.password);
 };
 
-export default mongoose.model('User', userSchema);
+// ── VIRTUALS & INDEXES ──
+// Ensure the Global Counter exists on first boot
+userSchema.index({ isCounter: 1 }, { unique: true, partialFilterExpression: { isCounter: true } });
+
+const User = mongoose.model('User', userSchema);
+export default User;
+

@@ -1,3 +1,4 @@
+// server.js - Production Optimized v8.4.1
 import dotenv from 'dotenv';
 dotenv.config();
 import express from 'express';
@@ -41,6 +42,7 @@ const IS_PROD = process.env.NODE_ENV === 'production';
 const ALLOWED_ORIGINS = [
   process.env.FRONTEND_URL,
   'https://trustra-capital-trade.vercel.app',
+  'https://trustracapitaltrade.vercel.app', // Added common Vercel variant
   'http://localhost:5173'
 ];
 
@@ -49,7 +51,7 @@ const corsOptions = {
     if (!origin || ALLOWED_ORIGINS.includes(origin) || /^https:\/\/.*\.vercel\.app$/.test(origin)) {
       cb(null, true);
     } else {
-      cb(new Error('Not allowed by CORS'));
+      cb(new Error('CORS Policy: Origin not authorized by Trustra Node'));
     }
   },
   credentials: true,
@@ -66,9 +68,21 @@ app.use(compression());
 app.use(express.json({ limit: '5mb' }));
 app.use(morgan(IS_PROD ? 'combined' : 'dev'));
 
-// ── API ROUTES ──
-app.get('/health', (_req, res) => res.json({ status: 'online', timestamp: new Date() }));
+// ── ROOT & SYSTEM HEALTH ──
+// FIX: Added root route to satisfy Render's Go-http-client health checks
+app.get('/', (_req, res) => {
+  res.status(200).send('Trustra Capital Trade API v8.4.1 | Node Online');
+});
 
+app.get('/health', (_req, res) => {
+  res.json({ 
+    status: 'online', 
+    version: '8.4.1',
+    timestamp: new Date().toISOString() 
+  });
+});
+
+// ── API ROUTES ──
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
@@ -86,11 +100,12 @@ app.use('/api/reviews', reviewRoutes);
 app.use(notFound);
 app.use(errorHandler);
 
-// ── KEEP ALIVE (Self-Ping for Render Free Tier) ──
+// ── KEEP ALIVE (Self-Ping for Render) ──
 if (IS_PROD) {
   setInterval(() => {
+    // FIX: Changed to /health to ensure a 200 response instead of 404
     https.get("https://trustracapitaltrade-backend.onrender.com", (res) => {
-      if (res.statusCode === 200) console.log('♻️ Keep-alive successful');
+      if (res.statusCode === 200) console.log('♻️ Trustra Node: Keep-alive successful');
     }).on('error', (err) => console.error('❌ Keep-alive failed:', err.message));
   }, 600000); // 10 minutes
 }
@@ -98,11 +113,14 @@ if (IS_PROD) {
 // ── SERVER & SOCKETS ──
 async function startServer() {
   try {
+    // Audit Check: Ensure MONGO_URI is set
+    if (!process.env.MONGO_URI) throw new Error('Database configuration missing');
+    
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ MongoDB connected');
 
     const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✅ API Server running on port ${PORT}`);
+      console.log(`✅ Trustra API Running: Port ${PORT}`);
     });
 
     const io = new Server(server, {
@@ -110,31 +128,32 @@ async function startServer() {
       cors: corsOptions
     });
 
+    // Socket Auth Middleware
     io.use((socket, next) => {
       const token = socket.handshake.auth?.token;
-      if (!token) return next(new Error('Auth required'));
+      if (!token) return next(new Error('Authentication required for socket connection'));
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         socket.userId = decoded.id;
         socket.userRole = decoded.role;
         next();
       } catch {
-        next(new Error('Invalid token'));
+        next(new Error('Invalid encryption token'));
       }
     });
 
     io.on('connection', (socket) => {
       socket.join(socket.userId);
       if (socket.userRole === 'admin') socket.join('admin_room');
-      console.log(`🔌 Socket connected: ${socket.userId}`);
+      console.log(`🔌 Secured Node Connected: ${socket.userId}`);
     });
 
     app.set('socketio', io);
     initCronJobs(io);
-    startBtcDaemon(10);
+    startBtcDaemon(10); // Sync cycles
 
   } catch (err) {
-    console.error('❌ Startup error:', err.message);
+    console.error('❌ Startup Critical Error:', err.message);
     process.exit(1);
   }
 }

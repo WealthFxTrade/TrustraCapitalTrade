@@ -1,8 +1,7 @@
-// src/constants/api.js
+// src/constants/api.js - Production Synchronized v8.4.1
 /**
  * Centralized API endpoints and configuration
  * All paths are relative — axios baseURL handles the root
- * Use API_ENDPOINTS in api.js calls for consistency and easy maintenance
  */
 
 // Base API URL (from .env or fallback)
@@ -12,7 +11,7 @@ export const API_URL = import.meta.env.VITE_API_URL || 'https://trustracapitaltr
 // Centralized Endpoints (relative paths)
 // ──────────────────────────────────────────────
 export const API_ENDPOINTS = {
-  // ── Authentication ────────────────────────────────────────
+  // ── Authentication ──
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
@@ -21,22 +20,22 @@ export const API_ENDPOINTS = {
     RESET_PASSWORD: (token) => `/auth/reset-password/${token}`,
   },
 
-  // ── User Profile & Dashboard ─────────────────────────────
+  // ── User Profile & Dashboard ──
   USER: {
     PROFILE: '/user/profile',
     UPDATE_PROFILE: '/user/profile',
     DASHBOARD: '/user/dashboard',
-    TRANSACTIONS: '/user/transactions', // alias for /transactions/my
+    TRANSACTIONS: '/user/transactions', 
   },
 
-  // ── Wallet & Balances ────────────────────────────────────
+  // ── Wallet & Balances ──
   WALLET: {
     BALANCES: '/wallet/balances',
     GENERATE_ADDRESS: (asset) => `/wallet/generate/${asset}`,
     GET_ADDRESS: (asset) => `/wallet/address/${asset}`,
   },
 
-  // ── Deposits & Withdrawals ───────────────────────────────
+  // ── Deposits & Withdrawals ──
   DEPOSIT: {
     CREATE: '/deposit/create',
     HISTORY: '/deposit/history',
@@ -47,7 +46,7 @@ export const API_ENDPOINTS = {
     HISTORY: '/withdrawal/history',
   },
 
-  // ── Investments & Plans ──────────────────────────────────
+  // ── Investments & Plans ──
   INVESTMENT: {
     PLANS: '/investment/plans',
     CREATE: '/investment/create',
@@ -55,13 +54,13 @@ export const API_ENDPOINTS = {
     DETAILS: (id) => `/investment/${id}`,
   },
 
-  // ── KYC ──────────────────────────────────────────────────
+  // ── KYC ──
   KYC: {
     SUBMIT: '/kyc/submit',
     STATUS: '/kyc/status',
   },
 
-  // ── Admin Endpoints ──────────────────────────────────────
+  // ── Admin Endpoints ──
   ADMIN: {
     USERS: '/admin/users',
     STATS: '/admin/stats',
@@ -69,7 +68,7 @@ export const API_ENDPOINTS = {
     WITHDRAWALS_PENDING: '/admin/withdrawals/pending',
   },
 
-  // ── Utility / Public ─────────────────────────────────────
+  // ── Utility / Public ──
   PUBLIC: {
     BTC_PRICE: '/public/bitcoin/price',
     REVIEWS: '/public/reviews',
@@ -77,14 +76,12 @@ export const API_ENDPOINTS = {
 };
 
 // ──────────────────────────────────────────────
-// Helper Functions (optional but useful)
+// Helper Functions
 // ──────────────────────────────────────────────
 
 /**
  * Build full URL from endpoint key or path
- * @param {string|function} endpoint - Key from API_ENDPOINTS or direct path
- * @param {...any} args - Arguments if endpoint is a function
- * @returns {string} Full API URL
+ * Corrected Template Literal Syntax
  */
 export function getApiUrl(endpoint, ...args) {
   let path;
@@ -93,12 +90,12 @@ export function getApiUrl(endpoint, ...args) {
   if (typeof endpoint === 'function') {
     path = endpoint(...args);
   } else if (typeof endpoint === 'string') {
-    // Try to resolve from nested structure
+    // Try to resolve nested string from dots (e.g. 'AUTH.LOGIN')
     const parts = endpoint.split('.');
     let current = API_ENDPOINTS;
 
     for (const part of parts) {
-      current = current[part];
+      current = current?.[part];
       if (!current) break;
     }
 
@@ -107,12 +104,10 @@ export function getApiUrl(endpoint, ...args) {
     path = endpoint;
   }
 
-  // Clean path (no double slashes)
-  const cleanPath = path.replace(/^\/+|\/+$/g, '');
+  // Ensure path is clean (remove leading slashes as API_URL provides them if needed)
+  const cleanPath = path.replace(/^\/+/, '');
 
-  return `\( {API_URL}/ \){cleanPath}`;
+  // FIX: Proper Template Literal backticks
+  return `${API_URL}/${cleanPath}`;
 }
 
-// Example usage:
-// getApiUrl(API_ENDPOINTS.AUTH.LOGIN) → /api/auth/login
-// getApiUrl(API_ENDPOINTS.RESET_PASSWORD, 'abc123') → /api/auth/reset-password/abc123
