@@ -1,15 +1,16 @@
-// src/constants/api.js - Production Synchronized v8.4.1
 /**
- * Centralized API endpoints and configuration
- * All paths are relative — axios baseURL handles the root
+ * src/constants/api.js - Production Synchronized v8.4.1
+ * Centralized API endpoints and configuration.
+ * All paths are relative — the axios baseURL handles the root /api prefix.
  */
 
 // Base API URL (from .env or fallback)
+// IMPORTANT: If your Axios baseURL already includes '/api', ensure these endpoints don't repeat it.
 export const API_URL = import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api';
 
-// ──────────────────────────────────────────────
-// Centralized Endpoints (relative paths)
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Centralized Endpoints (relative paths to the /api root)
+// ─────────────────────────────────────────────────────────────────────────────
 export const API_ENDPOINTS = {
   // ── Authentication ──
   AUTH: {
@@ -25,7 +26,7 @@ export const API_ENDPOINTS = {
     PROFILE: '/user/profile',
     UPDATE_PROFILE: '/user/profile',
     DASHBOARD: '/user/dashboard',
-    TRANSACTIONS: '/user/transactions', 
+    TRANSACTIONS: '/user/transactions',
   },
 
   // ── Wallet & Balances ──
@@ -75,39 +76,39 @@ export const API_ENDPOINTS = {
   },
 };
 
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper Functions
-// ──────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Build full URL from endpoint key or path
- * Corrected Template Literal Syntax
+ * Corrected to ensure no double slashes and proper string resolution.
  */
 export function getApiUrl(endpoint, ...args) {
   let path;
 
-  // Handle function endpoints (e.g. RESET_PASSWORD(token))
+  // 1. Handle function endpoints (e.g. RESET_PASSWORD(token))
   if (typeof endpoint === 'function') {
     path = endpoint(...args);
-  } else if (typeof endpoint === 'string') {
-    // Try to resolve nested string from dots (e.g. 'AUTH.LOGIN')
+  } 
+  // 2. Handle nested dot notation (e.g. 'AUTH.LOGIN')
+  else if (typeof endpoint === 'string' && endpoint.includes('.')) {
     const parts = endpoint.split('.');
     let current = API_ENDPOINTS;
-
     for (const part of parts) {
       current = current?.[part];
       if (!current) break;
     }
-
     path = typeof current === 'string' ? current : endpoint;
-  } else {
+  } 
+  // 3. Fallback to direct string
+  else {
     path = endpoint;
   }
 
-  // Ensure path is clean (remove leading slashes as API_URL provides them if needed)
-  const cleanPath = path.replace(/^\/+/, '');
+  // Sanitize: Remove leading slashes from the path and trailing slashes from API_URL
+  const cleanBase = API_URL.replace(/\/+$/, '');
+  const cleanPath = path.toString().replace(/^\/+/, '');
 
-  // FIX: Proper Template Literal backticks
-  return `${API_URL}/${cleanPath}`;
+  return `${cleanBase}/${cleanPath}`;
 }
-

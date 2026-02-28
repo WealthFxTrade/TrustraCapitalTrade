@@ -2,6 +2,7 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 
 // Lazy load pages
 const LandingPage = lazy(() => import('./pages/Landing'));
@@ -9,7 +10,7 @@ const Login = lazy(() => import('./pages/Auth/Login'));
 const Signup = lazy(() => import('./pages/Auth/Signup'));
 const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
 const Invest = lazy(() => import('./pages/Invest'));
-const Layout = lazy(() => import('./components/layout/Layout')); 
+const Layout = lazy(() => import('./components/layout/Layout'));
 
 // Professional 2026 Trustra Loading State
 const LoadingFallback = () => (
@@ -27,36 +28,28 @@ const LoadingFallback = () => (
 export default function App() {
   const { user, initialized } = useAuth();
 
-  // Prevents flicker during auth check
+  // Prevents UI flicker during initial token verification
   if (!initialized) return <LoadingFallback />;
 
   return (
     <Suspense fallback={<LoadingFallback />}>
       <Routes>
-        {/* Landing Page: Wrapped in Layout if you want consistent Nav/Footer */}
+        {/* Public Landing Page */}
         <Route path="/" element={<LandingPage />} />
 
-        {/* Auth Routes: Standalone pages (No Layout wrapper to avoid double-bg) */}
-        <Route
-          path="/login"
-          element={user ? <Navigate to="/dashboard" replace /> : <Login />}
-        />
-        <Route
-          path="/register"
-          element={user ? <Navigate to="/dashboard" replace /> : <Signup />}
-        />
+        {/* Guest-only Routes: Redirect to dashboard if already logged in */}
+        <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
+        <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Signup />} />
 
-        {/* Protected Dashboard Routes */}
-        <Route
-          path="/dashboard/*"
-          element={user ? <Layout><Dashboard /></Layout> : <Navigate to="/login" replace />}
-        />
-        
-        {/* Protected Investment Routes */}
-        <Route
-          path="/invest"
-          element={user ? <Layout><Invest /></Layout> : <Navigate to="/login" replace />}
-        />
+        {/* ─── Protected Routes (Authenticated Users Only) ─── */}
+        <Route element={<ProtectedRoute />}>
+          {/* All routes inside here will automatically use the Layout wrapper */}
+          <Route element={<Layout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/invest" element={<Invest />} />
+            {/* Add more internal pages here */}
+          </Route>
+        </Route>
 
         {/* Global Catch-all */}
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -64,4 +57,3 @@ export default function App() {
     </Suspense>
   );
 }
-

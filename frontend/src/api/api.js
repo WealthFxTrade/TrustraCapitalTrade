@@ -1,13 +1,15 @@
-// src/api/api.js
 import axios from 'axios';
 import nProgress from 'nprogress';
 import { toast } from 'react-hot-toast';
 import 'nprogress/nprogress.css';
-import { API_ENDPOINTS } from '../constants/api';
+import { API_ENDPOINTS, API_URL } from '../constants/api';
 
-// ─── Axios Instance Configuration ───────────────────────────────────────
+/**
+ * ─── Axios Instance Configuration ───────────────────────────────────────
+ * Uses the API_URL from constants which defaults to the Render backend.
+ */
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api',
+  baseURL: API_URL, 
   withCredentials: true,
   timeout: 30000,
   headers: {
@@ -40,29 +42,44 @@ api.interceptors.response.use(
   (error) => {
     nProgress.done();
     const status = error.response?.status;
-    
+
     if (status === 401) {
       localStorage.removeItem('token');
-      // Only toast if we aren't already on the login page to avoid spam
+      // Prevent redirect loops if already on login
       if (!window.location.pathname.includes('/login')) {
         toast.error('Session expired. Please log in.');
+        window.location.href = '/login';
       }
     }
+    
+    // Handle 404s specifically for API debugging
+    if (status === 404) {
+      console.error(`[API 404] Route not found: ${error.config.url}`);
+    }
+
     return Promise.reject(error);
   }
 );
 
 // ─── AUTHENTICATION ──────────────────────────────────────────────────────
 export const login = async (email, password) => {
-  const res = await api.post(API_ENDPOINTS.AUTH.LOGIN, { email, password });
-  // Ensure token is persisted immediately
-  if (res.data.token) localStorage.setItem('token', res.data.token);
-  return res.data;
+  // Uses synchronized constant '/auth/login' -> total: .../api/auth/login
+  const res = await api.post(API_ENDPOINTS.AUTH.LOGIN, { 
+    email: email.trim().toLowerCase(), 
+    password 
+  });
+  
+  const data = res.data;
+  const token = data.token || data.accessToken;
+  
+  if (token) {
+    localStorage.setItem('token', token);
+  }
+  return data;
 };
 
-export const register = async (data) => {
-  const res = await api.post(API_ENDPOINTS.AUTH.REGISTER, data);
-  // Ensure token is persisted immediately
+export const register = async (userData) => {
+  const res = await api.post(API_ENDPOINTS.AUTH.REGISTER, userData);
   if (res.data.token) localStorage.setItem('token', res.data.token);
   return res.data;
 };
@@ -70,8 +87,9 @@ export const register = async (data) => {
 export const logout = async () => {
   try {
     await api.post(API_ENDPOINTS.AUTH.LOGOUT);
+  } catch (err) {
+    console.warn('Backend logout failed, clearing local session anyway.');
   } finally {
-    // Always clear local storage even if the network call fails
     localStorage.removeItem('token');
     window.location.href = '/login';
   }
@@ -80,7 +98,6 @@ export const logout = async () => {
 // ─── USER PROFILE ────────────────────────────────────────────────────────
 export const fetchUserProfile = async () => {
   const res = await api.get(API_ENDPOINTS.USER.PROFILE);
-  // Flattening response to return data directly for the Dashboard
   return res.data.user || res.data;
 };
 
@@ -96,4 +113,3 @@ export const fetchUsers = async () => {
 };
 
 export default api;
-
