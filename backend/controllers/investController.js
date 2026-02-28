@@ -1,50 +1,51 @@
-import db from '../models';
+import User from '../models/User.js';
 
-export const investNow = async (req, res) => {
+// @desc    Purchase an Investment Plan
+// @route   POST /api/user/invest
+export const investInPlan = async (req, res) => {
   try {
-    const { amount, planName } = req.body;
-    const userId = req.user.id;
+    const { planName, amount } = req.body;
+    const user = await User.findById(req.user.id);
 
-    const user = await db.User.findById(userId);
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (!user) return res.status(404).json({ message: "Node not found" });
 
-    // 1. Check if user has enough balance in EUR
-    // Note: We changed 'USD' to 'EUR' to match your dashboard display
-    const currentBalance = user.balances.get('EUR') || 0;
-    
-    if (currentBalance < amount) {
-      return res.status(400).json({ success: false, message: 'Insufficient Euro balance' });
+    // 1. Check EUR Liquidity
+    const currentEur = user.balances.get('EUR') || 0;
+    if (currentEur < amount) {
+      return res.status(400).json({ message: "Insufficient EUR balance to activate plan" });
     }
 
-    // 2. Deduct amount from EUR balance
-    user.balances.set('EUR', currentBalance - amount);
-    
-    // 3. Update User Plan status
-    user.plan = planName;
-    user.isPlanActive = true;
+    // 2. Process Investment
+    user.balances.set('EUR', Number((currentEur - amount).toFixed(2)));
+    user.activePlan = planName;
+    user.totalBalance = user.balances.get('EUR'); // Update total reflected balance
 
-    // 4. Create Ledger Entry with Euro currency
-    user.ledger.push({
+    // 3. Ledger/History Entry
+    const investmentRecord = {
       amount: amount,
-      currency: 'EUR', // Changed from USD to EUR
+      currency: 'EUR',
       type: 'investment',
-      status: 'completed',
-      description: `Investment in ${planName} plan`
-    });
+      status: 'active',
+      description: `Activated ${planName} Portfolio`,
+      timestamp: new Date()
+    };
+    
+    if (user.ledger) {
+      user.ledger.push(investmentRecord);
+      user.markModified('ledger');
+    }
 
-    // Save changes to database
+    user.markModified('balances');
     await user.save();
 
-    res.json({ 
-      success: true, 
-      message: 'Investment successful', 
-      newBalance: user.balances.get('EUR'),
-      currencySymbol: '€' 
+    res.status(200).json({
+      success: true,
+      message: `${planName} activated successfully`,
+      activePlan: user.activePlan,
+      newBalance: user.balances.get('EUR')
     });
 
-  } catch (err) {
-    console.error("Investment Error:", err);
-    res.status(500).json({ success: false, message: err.message });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
-

@@ -1,114 +1,53 @@
 /**
- * src/constants/api.js - Production Synchronized v8.4.1
- * Centralized API endpoints and configuration.
- * All paths are relative — the axios baseURL handles the root /api prefix.
+ * src/constants/api.js - Production v8.4.2
+ * Synchronized with backend route mounting.
  */
 
-// Base API URL (from .env or fallback)
-// IMPORTANT: If your Axios baseURL already includes '/api', ensure these endpoints don't repeat it.
-export const API_URL = import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api';
+// Toggle between Vite proxy (local) and Production Render URL
+export const API_URL = import.meta.env.MODE === 'development' 
+  ? '/api' 
+  : (import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api');
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Centralized Endpoints (relative paths to the /api root)
-// ─────────────────────────────────────────────────────────────────────────────
 export const API_ENDPOINTS = {
-  // ── Authentication ──
+  // Authentication
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
     LOGOUT: '/auth/logout',
-    FORGOT_PASSWORD: '/auth/forgot-password',
-    RESET_PASSWORD: (token) => `/auth/reset-password/${token}`,
+    VERIFY: '/auth/verify',
   },
-
-  // ── User Profile & Dashboard ──
+  // User Management
   USER: {
     PROFILE: '/user/profile',
-    UPDATE_PROFILE: '/user/profile',
     DASHBOARD: '/user/dashboard',
-    TRANSACTIONS: '/user/transactions',
+    SETTINGS: '/user/settings',
   },
-
-  // ── Wallet & Balances ──
+  // Asset Management
   WALLET: {
     BALANCES: '/wallet/balances',
-    GENERATE_ADDRESS: (asset) => `/wallet/generate/${asset}`,
-    GET_ADDRESS: (asset) => `/wallet/address/${asset}`,
+    ADDRESS: (asset) => `/wallet/address/${asset}`,
+    HISTORY: '/wallet/transactions',
   },
-
-  // ── Deposits & Withdrawals ──
-  DEPOSIT: {
-    CREATE: '/deposit/create',
-    HISTORY: '/deposit/history',
-  },
-
-  WITHDRAWAL: {
-    REQUEST: '/withdrawal/request',
-    HISTORY: '/withdrawal/history',
-  },
-
-  // ── Investments & Plans ──
-  INVESTMENT: {
-    PLANS: '/investment/plans',
-    CREATE: '/investment/create',
-    LIST: '/investment/user',
-    DETAILS: (id) => `/investment/${id}`,
-  },
-
-  // ── KYC ──
-  KYC: {
-    SUBMIT: '/kyc/submit',
-    STATUS: '/kyc/status',
-  },
-
-  // ── Admin Endpoints ──
+  // Administrative Operations
   ADMIN: {
-    USERS: '/admin/users',
     STATS: '/admin/stats',
+    USERS: '/admin/users',
     KYC_PENDING: '/admin/kyc/pending',
-    WITHDRAWALS_PENDING: '/admin/withdrawals/pending',
-  },
-
-  // ── Utility / Public ──
-  PUBLIC: {
-    BTC_PRICE: '/public/bitcoin/price',
-    REVIEWS: '/public/reviews',
+    WITHDRAWALS: '/admin/withdrawals/pending',
+    AUDIT_LOGS: '/admin/audit-logs',
   },
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper Functions
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
- * Build full URL from endpoint key or path
- * Corrected to ensure no double slashes and proper string resolution.
+ * Builds a sanitized, full URL for Axios calls.
+ * Ensures consistent pathing regardless of leading/trailing slashes.
  */
 export function getApiUrl(endpoint, ...args) {
-  let path;
-
-  // 1. Handle function endpoints (e.g. RESET_PASSWORD(token))
-  if (typeof endpoint === 'function') {
-    path = endpoint(...args);
-  } 
-  // 2. Handle nested dot notation (e.g. 'AUTH.LOGIN')
-  else if (typeof endpoint === 'string' && endpoint.includes('.')) {
-    const parts = endpoint.split('.');
-    let current = API_ENDPOINTS;
-    for (const part of parts) {
-      current = current?.[part];
-      if (!current) break;
-    }
-    path = typeof current === 'string' ? current : endpoint;
-  } 
-  // 3. Fallback to direct string
-  else {
-    path = endpoint;
-  }
-
-  // Sanitize: Remove leading slashes from the path and trailing slashes from API_URL
+  let path = typeof endpoint === 'function' ? endpoint(...args) : endpoint;
+  
+  // Sanitize: Remove trailing slash from base and leading slash from path
   const cleanBase = API_URL.replace(/\/+$/, '');
   const cleanPath = path.toString().replace(/^\/+/, '');
-
+  
   return `${cleanBase}/${cleanPath}`;
 }

@@ -1,115 +1,97 @@
-import axios from 'axios';
-import nProgress from 'nprogress';
-import { toast } from 'react-hot-toast';
-import 'nprogress/nprogress.css';
-import { API_ENDPOINTS, API_URL } from '../constants/api';
-
 /**
- * ─── Axios Instance Configuration ───────────────────────────────────────
- * Uses the API_URL from constants which defaults to the Render backend.
+ * src/api/api.js - Production v8.4.1
+ * Centralized API handler for Trustra Capital Trade.
+ * Synchronized with Backend Port: 10000
  */
+import axios from 'axios';
+
+// 1. Base Configuration
+// In dev, we use '/api' to trigger the Vite Proxy. In prod, we use the Render URL.
+const BASE_URL = import.meta.env.MODE === 'development' 
+  ? '/api' 
+  : (import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api');
+
 const api = axios.create({
-  baseURL: API_URL, 
+  baseURL: BASE_URL,
   withCredentials: true,
-  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// ─── Request Interceptor ─────────────────────────────────────────────────
-api.interceptors.request.use(
-  (config) => {
-    nProgress.start();
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    nProgress.done();
-    return Promise.reject(error);
+// 2. Request Interceptor: Attach JWT Token from LocalStorage
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
-);
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
 
-// ─── Response Interceptor ────────────────────────────────────────────────
+// 3. Response Interceptor: Global Error Handling (Session Expiry)
 api.interceptors.response.use(
-  (response) => {
-    nProgress.done();
-    return response;
-  },
+  (response) => response,
   (error) => {
-    nProgress.done();
-    const status = error.response?.status;
-
-    if (status === 401) {
+    if (error.response?.status === 401) {
+      // Clear session if token is invalid or expired
       localStorage.removeItem('token');
-      // Prevent redirect loops if already on login
+      localStorage.removeItem('user');
+      // Only redirect if not already on the login page
       if (!window.location.pathname.includes('/login')) {
-        toast.error('Session expired. Please log in.');
         window.location.href = '/login';
       }
     }
-    
-    // Handle 404s specifically for API debugging
-    if (status === 404) {
-      console.error(`[API 404] Route not found: ${error.config.url}`);
-    }
-
     return Promise.reject(error);
   }
 );
 
-// ─── AUTHENTICATION ──────────────────────────────────────────────────────
-export const login = async (email, password) => {
-  // Uses synchronized constant '/auth/login' -> total: .../api/auth/login
-  const res = await api.post(API_ENDPOINTS.AUTH.LOGIN, { 
-    email: email.trim().toLowerCase(), 
-    password 
-  });
-  
-  const data = res.data;
-  const token = data.token || data.accessToken;
-  
-  if (token) {
-    localStorage.setItem('token', token);
-  }
+/**
+ * ─── AUTHENTICATION ───
+ */
+export const loginUser = async (credentials) => {
+  const { data } = await api.post('/auth/login', credentials);
+  return data; // Returns { token, user }
+};
+
+export const registerUser = async (userData) => {
+  const { data } = await api.post('/auth/register', userData);
   return data;
 };
 
-export const register = async (userData) => {
-  const res = await api.post(API_ENDPOINTS.AUTH.REGISTER, userData);
-  if (res.data.token) localStorage.setItem('token', res.data.token);
-  return res.data;
-};
-
-export const logout = async () => {
-  try {
-    await api.post(API_ENDPOINTS.AUTH.LOGOUT);
-  } catch (err) {
-    console.warn('Backend logout failed, clearing local session anyway.');
-  } finally {
-    localStorage.removeItem('token');
-    window.location.href = '/login';
-  }
-};
-
-// ─── USER PROFILE ────────────────────────────────────────────────────────
+/**
+ * ─── USER & PROFILE ───
+ */
 export const fetchUserProfile = async () => {
-  const res = await api.get(API_ENDPOINTS.USER.PROFILE);
-  return res.data.user || res.data;
+  const { data } = await api.get('/user/profile');
+  return data; // Returns user object directly
 };
 
-export const updateUserProfile = async (data) => {
-  const res = await api.put(API_ENDPOINTS.USER.UPDATE_PROFILE, data);
-  return res.data;
+export const updateProfile = async (profileData) => {
+  const { data } = await api.put('/user/profile', profileData);
+  return data;
 };
 
-// ─── ADMIN ───────────────────────────────────────────────────────────────
+/**
+ * ─── ADMINISTRATIVE (Admin Only) ───
+ */
 export const fetchUsers = async () => {
-  const res = await api.get(API_ENDPOINTS.ADMIN.USERS);
-  return res.data.users || res.data;
+  const { data } = await api.get('/user/all');
+  return data; // Returns Array of users directly
+};
+
+export const updateUserStatus = async (userId, statusData) => {
+  const { data } = await api.patch(`/user/status/${userId}`, statusData);
+  return data;
+};
+
+/**
+ * ─── ASSETS & TRADING ───
+ */
+export const fetchBitcoinMarket = async () => {
+  const { data } = await api.get('/bitcoin/market');
+  return data;
 };
 
 export default api;
