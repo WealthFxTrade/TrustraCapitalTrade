@@ -3,41 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
     <title>TRUSTRA CAPITAL | Automated Wealth Terminal</title>
+    <meta name="description" content="Secure Institutional Grade Wealth Management Terminal" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <!-- 1. Google Fonts: Inter (Sans) & JetBrains Mono (Terminal) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,900;1,400;1,900&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
 
-    <!-- 2. Polyfill for legacy library compatibility -->
     <script>
-      window.process = { env: { NODE_ENV: 'development' } };
       window.global = window;
+      window.process = { env: { NODE_ENV: 'production' } };
     </script>
 
-    <!-- 3. Base Terminal Styling for smooth loading -->
     <style>
+      :root {
+        --terminal-bg: #020408;
+      }
       body {
         margin: 0;
-        background-color: #020408;
+        background-color: var(--terminal-bg);
+        color: #ffffff;
+        font-family: 'Inter', sans-serif;
         overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
       }
-      /* Prevent FOUC (Flash of Unstyled Content) */
+      /* Loading Pulse for Initial Handshake */
       #root:empty {
-        background: #020408;
+        background: var(--terminal-bg);
         height: 100vh;
         width: 100vw;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #root:empty::after {
+        content: "";
+        width: 40px;
+        height: 40px;
+        border: 2px solid rgba(234, 179, 8, 0.1);
+        border-top-color: #EAB308;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
       }
     </style>
   </head>
-  
+
   <body>
-    <!-- The React Entry Point -->
     <div id="root"></div>
 
-    <!-- The Vite Module Entry -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
-
