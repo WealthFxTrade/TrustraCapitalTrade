@@ -6,12 +6,11 @@ const AuthContext = createContext(null);
 const TOKEN_KEY = 'trustra_token';
 
 export function AuthProvider({ children }) {
-  // Added 'initialized' to ensure the app doesn't flicker during the first API check
-  const [state, dispatch] = useReducer((s, a) => ({ ...s, ...a }), { 
-    user: null, 
+  const [state, dispatch] = useReducer((s, a) => ({ ...s, ...a }), {
+    user: null,
     token: localStorage.getItem(TOKEN_KEY),
     loading: true,
-    initialized: false 
+    initialized: false
   });
 
   const navigate = useNavigate();
@@ -19,14 +18,36 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
-    dispatch({ user: null, token: null, loading: false });
+    dispatch({ user: null, token: null, loading: false, initialized: true });
     navigate('/login');
   }, [navigate]);
+
+  // 🔐 LOGIN HANDLER: Called by Login.jsx
+  const login = async (email, password) => {
+    try {
+      const { data } = await api.post('/auth/login', { email, password });
+      
+      // Save token to browser storage
+      localStorage.setItem(TOKEN_KEY, data.token);
+      
+      // Update global state
+      dispatch({ 
+        user: data.user, 
+        token: data.token, 
+        loading: false, 
+        initialized: true 
+      });
+
+      return data;
+    } catch (error) {
+      throw error; // Let Login.jsx handle the error toast
+    }
+  };
 
   const initAuth = useCallback(async () => {
     const token = localStorage.getItem(TOKEN_KEY);
     const isPublicPage = ['/login', '/register', '/'].includes(pathname);
-    
+
     if (!token) {
       dispatch({ loading: false, initialized: true });
       if (!isPublicPage) navigate('/login');
@@ -34,16 +55,13 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      // Set the token in the API header globally
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
+      // Handshake with Render backend
       const { data } = await api.get('/user/profile');
-      // Sync the global user object
-      dispatch({ 
-        user: data.user || data, 
+      dispatch({
+        user: data.user || data,
         token,
-        loading: false, 
-        initialized: true 
+        loading: false,
+        initialized: true
       });
     } catch (error) {
       console.error("Auth Handshake Failed:", error);
@@ -55,10 +73,9 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
-  // Global helper to update user state without a full refresh
   const setUser = (userData) => dispatch({ user: userData });
 
-  // 1. Loading State - Displayed during the initial handshake
+  // Loading State - High-performance loader
   if (state.loading && !state.initialized) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center">
@@ -68,7 +85,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ ...state, logout, setUser, dispatch }}>
+    <AuthContext.Provider value={{ ...state, login, logout, setUser, dispatch }}>
       {children}
     </AuthContext.Provider>
   );
