@@ -1,80 +1,72 @@
-// src/pages/Auth/ForgotPassword.jsx
+// src/components/ForgotPassword.jsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
-import api from '../../api/api'; // FIXED PATH
-import { Mail, RefreshCw } from 'lucide-react';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email.trim()) return toast.error('Please enter your email');
+    if (!email) return setError('Email is required');
+
     setLoading(true);
+    setError('');
+    setMessage('');
 
     try {
-      await api.post('/auth/forgot-password', { email: email.trim() });
-      toast.success('Password reset link sent to your email');
-      setEmail('');
+      const res = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Request failed');
+
+      setMessage('Password reset link sent! Check your email.');
     } catch (err) {
-      const message = err.response?.data?.message || 'Failed to send reset link';
-      toast.error(message);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#05070a] flex flex-col justify-center px-6">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-10">
-        <Mail className="h-12 w-12 text-blue-500 mx-auto mb-4" />
-        <h2 className="text-3xl font-black uppercase italic text-white">Forgot Password</h2>
-        <p className="text-slate-500 text-xs mt-2 uppercase tracking-widest font-bold">
-          Enter your email to reset your password
-        </p>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-950 p-6">
+      <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 glass">
+        <h1 className="text-3xl font-bold text-indigo-400 mb-6 text-center">Forgot Password</h1>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white/5 p-8 rounded-[2rem] border border-white/10 backdrop-blur-xl shadow-xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="email"
-                placeholder="you@example.com"
-                className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-12 pr-4 outline-none focus:border-blue-500 transition-colors duration-200 text-white"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                disabled={loading}
-              />
-            </div>
+        {message && <p className="text-green-400 text-center mb-4">{message}</p>}
+        {error && <p className="text-red-400 text-center mb-4">{error}</p>}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full bg-blue-600 hover:bg-blue-500 py-4 rounded-xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-blue-600/20 transition-all duration-200 ${
-                loading ? 'opacity-70 cursor-not-allowed' : 'hover:shadow-blue-700/30'
-              }`}
-            >
-              {loading ? <RefreshCw className="animate-spin" size={18} /> : 'Send Reset Link'}
-            </button>
-          </form>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="email"
+            placeholder="Your Email Address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+          />
 
-          <div className="mt-6 text-center text-xs space-y-3">
-            <Link
-              to="/login"
-              className="text-blue-400 hover:text-blue-300 transition-colors block"
-            >
-              Back to Login
-            </Link>
-          </div>
-        </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-bold text-lg transition disabled:opacity-50"
+          >
+            {loading ? 'Sending...' : 'Send Reset Link'}
+          </button>
+        </form>
 
-        <p className="mt-10 text-center text-[9px] font-bold text-slate-700 uppercase tracking-widest">
-          © 2016–2026 Trustra Capital Trade • SSL Encrypted
+        <p className="text-gray-400 text-center mt-6">
+          Remembered your password?{' '}
+          <Link to="/login" className="text-indigo-400 hover:underline">
+            Login
+          </Link>
         </p>
       </div>
     </div>

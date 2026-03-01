@@ -2,91 +2,59 @@
 export default {
   content: [
     './index.html',
-    './src/**/*.{js,ts,jsx,tsx,mdx}', // includes all components, pages, hooks, etc.
+    './src/**/*.{js,ts,jsx,tsx,mdx}',
   ],
-  darkMode: 'class', // prefers manual dark mode toggle via class
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
+        // High-end Terminal Palette
+        yellow: {
+          500: '#EAB308', // The core accent color
+          400: '#FACC15',
+          200: '#FEF08A',
+        },
+        // Match the deep space background from the code
+        slate: {
+          950: '#020617', 
+          900: '#0f172a',
+        },
         primary: {
           DEFAULT: '#6366f1',
           dark: '#4f46e5',
-          light: '#818cf8',
-          50: '#eef2ff',
-          100: '#e0e7ff',
         },
-        success: '#10b981',
-        danger: '#ef4444',
-        warning: '#f59e0b',
-        info: '#3b82f6',
-        background: '#0f172a',
-        surface: '#1e293b',
-        'surface-hover': '#334155',
-        'surface-active': '#475569',
-        text: '#f1f5f9',
-        'text-muted': '#94a3b8',
-        'text-subtle': '#64748b',
       },
       fontFamily: {
-        sans: [
-          'Inter var',
-          'Inter',
-          'ui-sans-serif',
-          'system-ui',
-          '-apple-system',
-          'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
-          'Arial',
-          'Noto Sans',
-          'sans-serif',
-        ],
-        mono: [
-          'JetBrains Mono',
-          'ui-monospace',
-          'SFMono-Regular',
-          'Menlo',
-          'Monaco',
-          'Consolas',
-          'Liberation Mono',
-          'Courier New',
-          'monospace',
-        ],
-      },
-      spacing: {
-        18: '4.5rem',
-        128: '32rem',
-        144: '36rem',
+        // 'Inter' is great, but we add 'JetBrains Mono' for that code-terminal feel
+        sans: ['Inter var', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
+        '3xl': '1.5rem',
         '4xl': '2rem',
         '5xl': '2.5rem',
       },
-      keyframes: {
-        'fade-in': {
-          '0%': { opacity: '0', transform: 'translateY(8px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
-        },
-        'scale-in': {
-          '0%': { transform: 'scale(0.95)', opacity: '0' },
-          '100%': { transform: 'scale(1)', opacity: '1' },
-        },
+      boxShadow: {
+        // Adds the glowing effect seen on the Node cards
+        '3xl': '0 35px 60px -15px rgba(0, 0, 0, 0.3)',
+        'yellow-glow': '0 0 20px rgba(234, 179, 8, 0.15)',
       },
       animation: {
-        'fade-in': 'fade-in 0.5s ease-out forwards',
-        'scale-in': 'scale-in 0.4s ease-out forwards',
+        // Adds the smooth entry animation used in the pages
+        'in': 'fade-in 0.7s ease-out forwards',
+        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
       },
-      boxShadow: {
-        glass: '0 4px 30px rgba(0, 0, 0, 0.1)',
-        'inner-glow': 'inset 0 2px 10px rgba(99, 102, 241, 0.15)',
+      keyframes: {
+        'fade-in': {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
     },
   },
   plugins: [
-    // Uncomment if needed:
-    // require('@tailwindcss/forms'),
-    // require('@tailwindcss/typography'),
-    // require('@tailwindcss/aspect-ratio'),
+    // Adding the animation plugin for 'animate-in' classes
+    require("tailwindcss-animate"),
   ],
 };
+

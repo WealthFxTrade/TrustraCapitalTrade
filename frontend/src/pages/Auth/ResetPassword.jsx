@@ -1,112 +1,89 @@
+// src/components/ResetPassword.jsx
 import { useState } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
-import api from '../api/api.js';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
 
 export default function ResetPassword() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const queryParams = new URLSearchParams(location.search);
-  const token = queryParams.get('token'); // token from email link
-
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token');
+  const navigate = useNavigate();
+
+  const handleReset = async (e) => {
     e.preventDefault();
+    if (!password || !confirm) return setError('All fields are required');
+    if (password !== confirm) return setError('Passwords do not match');
 
-    if (!password || password.length < 8) {
-      return toast.error('Password must be at least 8 characters');
-    }
-    if (password !== confirmPassword) {
-      return toast.error('Passwords do not match');
-    }
-    if (!token) {
-      return toast.error('Invalid or missing reset token');
-    }
+    setLoading(true);
+    setError('');
+    setSuccess('');
 
-    setIsLoading(true);
     try {
-      const response = await api.post('/auth/reset-password', {
-        token,
-        password,
+      const res = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, password }),
       });
 
-      toast.success('Password reset successful! You can now log in.');
-      navigate('/login', { replace: true });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Reset failed');
+
+      setSuccess('Password reset successfully! Redirecting to login...');
+      setTimeout(() => navigate('/login'), 3000);
     } catch (err) {
-      const message =
-        err.response?.data?.message || 'Failed to reset password';
-      toast.error(message);
+      setError(err.message);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
+  if (!token) return <p className="text-center mt-10 text-red-400">Invalid reset link</p>;
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#05070a] px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
-        <div className="bg-[#0a0d14] p-8 rounded-2xl shadow-xl border border-white/10">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-black text-white tracking-tight uppercase italic">
-              Reset Password
-            </h2>
-            <p className="mt-3 text-slate-400 text-sm">
-              Enter your new password below to update your account
-            </p>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-950 p-6">
+      <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 glass">
+        <h1 className="text-3xl font-bold text-indigo-400 mb-6 text-center">Reset Password</h1>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="relative">
-              <input
-                type="password"
-                placeholder="New Password"
-                className="w-full pl-4 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white focus:border-blue-500 outline-none transition-all disabled:opacity-60"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading}
-                autoComplete="new-password"
-                required
-              />
-            </div>
+        {success && <p className="text-green-400 text-center mb-4">{success}</p>}
+        {error && <p className="text-red-400 text-center mb-4">{error}</p>}
 
-            <div className="relative">
-              <input
-                type="password"
-                placeholder="Confirm New Password"
-                className="w-full pl-4 pr-4 py-4 bg-black/40 border border-white/10 rounded-xl text-white focus:border-blue-500 outline-none transition-all disabled:opacity-60"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                disabled={isLoading}
-                autoComplete="new-password"
-                required
-              />
-            </div>
+        <form onSubmit={handleReset} className="space-y-4">
+          <input
+            type="password"
+            placeholder="New Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+          />
+          <input
+            type="password"
+            placeholder="Confirm Password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
+          />
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-xl shadow-blue-600/20 transition-all ${
-                isLoading
-                  ? 'bg-blue-600/50 text-slate-300 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-500 hover:shadow-blue-700/30 text-white'
-              }`}
-            >
-              {isLoading ? 'Resetting...' : 'Reset Password'}
-            </button>
-          </form>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-bold text-lg transition disabled:opacity-50"
+          >
+            {loading ? 'Resetting...' : 'Reset Password'}
+          </button>
+        </form>
 
-          <div className="mt-6 text-center text-sm text-slate-400">
-            Remembered your password?{' '}
-            <Link
-              to="/login"
-              className="text-blue-400 font-bold hover:underline"
-            >
-              Sign In
-            </Link>
-          </div>
-        </div>
+        <p className="text-gray-400 text-center mt-6">
+          Back to{' '}
+          <Link to="/login" className="text-indigo-400 hover:underline">
+            Login
+          </Link>
+        </p>
       </div>
     </div>
   );

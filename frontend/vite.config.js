@@ -10,18 +10,29 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    strictPort: false, // Allows Vite to switch to 5174 if 5173 is busy
     proxy: {
       '/api': {
-        // MATCHING YOUR BACKEND PORT 10000
-        target: 'http://localhost:10000', 
+        // HANDSHAKE: Mapping to your local Node server on 10000
+        target: 'http://localhost:10000',
         changeOrigin: true,
         secure: false,
+        // Ensures /api/login in frontend hits /api/login in backend
+        rewrite: (path) => path.replace(/^\/api/, '/api'), 
       },
     },
   },
   resolve: {
     alias: {
+      // Allows using '@/' for cleaner imports in your components
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    // Optimizes build for production terminal performance
+    minify: 'terser',
+  },
 });
+

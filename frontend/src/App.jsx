@@ -1,59 +1,75 @@
-// src/App.jsx
-import { lazy, Suspense } from 'react';
+import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
+import { Toaster } from 'react-hot-toast';
 
-// Lazy load pages
-const LandingPage = lazy(() => import('./pages/Landing'));
-const Login = lazy(() => import('./pages/Auth/Login'));
-const Signup = lazy(() => import('./pages/Auth/Signup'));
-const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
-const Invest = lazy(() => import('./pages/Invest'));
-const Layout = lazy(() => import('./components/layout/Layout'));
+// Auth & Protection
+import ProtectedRoute from './components/auth/ProtectedRoute';
+import AdminRoute from './components/auth/AdminRoute';
 
-// Professional 2026 Trustra Loading State
-const LoadingFallback = () => (
-  <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center">
-    <div className="relative">
-      <div className="w-20 h-20 border-2 border-yellow-500/20 rounded-full animate-ping absolute inset-0" />
-      <div className="w-20 h-20 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-    <p className="mt-8 text-yellow-500 font-black uppercase tracking-[0.4em] text-[10px] animate-pulse">
-      Trustra Node: Syncing...
-    </p>
-  </div>
-);
+// Layout
+import MainLayout from './components/layout/MainLayout';
+
+// Public Pages
+import Landing from './pages/Landing';
+import Login from './pages/Auth/Login';
+import Register from './pages/Auth/Signup'; // Ensure filename is Signup.jsx
+
+// Dashboard Pages
+import Dashboard from './pages/Dashboard/Dashboard';
+import Withdraw from './pages/Dashboard/Withdraw';
+import Profile from './pages/Dashboard/Profile';
+import Invest from './pages/Dashboard/Invest';
+import KYCUpload from './pages/Dashboard/KYC'; // Path: src/pages/Dashboard/KYC.jsx
+
+// Admin Pages
+import AdminDashboard from './pages/Admin/AdminDashboard';
 
 export default function App() {
-  const { user, initialized } = useAuth();
-
-  // Prevents UI flicker during initial token verification
-  if (!initialized) return <LoadingFallback />;
-
   return (
-    <Suspense fallback={<LoadingFallback />}>
+    <div className="min-h-screen bg-[#020408] text-white selection:bg-yellow-500/30 relative overflow-x-hidden">
+      {/* Global Texture Overlay */}
+      <div className="bg-grain fixed inset-0 pointer-events-none z-[100] opacity-20" />
+
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 5000,
+          style: {
+            background: '#0a0c10',
+            color: '#fff',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            borderRadius: '24px',
+            fontSize: '11px',
+            fontWeight: '900',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+          },
+        }}
+      />
+
       <Routes>
-        {/* Public Landing Page */}
-        <Route path="/" element={<LandingPage />} />
+        {/* Public Routes */}
+        <Route path="/" element={<Landing />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
-        {/* Guest-only Routes: Redirect to dashboard if already logged in */}
-        <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
-        <Route path="/register" element={user ? <Navigate to="/dashboard" replace /> : <Signup />} />
-
-        {/* ─── Protected Routes (Authenticated Users Only) ─── */}
-        <Route element={<ProtectedRoute />}>
-          {/* All routes inside here will automatically use the Layout wrapper */}
-          <Route element={<Layout />}>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/invest" element={<Invest />} />
-            {/* Add more internal pages here */}
-          </Route>
+        {/* User Terminal */}
+        <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/invest" element={<Invest />} />
+          <Route path="/withdraw" element={<Withdraw />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/kyc" element={<KYCUpload />} />
         </Route>
 
-        {/* Global Catch-all */}
+        {/* Admin Terminal */}
+        <Route element={<AdminRoute><MainLayout /></AdminRoute>}>
+          <Route path="/admin" element={<AdminDashboard />} />
+        </Route>
+
+        {/* 404 & Redirects */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </Suspense>
+    </div>
   );
 }

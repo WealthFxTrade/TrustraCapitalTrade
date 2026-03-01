@@ -1,97 +1,64 @@
-/**
- * src/api/api.js - Production v8.4.1
- * Centralized API handler for Trustra Capital Trade.
- * Synchronized with Backend Port: 10000
- */
 import axios from 'axios';
 
-// 1. Base Configuration
-// In dev, we use '/api' to trigger the Vite Proxy. In prod, we use the Render URL.
-const BASE_URL = import.meta.env.MODE === 'development' 
+const TOKEN_KEY = 'trustra_token';
+
+// HANDSHAKE LOGIC: 
+// In development, we use '/api' to trigger the Vite Proxy.
+// In production, we use the live Render URL.
+const isDev = import.meta.env.MODE === 'development';
+const BASE_URL = isDev 
   ? '/api' 
-  : (import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api');
+  : (import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com');
 
 const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
 });
 
-// 2. Request Interceptor: Attach JWT Token from LocalStorage
+// REQUEST INTERCEPTOR: Inject the Secure Cipher (Token)
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem(TOKEN_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
-}, (error) => {
-  return Promise.reject(error);
 });
 
-// 3. Response Interceptor: Global Error Handling (Session Expiry)
+// RESPONSE INTERCEPTOR: Handle Authentication Failures (401)
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      // Clear session if token is invalid or expired
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      // Only redirect if not already on the login page
-      if (!window.location.pathname.includes('/login')) {
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
+      // Optional: Redirect to login terminal if unauthorized
+      if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }
     }
-    return Promise.reject(error);
+    return Promise.reject(err);
   }
 );
 
-/**
- * ─── AUTHENTICATION ───
- */
-export const loginUser = async (credentials) => {
-  const { data } = await api.post('/auth/login', credentials);
-  return data; // Returns { token, user }
-};
+/** --- PROTOCOL EXPORTS --- **/
 
-export const registerUser = async (userData) => {
-  const { data } = await api.post('/auth/register', userData);
-  return data;
-};
-
-/**
- * ─── USER & PROFILE ───
- */
 export const fetchUserProfile = async () => {
   const { data } = await api.get('/user/profile');
-  return data; // Returns user object directly
-};
-
-export const updateProfile = async (profileData) => {
-  const { data } = await api.put('/user/profile', profileData);
   return data;
 };
 
-/**
- * ─── ADMINISTRATIVE (Admin Only) ───
- */
 export const fetchUsers = async () => {
   const { data } = await api.get('/user/all');
-  return data; // Returns Array of users directly
-};
-
-export const updateUserStatus = async (userId, statusData) => {
-  const { data } = await api.patch(`/user/status/${userId}`, statusData);
   return data;
 };
 
-/**
- * ─── ASSETS & TRADING ───
- */
-export const fetchBitcoinMarket = async () => {
-  const { data } = await api.get('/bitcoin/market');
+export const submitKYC = async (formData) => {
+  // Multimodal submission (Files + Data)
+  const { data } = await api.post('/user/kyc-upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
   return data;
 };
 
 export default api;
+

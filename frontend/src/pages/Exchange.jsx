@@ -1,108 +1,128 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/api';
-import { Repeat, ArrowDown, Loader2, Info } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { RefreshCcw, ArrowDown, Wallet, AlertCircle, Loader2 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 export default function Exchange() {
-  const { user } = useAuth();
-  const [btcInput, setBtcInput] = useState('');
-  const [eurPreview, setEurPreview] = useState(0);
+  const { user, setUser } = useAuth();
+  const [btcAmount, setBtcAmount] = useState('');
+  const [eurResult, setEurResult] = useState(0);
   const [rate, setRate] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Fetch current market rate on mount
+  // Fetch live market rate for conversion
   useEffect(() => {
     const getRate = async () => {
       try {
         const { data } = await api.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur');
         setRate(data.bitcoin.eur);
       } catch (err) {
-        console.error("Oracle sync failed");
+        toast.error("Oracle offline. Market rate unavailable.");
       }
     };
     getRate();
   }, []);
 
+  // Update EUR preview as user types
   useEffect(() => {
-    setEurPreview(Number(btcInput) * rate);
-  }, [btcInput, rate]);
+    const amount = parseFloat(btcAmount) || 0;
+    setEurResult(Number((amount * rate).toFixed(2)));
+  }, [btcAmount, rate]);
 
-  const executeSwap = async () => {
-    if (!btcInput || btcInput <= 0) return toast.error("Enter amount");
+  const handleSwap = async (e) => {
+    e.preventDefault();
+    if (!btcAmount || btcAmount <= 0) return toast.error("Enter a valid amount");
+    if (btcAmount > (user?.balances?.BTC || 0)) return toast.error("Insufficient BTC Liquidity");
+
     setLoading(true);
     try {
-      const { data } = await api.post('/user/exchange', { btcAmount: parseFloat(btcInput) });
-      toast.success(data.message);
-      setBtcInput('');
-      // The socket.io listener in App.jsx will automatically update the Global Context balance
+      // Endpoint created in our previous backend session
+      const { data } = await api.post('/exchange/btc-to-eur', { amount: parseFloat(btcAmount) });
+      
+      toast.success(`Success: €${eurResult.toLocaleString()} added to node`);
+      setUser(data.user); // Update global auth state with new balances
+      setBtcAmount('');
     } catch (err) {
-      toast.error(err.response?.data?.message || "Exchange failed");
+      toast.error(err.response?.data?.message || "Exchange protocol failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-xl mx-auto py-10 px-4">
+    <div className="max-w-xl mx-auto py-10 px-4 animate-in fade-in duration-700">
       <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-6 opacity-5 rotate-12">
-          <Repeat size={120} />
-        </div>
+        {/* Decorative Background Glow */}
+        <div className="absolute -top-24 -right-24 w-48 h-48 bg-yellow-500/10 blur-[80px] rounded-full pointer-events-none" />
 
         <h1 className="text-2xl font-black italic uppercase mb-8 flex items-center gap-3">
-          Instant <span className="text-yellow-500">Liquidity</span>
+          <RefreshCcw className="text-yellow-500" /> Capital <span className="text-yellow-500">Swap</span>
         </h1>
 
-        <div className="space-y-3">
-          {/* BTC FROM */}
-          <div className="bg-black/40 p-6 rounded-2xl border border-white/10">
+        <form onSubmit={handleSwap} className="space-y-4">
+          {/* BTC Input Area */}
+          <div className="bg-black/40 p-6 rounded-3xl border border-white/10 group focus-within:border-yellow-500/30 transition-all">
             <div className="flex justify-between mb-2">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Sell (BTC)</span>
-              <span className="text-[10px] font-black text-yellow-500">Available: {user?.balances?.BTC || 0}</span>
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Sell BTC</span>
+              <span className="text-[10px] font-black text-yellow-500">Available: {user?.balances?.BTC || 0} BTC</span>
             </div>
-            <input 
-              type="number" 
-              value={btcInput}
-              onChange={(e) => setBtcInput(e.target.value)}
-              className="bg-transparent text-3xl font-bold w-full outline-none placeholder:text-gray-800"
-              placeholder="0.00000000"
-            />
+            <div className="flex items-center gap-4">
+              <input 
+                type="number" 
+                step="any"
+                value={btcAmount}
+                onChange={(e) => setBtcAmount(e.target.value)}
+                className="bg-transparent text-3xl font-bold w-full outline-none placeholder:text-gray-800"
+                placeholder="0.000000"
+              />
+              <div className="bg-white/5 px-4 py-2 rounded-xl text-xs font-black">BTC</div>
+            </div>
           </div>
 
+          {/* Swap Divider */}
           <div className="flex justify-center -my-6 relative z-10">
-            <div className="bg-yellow-500 p-3 rounded-full text-black shadow-xl">
-              <ArrowDown size={20} />
+            <div className="bg-yellow-500 text-black p-3 rounded-full border-4 border-[#0a0c10] shadow-xl">
+              <ArrowDown size={20} strokeWidth={3} />
             </div>
           </div>
 
-          {/* EUR TO */}
-          <div className="bg-black/40 p-6 rounded-2xl border border-white/10">
+          {/* EUR Output Area */}
+          <div className="bg-black/40 p-6 rounded-3xl border border-white/10 group">
             <div className="flex justify-between mb-2">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Receive (EUR)</span>
+              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Receive EUR</span>
+              <span className="text-[10px] font-black text-gray-500">Rate: €{rate.toLocaleString()}</span>
             </div>
-            <div className="text-3xl font-bold text-gray-400">
-              €{eurPreview.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <div className="flex items-center gap-4">
+              <div className="text-3xl font-bold w-full text-white/50">
+                {eurResult.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+              </div>
+              <div className="bg-white/5 px-4 py-2 rounded-xl text-xs font-black text-yellow-500">EUR</div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-8 p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-xl flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <Info size={14} className="text-yellow-500" />
-            <span className="text-[10px] font-black text-gray-500 uppercase">Current Rate</span>
+          <div className="p-4 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl flex gap-3 items-center">
+            <AlertCircle size={16} className="text-yellow-500 shrink-0" />
+            <p className="text-[10px] text-gray-500 leading-relaxed italic uppercase font-bold">
+              Precision Swap: No hidden fees. Instant node credit.
+            </p>
           </div>
-          <span className="text-[10px] font-black text-white">1 BTC ≈ €{rate.toLocaleString()}</span>
-        </div>
 
-        <button 
-          onClick={executeSwap}
-          disabled={loading}
-          className="w-full mt-8 py-5 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest rounded-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95"
-        >
-          {loading ? <Loader2 className="animate-spin" size={20} /> : <Repeat size={20} />}
-          Execute Exchange
-        </button>
+          <button 
+            type="submit"
+            disabled={loading || !btcAmount}
+            className="w-full py-5 bg-yellow-500 hover:bg-yellow-400 text-black font-black uppercase tracking-widest rounded-[1.5rem] transition-all flex items-center justify-center gap-3 active:scale-95 disabled:opacity-50 disabled:grayscale"
+          >
+            {loading ? <Loader2 className="animate-spin" size={20} /> : <RefreshCcw size={20} />}
+            Confirm Exchange
+          </button>
+        </form>
+      </div>
+
+      <div className="mt-8 text-center">
+        <p className="text-[9px] text-gray-700 uppercase font-black tracking-[0.3em]">
+          Secured by Trustra Multi-Sig Liquidity Pool
+        </p>
       </div>
     </div>
   );

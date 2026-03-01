@@ -1,15 +1,43 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
-<head>
-  <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trustra Capital Trade | Secure Digital Asset Management</title>
-</head>
-<body class="bg-slate-950 text-gray-100 antialiased font-sans">
-  <div id="root"></div>
-  <!-- Path must match your file structure exactly -->
-  <script type="module" src="/src/main.jsx"></script>
-</body>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TRUSTRA CAPITAL | Automated Wealth Terminal</title>
+
+    <!-- 1. Google Fonts: Inter (Sans) & JetBrains Mono (Terminal) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com" rel="stylesheet">
+
+    <!-- 2. Polyfill for legacy library compatibility -->
+    <script>
+      window.process = { env: { NODE_ENV: 'development' } };
+      window.global = window;
+    </script>
+
+    <!-- 3. Base Terminal Styling for smooth loading -->
+    <style>
+      body {
+        margin: 0;
+        background-color: #020408;
+        overflow-x: hidden;
+      }
+      /* Prevent FOUC (Flash of Unstyled Content) */
+      #root:empty {
+        background: #020408;
+        height: 100vh;
+        width: 100vw;
+      }
+    </style>
+  </head>
+  
+  <body>
+    <!-- The React Entry Point -->
+    <div id="root"></div>
+
+    <!-- The Vite Module Entry -->
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
 

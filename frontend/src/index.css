@@ -1,93 +1,86 @@
-/* src/index.css */
+/* 1. TAILWIND CORE - Moved to the top for proper layering */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* 2. THEME VARIABLES */
 :root {
-  /* BRAND COLORS: Matching Signup.jsx Yellow/Gold */
   --primary: #eab308;          /* yellow-500 */
   --primary-dark: #ca8a04;     /* yellow-600 */
   --primary-light: #fde047;    /* yellow-300 */
+
+  --background: #020408;       /* DEEP BLACK */
+  --surface: #0a0c10;          /* TERMINAL GREY */
+  --surface-hover: #1e293b;    
   
-  /* THEME COLORS: Deep Slate / Black */
-  --background: #020617;       /* slate-950 (MATCHES YOUR JSX) */
-  --surface: #0f172a;          /* slate-900 */
-  --surface-hover: #1e293b;    /* slate-800 */
-  
-  --text: #f8fafc;             /* slate-50 */
-  --text-muted: #94a3b8;       /* slate-400 */
-  --text-subtle: #475569;      /* slate-500 */
-  
-  --border: rgba(234, 179, 8, 0.1); /* Subtle Gold border */
-  --ring: rgba(234, 179, 8, 0.3);   /* Gold focus ring */
-  
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
+  --text: #f8fafc;             
+  --text-muted: #94a3b8;       
+  --border: rgba(234, 179, 8, 0.1); 
+  --ring: rgba(234, 179, 8, 0.3);   
 }
 
-/* ============================================================
-   GLOBAL RESET & SCROLLBAR
-   ============================================================ */
+/* 3. GLOBAL RESET - REMOVED LIME GREEN OVERRIDE */
+html, body, #root {
+  background-color: var(--background) !important;
+  color: var(--text) !important;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
 body {
-  background-color: var(--background);
-  color: var(--text);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
 }
 
-/* Custom Gold Scrollbar */
+/* 4. TERMINAL TEXTURE (The Grain Effect) */
+.bg-grain {
+  background-image: url("https://grainy-gradients.vercel.app");
+  filter: contrast(150%) brightness(100%);
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0.03;
+}
+
+/* 5. CUSTOM GOLD SCROLLBAR */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { 
-  background: var(--primary-dark); 
-  border-radius: 10px; 
+::-webkit-scrollbar-thumb {
+  background: var(--primary-dark);
+  border-radius: 10px;
 }
 
-/* ============================================================
-   NPROGRESS BRANDING (Global Loading Bar)
-   ============================================================ */
-#nprogress .bar {
-  background: var(--primary) !important;
-  height: 3px !important;
-  box-shadow: 0 0 10px var(--primary), 0 0 5px var(--primary);
-  z-index: 9999 !important;
-}
-
-#nprogress .spinner-icon {
-  border-top-color: var(--primary) !important;
-  border-left-color: var(--primary) !important;
-}
-
-/* ============================================================
-   GLASSMORPHISM & INTERACTION
-   ============================================================ */
+/* 6. GLASSMORPHISM UTILITIES */
 .glass {
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(10, 12, 16, 0.7);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
 }
 
-/* Selection highlight */
+/* 7. SELECTION & INTERACTION */
 ::selection {
   background: var(--primary);
-  color: #000; /* Black text on gold highlight looks premium */
+  color: #000;
 }
-
-/* ============================================================
-   Z-INDEX & CLICKABILITY FIXES
-   ============================================================ */
-.sidebar, aside { z-index: 50 !important; }
 
 button, a, .clickable {
   cursor: pointer !important;
   pointer-events: auto !important;
 }
 
-/* Ensure icons don't "steal" the click event from buttons */
 button svg, button span {
   pointer-events: none;
 }
+
+/* 8. NPROGRESS (Loading Bar) */
+#nprogress .bar {
+  background: var(--primary) !important;
+  height: 3px !important;
+  z-index: 9999 !important;
+}
+

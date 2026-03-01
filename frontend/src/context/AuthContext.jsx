@@ -1,131 +1,81 @@
-// src/context/AuthContext.jsx
 import React, { createContext, useReducer, useContext, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
-import api from '../api/api'; 
-import { API_ENDPOINTS } from '../constants/api';
-
-const initialState = {
-  user: null,
-  token: null,
-  loading: true,
-  initialized: false,
-  error: null,
-};
-
-function authReducer(state, action) {
-  switch (action.type) {
-    case 'AUTH_SUCCESS':
-      return {
-        ...state,
-        user: action.payload.user,
-        token: action.payload.token,
-        loading: false,
-        initialized: true,
-        error: null,
-      };
-    case 'AUTH_FAILED':
-      return {
-        ...state,
-        user: null,
-        token: null,
-        loading: false,
-        initialized: true,
-        error: action.payload,
-      };
-    case 'LOGOUT':
-      return { ...initialState, initialized: true, loading: false };
-    case 'SET_LOADING':
-      return { ...state, loading: action.payload };
-    default:
-      return state;
-  }
-}
+import { useNavigate, useLocation } from 'react-router-dom';
+import api from '../api/api';
 
 const AuthContext = createContext(null);
-
-
+const TOKEN_KEY = 'trustra_token';
 
 export function AuthProvider({ children }) {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+  // Added 'initialized' to ensure the app doesn't flicker during the first API check
+  const [state, dispatch] = useReducer((s, a) => ({ ...s, ...a }), { 
+    user: null, 
+    token: localStorage.getItem(TOKEN_KEY),
+    loading: true,
+    initialized: false 
+  });
+
   const navigate = useNavigate();
-  const tokenKey = 'token';
+  const { pathname } = useLocation();
 
-  // Session Initialization
-  useEffect(() => {
-    const initAuth = async () => {
-      const storedToken = localStorage.getItem(tokenKey);
-      
-      if (!storedToken) {
-        dispatch({ type: 'AUTH_FAILED', payload: null });
-        return;
-      }
-
-      try {
-        // Axios instance in api.js automatically attaches the Bearer token
-        const res = await api.get(API_ENDPOINTS.USER.PROFILE);
-        const userData = res.data.user || res.data;
-
-        if (!userData) throw new Error('Invalid profile data');
-
-        dispatch({
-          type: 'AUTH_SUCCESS',
-          payload: { user: userData, token: storedToken },
-        });
-      } catch (err) {
-        console.error('[Auth Init Error]:', err.message);
-        localStorage.removeItem(tokenKey);
-        dispatch({ type: 'AUTH_FAILED', payload: 'Session expired' });
-      }
-    };
-
-    initAuth();
-  }, []);
-
-  // Login Handler
-  const login = useCallback(async (userData, token) => {
-    // Note: The actual API call is now handled in Login.jsx / api.js
-    // This function simply synchronizes the global state.
-    localStorage.setItem(tokenKey, token);
-    dispatch({
-      type: 'AUTH_SUCCESS',
-      payload: { user: userData, token },
-    });
-  }, []);
-
-  // Logout Handler
-  const logout = useCallback(async () => {
-    dispatch({ type: 'SET_LOADING', payload: true });
-    try {
-      await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {});
-    } finally {
-      localStorage.removeItem(tokenKey);
-      dispatch({ type: 'LOGOUT' });
-      toast.success('Secure Node Disconnected');
-      navigate('/login', { replace: true });
-    }
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    dispatch({ user: null, token: null, loading: false });
+    navigate('/login');
   }, [navigate]);
 
+  const initAuth = useCallback(async () => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const isPublicPage = ['/login', '/register', '/'].includes(pathname);
+    
+    if (!token) {
+      dispatch({ loading: false, initialized: true });
+      if (!isPublicPage) navigate('/login');
+      return;
+    }
+
+    try {
+      // Set the token in the API header globally
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      const { data } = await api.get('/user/profile');
+      // Sync the global user object
+      dispatch({ 
+        user: data.user || data, 
+        token,
+        loading: false, 
+        initialized: true 
+      });
+    } catch (error) {
+      console.error("Auth Handshake Failed:", error);
+      logout();
+    }
+  }, [navigate, pathname, logout]);
+
+  useEffect(() => {
+    initAuth();
+  }, [initAuth]);
+
+  // Global helper to update user state without a full refresh
+  const setUser = (userData) => dispatch({ user: userData });
+
+  // 1. Loading State - Displayed during the initial handshake
+  if (state.loading && !state.initialized) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <AuthContext.Provider value={{ ...state, login, logout }}>
-      {!state.initialized ? (
-        <div className="min-h-screen bg-[#020617] flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-12 h-12 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-yellow-500 font-black uppercase tracking-[0.3em] text-[10px]">
-              Initializing Secure Node...
-            </p>
-          </div>
-        </div>
-      ) : (
-        children
-      )}
+    <AuthContext.Provider value={{ ...state, logout, setUser, dispatch }}>
+      {children}
     </AuthContext.Provider>
   );
 }
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };

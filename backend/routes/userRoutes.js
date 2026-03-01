@@ -1,36 +1,26 @@
 import express from 'express';
-import { protect, admin } from '../middleware/authMiddleware.js';
 import { 
-  getProfile, 
-  updateProfile, 
-  getAllUsers,
-  getMyDepositAddress,
-  updateUserStatus,
-  deleteUser
+  getUserProfile, 
+  getMyDepositAddress, 
+  updatePassword, 
+  uploadKYC, 
+  deleteUser, 
+  getAllUsers, 
+  updateUser 
 } from '../controllers/userController.js';
+import { protect, admin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-/**
- * ─── INVESTOR ROUTES ───
- * Standard user operations
- */
-router.get('/profile', protect, getProfile);
-router.put('/profile', protect, updateProfile);
-
-/**
- * @desc    Get/Generate unique deterministic deposit address
- * @route   GET /api/user/deposit-address
- * @access  Private
- */
+// Public/User Routes
+router.get('/profile', protect, getUserProfile);
 router.get('/deposit-address', protect, getMyDepositAddress);
+router.put('/update-password', protect, updatePassword);
+router.post('/kyc-upload', protect, uploadKYC);
 
-/**
- * ─── ADMINISTRATIVE ROUTES ───
- * Only accessible by users with role: 'admin'
- */
+// Admin Routes
 router.get('/all', protect, admin, getAllUsers);
-router.patch('/status/:id', protect, admin, updateUserStatus);
+router.put('/:id', protect, admin, updateUser);
 router.delete('/:id', protect, admin, deleteUser);
 
 export default router;
