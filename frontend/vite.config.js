@@ -1,32 +1,30 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  build: {
-    // Optimizing for production
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
-    rollupOptions: {
-      output: {
-        // Splitting heavy libraries into separate chunks for faster loading
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['lucide-react', 'framer-motion'],
-          charts: ['recharts', 'apexcharts'],
-        },
-      },
+  // Use 'resolve.alias' to redirect Node-only calls to browser-safe versions
+  resolve: {
+    alias: {
+      '@': '/src',
+      'path': 'path-browserify',
     },
   },
-  server: {
-    // Useful if you're testing via Termux on a local network
-    host: true,
-    port: 5173,
+  build: {
+    // This tells Vite/Rollup that these are NOT browser modules
+    rollupOptions: {
+      external: [
+        'node:path', 
+        'node:url', 
+        'node:fs', 
+        '@vitejs/plugin-react'
+      ],
+    },
+  },
+  // This helps when dependencies use 'process' or Node globals
+  define: {
+    'process.env': {},
+    'global': {},
   }
 });
+

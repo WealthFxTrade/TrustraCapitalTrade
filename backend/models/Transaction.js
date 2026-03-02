@@ -1,109 +1,80 @@
-// models/Transaction.js
 import mongoose from 'mongoose';
 
 /**
- * Transaction Schema
- * Represents deposits, withdrawals, investments, profits, and reinvestments.
- * All amounts are positive; use signedAmount for accounting direction.
+ * Transaction Schema v8.4.4
+ * Optimized for Elite Yield Protocol & Secure Handshake
  */
 const transactionSchema = new mongoose.Schema(
   {
-    // Owner of the transaction
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'Transaction must belong to a user'],
+      required: [true, 'Transaction must belong to a user node'],
       index: true,
     },
-
-    // Transaction type
     type: {
       type: String,
       enum: ['deposit', 'withdrawal', 'investment', 'profit', 'reinvest'],
       required: [true, 'Transaction type is required'],
       index: true,
     },
-
-    // Original requested/credited amount (always positive)
     amount: {
       type: Number,
       required: [true, 'Amount is required'],
       min: [0, 'Amount cannot be negative'],
     },
-
-    // Signed amount for accounting (+ deposits/profits, - withdrawals/investments)
     signedAmount: {
       type: Number,
       required: true,
     },
-
-    // Optional fee deducted (positive number)
     fee: {
       type: Number,
       default: 0,
       min: [0, 'Fee cannot be negative'],
     },
-
-    // Net amount after fee (to/from user)
     netAmount: {
       type: Number,
       min: [0, 'Net amount cannot be negative'],
     },
-
-    // Currency (ISO 4217 code)
     currency: {
       type: String,
       default: 'EUR',
       uppercase: true,
       trim: true,
-      minlength: [3, 'Currency must be 3 letters'],
-      maxlength: [3, 'Currency must be 3 letters'],
+      minlength: 3,
+      maxlength: 3,
     },
-
-    // Destination wallet address (for withdrawals)
     walletAddress: {
       type: String,
       trim: true,
       sparse: true,
     },
-
-    // Blockchain transaction hash (if applicable)
     txHash: {
       type: String,
       trim: true,
       sparse: true,
-      index: true, // Single clean index (removed duplicate)
+      index: true,
     },
-
-    // Current status
     status: {
       type: String,
       enum: ['pending', 'completed', 'rejected', 'failed'],
       default: 'pending',
       index: true,
     },
-
-    // Human-readable description
     description: {
       type: String,
       trim: true,
       maxlength: [200, 'Description too long'],
     },
-
-    // Reference to related document (Investment, Withdrawal, etc.)
     referenceId: {
       type: mongoose.Schema.Types.ObjectId,
       sparse: true,
     },
-
-    // Admin/user who last processed it
     processedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null,
     },
-
-    // Payment/origin method
     method: {
       type: String,
       enum: ['crypto', 'bank', 'internal', 'card'],
@@ -118,63 +89,55 @@ const transactionSchema = new mongoose.Schema(
 );
 
 /**
- * Pre-validate hook: Ensure consistent amounts
+ * ── PRE-VALIDATE HANDSHAKE ──
+ * Ensures accounting direction and net amounts are correct
  */
 transactionSchema.pre('validate', function (next) {
-  // Calculate net amount after fee
+  // 1. Calculate net yield/allocation after protocol fees
   this.netAmount = this.amount - (this.fee || 0);
 
-  // Auto-calculate signedAmount if missing
+  // 2. Auto-calculate signedAmount for Ledger (negative for egress)
   if (this.signedAmount == null) {
     const isNegative = ['withdrawal', 'investment'].includes(this.type);
     this.signedAmount = isNegative ? -Math.abs(this.netAmount) : Math.abs(this.netAmount);
   }
 
-  // Safety: netAmount must not be negative
+  // 3. Prevent mathematical overflow
   if (this.netAmount < 0) {
-    this.invalidate('netAmount', 'Net amount cannot be negative after fee deduction');
+    this.invalidate('netAmount', 'Net allocation cannot be negative after fees');
   }
 
   next();
 });
 
 /**
- * Indexes for performance
+ * ── SYSTEM INDEXES ──
  */
-transactionSchema.index({ user: 1, createdAt: -1 });           // User timeline
-transactionSchema.index({ status: 1, createdAt: -1 });         // Pending/completed queries
-transactionSchema.index({ type: 1, createdAt: -1 });           // Type filtering
-// txHash index already defined in field (removed duplicate schema.index)
+transactionSchema.index({ user: 1, createdAt: -1 });
+transactionSchema.index({ status: 1, createdAt: -1 });
 
 /**
- * Virtual: Formatted display string
+ * ── VIRTUALS ──
+ * Formatted string for Terminal UI
  */
 transactionSchema.virtual('formattedAmount').get(function () {
   const sign = this.signedAmount >= 0 ? '+' : '-';
-  return `\( {sign} \){Math.abs(this.netAmount).toLocaleString(undefined, {
+  return `${sign} ${Math.abs(this.netAmount).toLocaleString('de-DE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} ${this.currency}`;
 });
 
 /**
- * Static method: Get all pending withdrawals (for admin queue)
+ * ── STATIC PROTOCOLS ──
  */
 transactionSchema.statics.getPendingWithdrawals = async function (limit = 50) {
   return this.find({ type: 'withdrawal', status: 'pending' })
     .sort({ createdAt: -1 })
     .limit(limit)
-    .populate('user', 'email fullName')
-    .populate('processedBy', 'email fullName');
+    .populate('user', 'email fullName');
 };
 
-/**
- * Static method: Get recent transactions for a user
- */
-transactionSchema.statics.getUserRecent = async function (userId, limit = 20) {
-  return this.find({ user: userId })
-    .sort({ createdAt: -1 })
-    .limit(limit);
-};
+const Transaction = mongoose.model('Transaction', transactionSchema);
+export default Transaction;
 
-export default mongoose.model('Transaction', transactionSchema);

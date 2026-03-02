@@ -1,33 +1,40 @@
 import axios from 'axios';
 
-const TOKEN_KEY = 'trustra_token';
 const isDev = import.meta.env.MODE === 'development';
 const BASE_URL = isDev 
   ? '/api' 
-  : (import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com');
+  : 'https://trustracapitaltrade-backend.onrender.com';
 
 const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
-  timeout: 30000, 
-  headers: { 'Content-Type': 'application/json' },
+  timeout: 45000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Request Interceptor (Inject Token)
+// Interceptor for JWT
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const token = localStorage.getItem('trustra_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
-// 🛰️ EXPLICIT NAMED EXPORT FOR KYC (Fixes Build Error)
+/** 
+ * ── SPECIALIZED KYC UPLOAD ──
+ * This is what KYC.jsx is looking for
+ */
 export const submitKYC = async (formData) => {
-  return await api.post('/user/kyc-upload', formData, {
+  const response = await api.post('/user/kyc-upload', formData, {
     headers: {
-      // Critical for file uploads so the browser sets the boundary
-      'Content-Type': 'multipart/form-data',
+      'Content-Type': 'multipart/form-data', // Required for file uploads
     },
   });
+  return response.data;
 };
 
 export default api;
+

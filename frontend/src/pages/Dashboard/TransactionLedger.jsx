@@ -1,48 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/api';
-import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  Hash,
-  Clock,
-  ExternalLink,
-  Search,
-  Activity,
-  AlertTriangle,
-  Globe,
-  ShieldCheck,
-  ChevronRight,
-  Zap,
-  Loader2
+import { 
+  ArrowDownLeft, ArrowUpRight, Hash, Clock, 
+  ShieldCheck, Zap, AlertTriangle, Loader2 
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { API_ENDPOINTS } from '../../constants/api';
-import AuditReportModal from '../../components/ui/AuditReportModal';
+
+// Dummy component if AuditReportModal isn't built yet
+const AuditReportModal = ({ isOpen, onClose, transaction }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-[#020408]/90 backdrop-blur-xl">
+      <div className="bg-[#0f1218] border border-white/10 p-8 rounded-[2rem] max-w-md w-full relative">
+        <button onClick={onClose} className="absolute top-6 right-6 text-gray-500 hover:text-white">✕</button>
+        <h3 className="text-xl font-black italic uppercase text-yellow-500 mb-4">Audit Proof</h3>
+        <div className="space-y-4 font-mono text-[10px] break-all">
+          <p className="opacity-40 uppercase tracking-widest">Transaction Hash:</p>
+          <p className="text-white">{transaction?.txHash || 'INTERNAL_LEDGER_SYNC'}</p>
+          <p className="opacity-40 uppercase tracking-widest mt-4">Node ID:</p>
+          <p className="text-white">{transaction?._id}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function TransactionLedger() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
-  
-  // Modal State
   const [selectedTx, setSelectedTx] = useState(null);
   const [isAuditOpen, setIsAuditOpen] = useState(false);
 
   useEffect(() => {
     const fetchTransactions = async () => {
       try {
-        const endpoint = API_ENDPOINTS.USER_TRANSACTIONS || '/user/transactions';
-        const res = await api.get(endpoint);
-        const data = res.data?.transactions || res.data || [];
+        // Aligned with backend: GET /api/withdrawal/my (or your dedicated ledger route)
+        const res = await api.get('/withdrawal/my'); 
+        const data = res.data?.data || res.data?.transactions || [];
         setTransactions(Array.isArray(data) ? data : []);
       } catch (err) {
-        console.error('Handshake Error:', err);
-        toast.error('LEDGER SYNC FAILED: CONNECTION REFUSED');
+        toast.error('LEDGER SYNC FAILED: NODE TIMEOUT');
       } finally {
         setLoading(false);
       }
     };
-
     fetchTransactions();
   }, []);
 
@@ -70,19 +73,23 @@ export default function TransactionLedger() {
   }
 
   return (
-    <div className="p-4 md:p-0 min-h-screen bg-transparent text-white font-sans animate-in fade-in duration-700">
+    <div className="p-4 md:p-10 min-h-screen bg-transparent text-white font-sans">
       
       {/* 1. Audit Protocol Banner */}
-      <div className="bg-yellow-500/5 border border-yellow-500/10 rounded-[2.5rem] p-8 mb-12 flex items-start gap-6 max-w-6xl mx-auto relative overflow-hidden group">
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-yellow-500/5 border border-yellow-500/10 rounded-[2.5rem] p-8 mb-12 flex items-start gap-6 max-w-6xl mx-auto relative overflow-hidden group"
+      >
         <div className="absolute top-0 left-0 w-1 h-full bg-yellow-500/40" />
         <AlertTriangle className="text-yellow-500 flex-shrink-0 mt-1" size={28} />
         <div className="space-y-2">
-          <h4 className="font-black text-yellow-500 uppercase tracking-[0.3em] text-[11px]">Audit Protocol v8.4.1 Active</h4>
+          <h4 className="font-black text-yellow-500 uppercase tracking-[0.3em] text-[11px]">Audit Protocol v8.4.4 Active</h4>
           <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest leading-relaxed">
-            All crypto-asset movements are executed via <span className="text-white">Managed Nodes</span>. Transactions marked as <span className="text-yellow-500">'Settled'</span> have cleared the global ledger. Handshake verified by Trustra Security.
+            All extractions are verified via <span className="text-white">AES-256 Handshake</span>. Transactions marked as <span className="text-emerald-500">'Completed'</span> represent finalized blockchain settlement.
           </p>
         </div>
-      </div>
+      </motion.div>
 
       <div className="max-w-6xl mx-auto space-y-12">
         {/* 2. Header & Terminal Filters */}
@@ -102,9 +109,7 @@ export default function TransactionLedger() {
                 key={f}
                 onClick={() => setFilter(f)}
                 className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
-                  filter === f 
-                  ? 'bg-white text-black shadow-xl scale-105' 
-                  : 'text-slate-500 hover:text-white hover:bg-white/5'
+                  filter === f ? 'bg-white text-black shadow-xl scale-105' : 'text-slate-500 hover:text-white'
                 }`}
               >
                 {f}
@@ -113,111 +118,80 @@ export default function TransactionLedger() {
           </div>
         </div>
 
-        {/* 3. Main Data Table */}
-        <div className="bg-[#0a0f1e]/60 backdrop-blur-xl border border-white/5 rounded-[3rem] overflow-hidden shadow-2xl">
+        {/* 3. Terminal Table Protocol */}
+        <div className="bg-white/[0.02] border border-white/5 rounded-[3rem] overflow-hidden backdrop-blur-3xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="bg-white/[0.02] text-slate-500 text-[9px] font-black uppercase tracking-[0.3em] border-b border-white/5">
-                <tr>
-                  <th className="px-10 py-7">Event Identifier</th>
-                  <th className="px-10 py-7">Network Cipher</th>
-                  <th className="px-10 py-7">Quantum (EUR)</th>
-                  <th className="px-10 py-7 text-right">Status</th>
+              <thead>
+                <tr className="bg-white/[0.03] border-b border-white/5">
+                  <th className="px-10 py-8 text-[9px] font-black text-slate-500 uppercase tracking-[0.4em]">Handshake Event</th>
+                  <th className="px-10 py-8 text-[9px] font-black text-slate-500 uppercase tracking-[0.4em] text-center">Amount (€)</th>
+                  <th className="px-10 py-8 text-[9px] font-black text-slate-500 uppercase tracking-[0.4em] text-center">Status</th>
+                  <th className="px-10 py-8 text-[9px] font-black text-slate-500 uppercase tracking-[0.4em] text-right">Verification</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.03]">
-                {filteredLogs.length > 0 ? (
-                  filteredLogs.map((tx) => (
-                    <tr 
-                      key={tx._id || tx.id} 
-                      onClick={() => handleOpenAudit(tx)}
-                      className="hover:bg-white/[0.02] transition-all group cursor-pointer"
+                <AnimatePresence mode="popLayout">
+                  {filteredLogs.map((tx) => (
+                    <motion.tr 
+                      layout
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      key={tx._id} 
+                      className="group hover:bg-white/[0.02] transition-colors"
                     >
                       <td className="px-10 py-8">
-                        <div className="flex items-center gap-5">
-                          <div className={`p-3 rounded-2xl border border-white/5 ${
-                              tx.type === 'deposit' || tx.type === 'profit'
-                                ? 'bg-emerald-500/5 text-emerald-400'
-                                : 'bg-yellow-500/5 text-yellow-500'
-                            }`}
-                          >
-                            {tx.type === 'deposit' || tx.type === 'profit' ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
+                        <div className="flex items-center gap-6">
+                          <div className={`p-4 rounded-2xl ${
+                            ['deposit', 'profit'].includes(tx.type) ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-400'
+                          }`}>
+                            {['deposit', 'profit'].includes(tx.type) ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
                           </div>
                           <div>
-                            <p className="text-sm font-black italic uppercase tracking-tighter text-white group-hover:text-yellow-500 transition-colors">
-                              {tx.description || tx.type?.replace('_', ' ') || 'Internal Transfer'}
-                            </p>
-                            <p className="text-[9px] font-black text-slate-600 flex items-center gap-2 uppercase mt-1.5 tracking-tighter">
-                              <Clock size={10} /> {new Date(tx.createdAt).toLocaleDateString()}
-                            </p>
+                            <h4 className="font-black italic uppercase text-sm tracking-tight">{tx.type}</h4>
+                            <div className="flex items-center gap-2 text-[9px] font-bold text-slate-600 uppercase tracking-widest mt-1">
+                              <Clock size={10} /> {new Date(tx.createdAt).toLocaleDateString('de-DE')}
+                            </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-10 py-8">
-                        <div className="flex items-center gap-2 text-slate-600 group-hover:text-yellow-500/50 transition-colors">
-                          <Hash size={12} />
-                          <code className="text-[10px] font-mono tracking-tighter uppercase">
-                            {tx.txHash ? `${tx.txHash.substring(0, 14)}...` : 'Relay_0x2026'}
-                          </code>
-                        </div>
+                      <td className="px-10 py-8 text-center font-mono font-black italic text-lg">
+                        <span className={tx.signedAmount >= 0 ? 'text-emerald-400' : 'text-white'}>
+                          {tx.signedAmount >= 0 ? '+' : '-'} {Math.abs(tx.amount || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                        </span>
                       </td>
-                      <td className="px-10 py-8">
-                        <span className={`text-lg font-black italic tabular-nums ${
-                            tx.type === 'deposit' || tx.type === 'profit' ? 'text-emerald-400' : 'text-white'
-                          }`}
-                        >
-                          {tx.type === 'deposit' || tx.type === 'profit' ? '+' : '-'}€
-                          {(tx.amount || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                      <td className="px-10 py-8 text-center">
+                        <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                          tx.status === 'completed' ? 'border-emerald-500/20 text-emerald-400 bg-emerald-500/5' :
+                          tx.status === 'pending' ? 'border-yellow-500/20 text-yellow-500 bg-yellow-500/5' :
+                          'border-red-500/20 text-red-400 bg-red-500/5'
+                        }`}>
+                          {tx.status === 'completed' && <ShieldCheck size={10} />}
+                          {tx.status}
                         </span>
                       </td>
                       <td className="px-10 py-8 text-right">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/[0.03] border border-white/5 group-hover:border-yellow-500/30 transition-all">
-                          <div className={`w-1.5 h-1.5 rounded-full ${tx.status === 'Completed' || tx.status === 'Settled' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-yellow-500 animate-pulse'}`} />
-                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
-                            {tx.status || 'Settling'}
-                          </span>
-                        </div>
+                        <button 
+                          onClick={() => handleOpenAudit(tx)}
+                          className="p-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all hover:border-yellow-500/30 group-hover:scale-110"
+                        >
+                          <Hash size={16} className="text-slate-400 group-hover:text-yellow-500" />
+                        </button>
                       </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="p-32 text-center">
-                       <div className="flex flex-col items-center gap-4 opacity-10">
-                         <Search size={48} />
-                         <p className="text-[10px] uppercase font-black tracking-[1em]">Log_Empty</p>
-                       </div>
-                    </td>
-                  </tr>
-                )}
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
               </tbody>
             </table>
           </div>
         </div>
-
-        {/* 4. Footer Identity */}
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-6 px-4 py-8 border-t border-white/5">
-           <div className="flex items-center gap-6 opacity-30">
-              <div className="flex items-center gap-2">
-                <Globe size={14} />
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Node: Frankfurt_Hub</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck size={14} />
-                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">AES-256 Active</span>
-              </div>
-           </div>
-           <p className="text-[10px] font-black text-slate-700 uppercase tracking-widest">
-             Click any record for institutional audit verification
-           </p>
-        </div>
       </div>
 
-      {/* 5. Audit Modal Injection */}
       <AuditReportModal 
         isOpen={isAuditOpen} 
         onClose={() => setIsAuditOpen(false)} 
-        txData={selectedTx} 
+        transaction={selectedTx} 
       />
     </div>
   );
