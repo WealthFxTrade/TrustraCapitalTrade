@@ -11,8 +11,8 @@ import AdminRoute from './components/auth/AdminRoute';
 // Layout
 import MainLayout from './components/layout/MainLayout';
 
-// 🚀 Lazy Loading for Performance (Vercel Optimization)
-const Landing = lazy(() => import('./pages/Landing'));
+// Lazy Loading
+const Landing = lazy(() => import('./components/landing/Landing')); // ← corrected import
 const Login = lazy(() => import('./pages/Auth/Login'));
 const Register = lazy(() => import('./pages/Auth/Signup'));
 const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
@@ -22,7 +22,6 @@ const Invest = lazy(() => import('./pages/Dashboard/Invest'));
 const KYCUpload = lazy(() => import('./pages/Dashboard/KYC'));
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
 
-// 🛰️ LOADING COMPONENT
 const TerminalLoading = () => (
   <div className="min-h-screen bg-[#020408] flex items-center justify-center">
     <div className="w-12 h-12 border-2 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin" />
@@ -32,7 +31,6 @@ const TerminalLoading = () => (
 export default function App() {
   const location = useLocation();
 
-  // Trigger NProgress on route change
   React.useEffect(() => {
     nprogress.start();
     nprogress.done();
@@ -69,7 +67,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
 
-          {/* User Terminal (Nested inside MainLayout via <Outlet />) */}
+          {/* Protected User Routes */}
           <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/invest" element={<Invest />} />
@@ -78,12 +76,12 @@ export default function App() {
             <Route path="/kyc" element={<KYCUpload />} />
           </Route>
 
-          {/* Admin Terminal */}
+          {/* Admin Routes */}
           <Route element={<AdminRoute><MainLayout /></AdminRoute>}>
             <Route path="/admin" element={<AdminDashboard />} />
           </Route>
 
-          {/* 404 & Redirects */}
+          {/* 404 */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
