@@ -1,30 +1,44 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  // Use 'resolve.alias' to redirect Node-only calls to browser-safe versions
   resolve: {
     alias: {
-      '@': '/src',
-      'path': 'path-browserify',
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:10000',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   build: {
-    // This tells Vite/Rollup that these are NOT browser modules
+    outDir: 'dist',
+    minify: 'terser',
+    sourcemap: false, // Security: Prevents raw code exposure in browser tools
     rollupOptions: {
-      external: [
-        'node:path', 
-        'node:url', 
-        'node:fs', 
-        '@vitejs/plugin-react'
-      ],
+      output: {
+        // Splitting heavy libraries into separate chunks for better caching
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('lucide-react')) return 'ui-icons';
+            if (id.includes('axios') || id.includes('react-router')) return 'vendor-core';
+            return 'vendor-libs';
+          }
+        },
+      },
     },
+    chunkSizeWarningLimit: 1000,
   },
-  // This helps when dependencies use 'process' or Node globals
   define: {
-    'process.env': {},
-    'global': {},
+    // browser-safe globals
+    'global': 'window',
   }
 });
-
