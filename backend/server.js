@@ -1,29 +1,22 @@
 import dotenv from 'dotenv';
-dotenv.config();                                                                        
-import express from 'express';                                                          
+dotenv.config();
+import express from 'express';
 import mongoose from 'mongoose';
-import cors from 'cors';                                                                
+import cors from 'cors';
 import helmet from 'helmet';
 
 // ── 0. DYNAMIC CONFIG AUDIT ──
-const REQUIRED_ENVS = ['MONGO_URI', 'JWT_SECRET', 'ENCRYPTION_KEY', 'ENCRYPTION_IV'];   
+const REQUIRED_ENVS = ['MONGO_URI', 'JWT_SECRET']; 
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Verify critical infrastructure before booting
 REQUIRED_ENVS.forEach((key) => {
-  if (!process.env[key]) {
-    if (isProduction) {
-      console.error(`🚨 [FATAL]: ${key} is missing. System shutdown.`);
-      process.exit(1);
-    } else {
-      console.warn(`⚠️ [DEV WARNING]: ${key} missing. Using temporary key.`);
-      process.env[key] = key === 'ENCRYPTION_KEY' 
-        ? 'default_32_char_key_for_dev_only_!!' 
-        : 'default_16_char_iv';
-    }
+  if (!process.env[key] && isProduction) {
+    console.error(`🚨 [FATAL]: ${key} is missing. System shutdown.`);
+    process.exit(1);
   }
 });
 
-// Import routes AFTER env check
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
@@ -37,53 +30,74 @@ const PORT = process.env.PORT || 10000;
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json());
 
-// ✅ FIX: Hardened CORS for Production Handshake
+// ✅ FIX: Robust CORS Handshake
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'https://trustra-capital-trade.vercel.app' 
+].filter(Boolean); // Removes 'undefined' if FRONTEND_URL isn't set
+
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL, 
-    'http://localhost:5173', 
-    'https://trustra-capital-trade.vercel.app' // Add your specific Vercel URL
-  ],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error('CORS Policy: Origin not allowed'), false);
+    }
+    return callback(null, true);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// ── 2. HEALTH CHECK (Instant Load) ──
+// ── 2. HEALTH CHECK ──
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'online',
     database: mongoose.connection.readyState === 1 ? 'connected' : 'syncing',
-    engine: 'Trustra ROI v8.4'
+    timestamp: new Date().toISOString()
   });
 });
 
+// Root terminal view
 app.get('/', (req, res) => {
   res.status(200).send(`
-    <div style="background:#020408; color:#eab308; height:100vh; display:flex; align-items:center; justify-content:center; font-family:sans-serif;">
-      <div style="text-align:center; border:1px solid #eab308; padding:40px; border-radius:10px;">
-        <h1 style="font-style:italic; font-size:40px; margin:0;">TRUSTRA CAPITAL</h1>
-        <p style="color:#fff; opacity:0.5; margin-top:10px;">NODE STATUS: ${mongoose.connection.readyState === 1 ? 'ONLINE' : 'SYNCING...'}</p>
+    <div style="background:#020408; color:#eab308; height:100vh; display:flex; align-items:center; justify-content:center; font-family:monospace;">
+      <div style="text-align:center; border:1px solid #eab308; padding:40px; border-radius:20px; box-shadow: 0 0 20px rgba(234, 179, 8, 0.2);">
+        <h1 style="font-style:italic; font-size:32px; margin:0; letter-spacing: -1px;">TRUSTRA CORE v8.4</h1>
+        <p style="color:#fff; opacity:0.5; margin-top:10px; text-transform:uppercase; font-size:10px; letter-spacing:2px;">
+          Gateway Status: ${mongoose.connection.readyState === 1 ? '● ONLINE' : '○ SYNCING...'}
+        </p>
       </div>
     </div>
   `);
 });
 
-// API Routes
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/withdrawal', withdrawalRoutes);
 
 // ── 3. BOOT SEQUENCE ──
-// Use 0.0.0.0 for external cloud accessibility
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 TRUSTRA CORE LIVE: PORT ${PORT}`);
+const startServer = async () => {
+  try {
+    // Connect to DB with a 5-second timeout to prevent hanging
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000 
+    });
+    console.log('📡 Database Handshake Successful');
 
-  mongoose.connect(process.env.MONGO_URI)
-    .then(() => {
-      console.log('📡 Database Handshake Successful');
-      startRoiEngine(); // Ensure this worker doesn't require arguments
-    })
-    .catch(err => console.error('❌ DB Connection Error:', err.message));
-});
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 TRUSTRA CORE LIVE: PORT ${PORT}`);
+      startRoiEngine(); 
+    });
+  } catch (err) {
+    console.error('❌ Boot Error:', err.message);
+    // Restart logic for Render
+    setTimeout(startServer, 5000);
+  }
+};
+
+startServer();
