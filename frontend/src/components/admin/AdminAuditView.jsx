@@ -1,106 +1,160 @@
-import React, { useEffect, useState } from 'react';
-import { Shield, Activity, Clock, User, Terminal, Search, Filter } from 'lucide-react';
-import api from '../../api/apiService';
-import toast from 'react-hot-toast';
+import React, { useState, useEffect } from 'react';
+import api from '../../api/api';
+import { 
+  X, Shield, CreditCard, Activity, 
+  ArrowDownLeft, ArrowUpRight, Lock, 
+  MapPin, Clock, Loader2 
+} from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { motion } from 'framer-motion';
 
-export default function AdminAuditView() {
-  const [logs, setLogs] = useState([]);
+export default function AdminAuditView({ userId, onClose }) {
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchLogs = async () => {
+    const fetchUserDetails = async () => {
       try {
-        const { data } = await api.get('/admin/audit-logs');
-        if (data.success) setLogs(data.logs);
+        setLoading(true);
+        // Specialized endpoint to get full user history
+        const { data } = await api.get(`/admin/users/${userId}/audit`);
+        setData(data);
       } catch (err) {
-        toast.error("Audit Stream Sync Failed");
+        toast.error("Audit Interrupted: Node data unreachable");
+        onClose();
       } finally {
         setLoading(false);
       }
     };
-    fetchLogs();
-  }, []);
 
-  const getActionColor = (action) => {
-    if (action.includes('REJECT') || action.includes('BAN')) return 'text-red-500 bg-red-500/10';
-    if (action.includes('APPROVE') || action.includes('UNBAN')) return 'text-emerald-500 bg-emerald-500/10';
-    return 'text-blue-500 bg-blue-500/10';
-  };
+    if (userId) fetchUserDetails();
+  }, [userId]);
+
+  if (!userId) return null;
 
   return (
-    <div className="bg-[#0a0d14] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
-      {/* Header Area */}
-      <div className="p-8 border-b border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 bg-white/[0.01]">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-indigo-500/10 rounded-2xl text-indigo-500">
-            <Terminal size={20} />
-          </div>
-          <div>
-            <h2 className="text-xl font-black italic uppercase tracking-tighter text-white">Audit Telemetry</h2>
-            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-1 italic">Immutable System Event Stream</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2 px-4 py-2 bg-black/40 border border-white/5 rounded-xl">
-          <Activity size={14} className="text-emerald-500 animate-pulse" />
-          <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Live Monitoring Active</span>
-        </div>
-      </div>
+    <div className="fixed inset-0 z-[100] flex justify-end">
+      {/* Backdrop */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+      />
 
-      {/* Audit List */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead className="bg-white/[0.01] border-b border-white/5">
-            <tr>
-              <th className="px-8 py-5 text-[9px] font-black text-slate-600 uppercase tracking-[0.2em]">Timestamp</th>
-              <th className="px-8 py-5 text-[9px] font-black text-slate-600 uppercase tracking-[0.2em]">Administrator</th>
-              <th className="px-8 py-5 text-[9px] font-black text-slate-600 uppercase tracking-[0.2em]">Operation</th>
-              <th className="px-8 py-5 text-[9px] font-black text-slate-600 uppercase tracking-[0.2em]">Target Node</th>
-              <th className="px-8 py-5 text-[9px] font-black text-slate-600 uppercase tracking-[0.2em]">IP Source</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {loading ? (
-              [...Array(5)].map((_, i) => (
-                <tr key={i} className="animate-pulse">
-                  <td colSpan="5" className="px-8 py-6 bg-white/[0.01]"></td>
-                </tr>
-              ))
-            ) : logs.map((log) => (
-              <tr key={log._id} className="hover:bg-white/[0.02] transition-colors group">
-                <td className="px-8 py-6">
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <Clock size={12} />
-                    <span className="text-[10px] font-mono">{new Date(log.createdAt).toLocaleString()}</span>
-                  </div>
-                </td>
-                <td className="px-8 py-6">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                      <User size={14} />
+      {/* Slide-over Panel */}
+      <motion.div 
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className="relative w-full max-w-2xl h-full bg-[#05070a] border-l border-white/10 shadow-2xl flex flex-col"
+      >
+        {/* PANEL HEADER */}
+        <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-rose-500/10 rounded-2xl text-rose-500">
+              <Shield size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-black uppercase italic tracking-tighter">Node Investigation</h2>
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Target ID: {userId}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full transition-all">
+            <X size={24} className="text-gray-500" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <Loader2 className="animate-spin text-rose-500 mb-4" size={32} />
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-600">Decrypting Node History...</p>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
+            
+            {/* 1. FINANCIAL SUMMARY */}
+            <section>
+              <h3 className="text-[10px] font-black uppercase text-gray-600 tracking-[0.4em] mb-4">Capital Allocation</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                  <p className="text-[9px] font-black text-gray-500 uppercase mb-1">Primary Balance</p>
+                  <p className="text-2xl font-black italic text-white">€{data.user.balances.EUR?.toLocaleString()}</p>
+                </div>
+                <div className="bg-white/5 p-6 rounded-3xl border border-white/5">
+                  <p className="text-[9px] font-black text-gray-500 uppercase mb-1">Yield Balance</p>
+                  <p className="text-2xl font-black italic text-rose-500">€{data.user.balances.EUR_PROFIT?.toLocaleString()}</p>
+                </div>
+              </div>
+            </section>
+
+            
+
+            {/* 2. SECURITY & LOGINS */}
+            <section>
+              <h3 className="text-[10px] font-black uppercase text-gray-600 tracking-[0.4em] mb-4">Access Logs</h3>
+              <div className="space-y-3">
+                {data.logins?.map((log, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
+                        <Clock size={14} />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold text-white">{new Date(log.timestamp).toLocaleString()}</p>
+                        <p className="text-[9px] text-gray-500 flex items-center gap-1 font-mono uppercase">
+                          <MapPin size={8} /> {log.ipAddress} • {log.userAgent.substring(0, 20)}...
+                        </p>
+                      </div>
                     </div>
-                    <span className="text-[11px] font-bold text-slate-200">{log.admin?.fullName || 'Root Node'}</span>
+                    <span className="text-[8px] font-black text-emerald-500 uppercase bg-emerald-500/10 px-2 py-1 rounded">Success</span>
                   </div>
-                </td>
-                <td className="px-8 py-6">
-                  <span className={`px-3 py-1 rounded-full text-[9px] font-black tracking-widest uppercase ${getActionColor(log.action)}`}>
-                    {log.action.replace('_', ' ')}
-                  </span>
-                </td>
-                <td className="px-8 py-6">
-                  <span className="text-[10px] font-mono text-slate-500">
-                    {log.targetModel}: {log.targetId.slice(-8).toUpperCase()}
-                  </span>
-                </td>
-                <td className="px-8 py-6 text-[10px] font-mono text-slate-600 group-hover:text-blue-500 transition-colors">
-                  {log.ip || '0.0.0.0'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                ))}
+              </div>
+            </section>
+
+            {/* 3. RECENT TRANSACTIONS */}
+            <section>
+              <h3 className="text-[10px] font-black uppercase text-gray-600 tracking-[0.4em] mb-4">Ledger Activity</h3>
+              <div className="space-y-2">
+                {data.transactions?.map((tx, i) => (
+                  <div key={i} className="flex items-center justify-between p-4 hover:bg-white/[0.04] rounded-2xl transition-all border border-transparent hover:border-white/5 group">
+                    <div className="flex items-center gap-4">
+                      {tx.type === 'deposit' ? (
+                        <ArrowDownLeft size={18} className="text-emerald-500" />
+                      ) : (
+                        <ArrowUpRight size={18} className="text-rose-500" />
+                      )}
+                      <div>
+                        <p className="text-xs font-black uppercase text-white">{tx.type}</p>
+                        <p className="text-[9px] text-gray-500 font-bold">{new Date(tx.createdAt).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-xs font-black ${tx.type === 'deposit' ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {tx.type === 'deposit' ? '+' : '-'}€{tx.amount.toLocaleString()}
+                      </p>
+                      <p className="text-[8px] font-black text-gray-600 uppercase tracking-tighter">{tx.status}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+
+        {/* ACTIONS FOOTER */}
+        <div className="p-8 bg-white/[0.02] border-t border-white/5 grid grid-cols-2 gap-4">
+          <button className="flex items-center justify-center gap-2 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">
+            <Lock size={14} /> Reset 2FA
+          </button>
+          <button className="flex items-center justify-center gap-2 py-4 bg-rose-600 hover:bg-rose-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-rose-900/40">
+            <Activity size={14} /> Send Alert
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }
-

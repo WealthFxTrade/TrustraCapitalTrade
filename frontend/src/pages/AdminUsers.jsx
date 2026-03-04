@@ -1,186 +1,184 @@
-// src/pages/AdminUsers.jsx - Production v8.4.1
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, Search, Edit3, Shield, Mail, 
-  Wallet, Trash2, ArrowLeft, RefreshCw,
-  CheckCircle2, AlertCircle, XCircle
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import api from '../api/api';
-import toast from 'react-hot-toast';
+import { 
+  Users, Search, UserMinus, UserCheck, 
+  ShieldAlert, MoreHorizontal, Mail, 
+  Ban, Filter, Loader2, ArrowUpDown
+} from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function AdminUsers() {
-  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [editingBalance, setEditingBalance] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({});
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (p = 1, search = '') => {
     try {
-      const { data } = await api.get('/admin/users');
-      setUsers(data.users || []);
+      setLoading(true);
+      const { data } = await api.get(`/admin/users?page=${p}&search=${search}&limit=12`);
+      setUsers(data.users);
+      setPagination(data.pagination);
     } catch (err) {
-      toast.error("Failed to retrieve user directory.");
+      toast.error("Database Link Severed: Could not sync user directory");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => {
+    fetchUsers(page, searchTerm);
+  }, [page]);
 
-  const handleUpdateBalance = async (userId) => {
-    if (!editingBalance || isNaN(editingBalance)) return toast.error("Enter a valid amount");
-    
+  const handleSearch = (e) => {
+    e.preventDefault();
+    setPage(1);
+    fetchUsers(1, searchTerm);
+  };
+
+  const toggleUserStatus = async (userId, currentStatus) => {
+    const action = currentStatus ? 'DEACTIVATE' : 'ACTIVATE';
+    if (!window.confirm(`PROTOCOL OVERRIDE: ${action} this node?`)) return;
+
     try {
-      await api.put(`/admin/users/${userId}/balance`, { balance: Number(editingBalance) });
-      toast.success("User balance recalibrated");
-      setSelectedUser(null);
-      fetchUsers();
+      await api.patch(`/admin/users/${userId}`, { isActive: !currentStatus });
+      toast.success(`Node ${action}D successfully`);
+      fetchUsers(page, searchTerm);
     } catch (err) {
-      toast.error("Balance update failed");
+      toast.error("Authorization Failure: Override rejected");
     }
   };
 
-  const filteredUsers = users.filter(u => 
-    u.email.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    u.fullName.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
-    <div className="min-h-screen bg-[#020617] text-white p-6 md:p-12 font-sans">
-      <div className="max-w-7xl mx-auto space-y-8">
-        
-        {/* Header & Search */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/admin')} className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <ArrowLeft size={20} className="text-gray-400" />
-            </button>
-            <div>
-              <h1 className="text-3xl font-black uppercase italic tracking-tighter">User Directory</h1>
-              <p className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.4em]">Investor Identity Management</p>
-            </div>
-          </div>
-
-          <div className="relative w-full lg:w-96">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-            <input 
-              type="text"
-              placeholder="Search by Name or Email..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#0a0c10] border border-white/10 rounded-2xl py-4 pl-12 pr-6 text-xs focus:border-yellow-500 transition-all outline-none"
-            />
-          </div>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+      {/* HEADER & SEARCH BAR */}
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+        <div>
+          <h1 className="text-3xl font-black uppercase italic tracking-tighter flex items-center gap-3">
+            <Users className="text-rose-500" /> Node <span className="text-rose-500">Directory</span>
+          </h1>
+          <p className="text-[10px] font-black uppercase text-gray-500 tracking-[0.4em] mt-2">
+            Centralized User Management & Access Control
+          </p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-10">
-          {/* User List Table */}
-          <div className="lg:col-span-2 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-white/[0.02] border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-gray-500">
-                    <th className="p-6">Investor</th>
-                    <th className="p-6">Balance</th>
-                    <th className="p-6">Status</th>
-                    <th className="p-6 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {loading ? (
-                    <tr><td colSpan="4" className="p-20 text-center"><RefreshCw className="animate-spin mx-auto text-yellow-500" /></td></tr>
-                  ) : filteredUsers.map((u) => (
-                    <tr key={u._id} className="hover:bg-white/[0.01] transition-colors group">
-                      <td className="p-6">
-                        <p className="text-sm font-black">{u.fullName}</p>
-                        <p className="text-[10px] text-gray-500 font-bold uppercase">{u.email}</p>
-                      </td>
-                      <td className="p-6">
-                        <p className="text-sm font-black text-emerald-500 italic">€{(u.balance || 0).toLocaleString()}</p>
-                      </td>
-                      <td className="p-6">
-                        {u.kycStatus === 'verified' ? (
-                          <span className="text-[8px] font-black uppercase bg-emerald-500/10 text-emerald-500 px-2 py-1 rounded-full flex items-center gap-1 w-fit">
-                            <CheckCircle2 size={10} /> Verified
-                          </span>
-                        ) : (
-                          <span className="text-[8px] font-black uppercase bg-red-500/10 text-red-500 px-2 py-1 rounded-full flex items-center gap-1 w-fit">
-                            <AlertCircle size={10} /> Unverified
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-6 text-right">
-                        <button 
-                          onClick={() => { setSelectedUser(u); setEditingBalance(u.balance); }}
-                          className="p-2 bg-white/5 rounded-lg hover:bg-yellow-500 hover:text-black transition-all"
-                        >
-                          <Edit3 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <form onSubmit={handleSearch} className="flex w-full xl:w-auto gap-3">
+          <div className="relative flex-1 xl:w-80">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
+            <input 
+              type="text" 
+              placeholder="Search Name, Email, or ID..."
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-xs font-bold text-white focus:border-rose-500/50 outline-none transition-all"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
+          <button className="bg-rose-600 hover:bg-rose-500 text-white p-3 rounded-2xl transition-all shadow-lg shadow-rose-900/20">
+            <Filter size={20} />
+          </button>
+        </form>
+      </div>
 
-          {/* Inspection & Edit Panel */}
-          <div className="lg:col-span-1">
-            {selectedUser ? (
-              <div className="bg-[#0a0c10] border border-yellow-500/30 rounded-[2.5rem] p-8 space-y-8 animate-in slide-in-from-right-10 duration-500">
-                <div className="flex justify-between items-start">
-                  <div className="w-16 h-16 bg-yellow-500 rounded-2xl flex items-center justify-center text-black font-black text-2xl italic shadow-lg shadow-yellow-500/20">
-                    {selectedUser.fullName.charAt(0)}
-                  </div>
-                  <button onClick={() => setSelectedUser(null)} className="text-gray-500 hover:text-white"><XCircle size={24} /></button>
-                </div>
+      
 
-                <div>
-                  <h3 className="text-xl font-black italic uppercase tracking-tighter">{selectedUser.fullName}</h3>
-                  <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mt-1">UID: {selectedUser._id.slice(-10)}</p>
-                </div>
+      {/* USER LISTING */}
+      <div className="bg-[#0a0f1e] border border-white/5 rounded-[3rem] overflow-hidden">
+        {loading ? (
+          <div className="py-40 flex flex-col items-center justify-center">
+            <Loader2 className="animate-spin text-rose-500 mb-4" size={32} />
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-600">Scanning Database Clusters...</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-white/5 text-[9px] font-black uppercase tracking-[0.2em] text-gray-500 border-b border-white/5">
+                <tr>
+                  <th className="px-8 py-6">Investor Profile</th>
+                  <th className="px-8 py-6">KYC Status</th>
+                  <th className="px-8 py-6">Asset Value (EUR)</th>
+                  <th className="px-8 py-6">Node Status</th>
+                  <th className="px-8 py-6 text-right">Overrides</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                <AnimatePresence mode='popLayout'>
+                  {users.map((user) => (
+                    <motion.tr 
+                      layout
+                      key={user._id} 
+                      className="hover:bg-white/[0.01] transition-colors group"
+                    >
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center font-black italic text-rose-500 border border-white/10">
+                            {user.fullName.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-xs font-black uppercase text-white">{user.fullName}</p>
+                            <p className="text-[9px] text-gray-600 font-mono mt-0.5">{user.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md border ${
+                          user.kyc?.status === 'verified' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                          user.kyc?.status === 'pending' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                          'bg-gray-500/10 text-gray-500 border-white/10'
+                        }`}>
+                          {user.kyc?.status || 'unverified'}
+                        </span>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="text-xs font-black text-white">€{(user.balances?.EUR || 0).toLocaleString()}</p>
+                        <p className="text-[9px] text-rose-500 font-bold mt-0.5">Yield: €{(user.balances?.EUR_PROFIT || 0).toLocaleString()}</p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-1.5 w-1.5 rounded-full ${user.isActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500'}`}></span>
+                          <span className="text-[9px] font-black uppercase text-gray-400">{user.isActive ? 'Active' : 'Offline'}</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex justify-end gap-2 opacity-40 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            onClick={() => toggleUserStatus(user._id, user.isActive)}
+                            className={`p-2 rounded-lg transition-all ${user.isActive ? 'bg-rose-500/10 text-rose-500 hover:bg-rose-500' : 'bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500'} hover:text-white`}
+                            title={user.isActive ? "Deactivate Node" : "Activate Node"}
+                          >
+                            {user.isActive ? <Ban size={16} /> : <UserCheck size={16} />}
+                          </button>
+                          <button className="p-2 bg-white/5 text-gray-400 rounded-lg hover:bg-white/10 hover:text-white transition-all">
+                            <MoreHorizontal size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          </div>
+        )}
 
-                <div className="space-y-4 pt-6 border-t border-white/5">
-                  <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Override Balance (EUR)</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-yellow-500 font-black">€</span>
-                    <input 
-                      type="number"
-                      value={editingBalance}
-                      onChange={(e) => setEditingBalance(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-4 pl-10 pr-4 text-xl font-black outline-none focus:border-yellow-500"
-                    />
-                  </div>
-                  <button 
-                    onClick={() => handleUpdateBalance(selectedUser._id)}
-                    className="w-full bg-white text-black py-4 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-yellow-500 transition-all"
-                  >
-                    Apply Correction
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                   <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Account Protocols</p>
-                   <div className="flex flex-wrap gap-2">
-                      <span className="bg-white/5 p-3 rounded-xl border border-white/5 text-[9px] font-black uppercase tracking-widest flex items-center gap-2">
-                        <Mail size={12} className="text-blue-500" /> Send Email
-                      </span>
-                      <button className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl text-[9px] font-black uppercase tracking-widest text-red-500 flex items-center gap-2 hover:bg-red-500 hover:text-white transition-all">
-                        <Trash2 size={12} /> Suspend
-                      </button>
-                   </div>
-                </div>
-              </div>
-            ) : (
-              <div className="bg-[#0a0c10]/50 border border-dashed border-white/10 rounded-[2.5rem] p-12 text-center h-full flex flex-col justify-center items-center">
-                <Shield size={48} className="text-gray-800 mb-6 opacity-20" />
-                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-600">Select an investor profile to initiate inspection protocol.</p>
-              </div>
-            )}
+        {/* PAGINATION */}
+        <div className="p-8 bg-white/5 flex justify-between items-center border-t border-white/5">
+          <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">
+            Total Nodes Detected: {pagination.total || 0}
+          </p>
+          <div className="flex gap-2">
+            {[...Array(pagination.pages || 0)].map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setPage(i + 1)}
+                className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${
+                  page === i + 1 ? 'bg-rose-600 text-white' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
           </div>
         </div>
       </div>

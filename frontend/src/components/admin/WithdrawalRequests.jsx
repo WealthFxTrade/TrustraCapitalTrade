@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../api/api';
-import { 
-  Clock, CheckCircle2, XCircle, ExternalLink, 
-  ArrowUpRight, AlertCircle, Loader2, Filter
+import {
+  Clock, CheckCircle2, XCircle, ExternalLink,
+  ArrowUpRight, AlertCircle, Loader2
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -13,8 +13,10 @@ export default function WithdrawalRequests() {
 
   const fetchWithdrawals = async () => {
     try {
+      setLoading(true);
+      // Ensure this matches your backend response structure
       const { data } = await api.get('/admin/withdrawals');
-      setRequests(data);
+      setRequests(data.withdrawals || data);
     } catch (err) {
       toast.error("Audit Sync Failed: Withdrawal Ledger Unreachable");
     } finally {
@@ -27,18 +29,22 @@ export default function WithdrawalRequests() {
   }, []);
 
   const handleUpdateStatus = async (id, status) => {
-    const confirmMsg = status === 'approved' 
-      ? "Confirm: Have you manually processed this payout to the external wallet?" 
-      : "Confirm: Are you rejecting this withdrawal request?";
-    
-    if (!window.confirm(confirmMsg)) return;
+    let txHash = null;
+
+    if (status === 'approved') {
+      txHash = prompt("Enter Blockchain Transaction Hash (TXID) to authorize payment:");
+      if (!txHash) return toast.error("TXID is required to clear this payout.");
+    } else {
+      if (!window.confirm("Confirm: Are you rejecting this withdrawal? Funds will be restored to the user.")) return;
+    }
 
     try {
-      await api.put(`/admin/withdrawals/${id}`, { status });
-      toast.success(`Protocol: Request marked as ${status}`);
+      // Corrected to use PATCH and our specific status endpoint
+      await api.patch(`/admin/withdrawals/${id}/status`, { status, txHash });
+      toast.success(`Protocol: Request marked as ${status.toUpperCase()}`);
       fetchWithdrawals();
     } catch (err) {
-      toast.error("Protocol Error: Status update failed");
+      toast.error(err.response?.data?.message || "Protocol Error: Status update failed");
     }
   };
 
@@ -46,7 +52,7 @@ export default function WithdrawalRequests() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Header & Filter Control */}
+      {/* HEADER & FILTER CONTROL */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-3xl font-black uppercase italic tracking-tighter flex items-center gap-3">
@@ -70,7 +76,9 @@ export default function WithdrawalRequests() {
         </div>
       </div>
 
-      {/* Requests Ledger */}
+      
+
+      {/* REQUESTS LEDGER */}
       <div className="bg-[#0a0f1e] border border-white/5 rounded-[2.5rem] overflow-hidden">
         {loading ? (
           <div className="py-32 flex flex-col items-center justify-center">
@@ -99,16 +107,22 @@ export default function WithdrawalRequests() {
                   <tr key={req._id} className="hover:bg-white/[0.01] transition-colors group">
                     <td className="px-8 py-6">
                       <p className="text-xs font-black uppercase text-white">{req.user?.fullName || 'Entity Unknown'}</p>
-                      <p className="text-[9px] text-gray-600 font-mono mt-1">{req.method || 'USDT-TRC20'}</p>
+                      <p className="text-[9px] text-gray-600 font-mono mt-1">{req.network || 'BTC_NODE'}</p>
                     </td>
                     <td className="px-8 py-6">
-                      <p className="text-xs font-black text-rose-500">-{req.amount.toLocaleString()} {req.currency || 'EUR'}</p>
+                      <p className="text-xs font-black text-rose-500">-{req.amount.toLocaleString('de-DE')} €</p>
                       <p className="text-[9px] text-gray-600 font-bold mt-1">{new Date(req.createdAt).toLocaleDateString()}</p>
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-2 group/addr">
-                        <code className="text-[10px] text-gray-400 bg-white/5 px-2 py-1 rounded truncate max-w-[150px]">
-                          {req.address}
+                        <code 
+                          className="text-[10px] text-gray-400 bg-white/5 px-2 py-1 rounded truncate max-w-[150px] cursor-copy active:text-rose-500"
+                          onClick={() => {
+                            navigator.clipboard.writeText(req.walletAddress);
+                            toast.success("Address Clipped");
+                          }}
+                        >
+                          {req.walletAddress}
                         </code>
                         <ExternalLink size={12} className="text-gray-600 group-hover/addr:text-rose-500 cursor-pointer" />
                       </div>
@@ -125,14 +139,14 @@ export default function WithdrawalRequests() {
                     <td className="px-8 py-6 text-right">
                       {req.status === 'pending' && (
                         <div className="flex justify-end gap-2">
-                          <button 
+                          <button
                             onClick={() => handleUpdateStatus(req._id, 'rejected')}
                             className="p-2 bg-rose-500/10 text-rose-500 rounded-lg hover:bg-rose-500 hover:text-white transition-all"
                             title="Reject Request"
                           >
                             <XCircle size={16} />
                           </button>
-                          <button 
+                          <button
                             onClick={() => handleUpdateStatus(req._id, 'approved')}
                             className="p-2 bg-emerald-500/10 text-emerald-500 rounded-lg hover:bg-emerald-500 hover:text-white transition-all"
                             title="Approve & Mark Paid"
@@ -150,7 +164,7 @@ export default function WithdrawalRequests() {
         )}
       </div>
 
-      {/* Security Footer */}
+      {/* SECURITY FOOTER */}
       <div className="p-6 bg-rose-500/5 border border-rose-500/10 rounded-2xl flex items-center gap-4">
         <AlertCircle size={20} className="text-rose-500" />
         <p className="text-[10px] text-gray-500 uppercase font-black italic tracking-widest leading-relaxed">

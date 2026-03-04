@@ -1,14 +1,14 @@
-// controllers/adminController.js
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 import KYC from '../models/KYC.js';
 import Withdrawal from '../models/Withdrawal.js';
+import Deposit from '../models/Deposit.js'; // Ensure this exists
 import AuditLog from '../models/AuditLog.js';
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * Get global platform statistics for admin dashboard
- * @route   GET /api/admin/stats
+ * @desc    Get global platform statistics for admin dashboard
+ * @route   GET /api/admin/stats/overview
  * @access  Admin
  */
 export const getDashboardStats = async (req, res, next) => {
@@ -34,8 +34,12 @@ export const getDashboardStats = async (req, res, next) => {
       },
     ]);
 
-    const pendingKyc = await KYC.countDocuments({ status: 'pending' });
-    const pendingWithdrawals = await Withdrawal.countDocuments({ status: 'pending' });
+    // Fetch pending counts for the Sidebar Badges
+    const [pendingKyc, pendingWithdrawals, pendingDeposits] = await Promise.all([
+      KYC.countDocuments({ status: 'pending' }),
+      Withdrawal.countDocuments({ status: 'pending' }),
+      Deposit.countDocuments({ status: 'pending' })
+    ]);
 
     res.json({
       success: true,
@@ -44,6 +48,7 @@ export const getDashboardStats = async (req, res, next) => {
         activeUsers: stats[0]?.userStats[0]?.activeUsers || 0,
         pendingKyc,
         pendingWithdrawals,
+        pendingDeposits,
         totalLiquidity: stats[0]?.totalLiquidity || [],
         timestamp: new Date().toISOString(),
       },
@@ -54,7 +59,7 @@ export const getDashboardStats = async (req, res, next) => {
 };
 
 /**
- * Get all users (paginated, filtered)
+ * @desc    Get all users (paginated, filtered)
  * @route   GET /api/admin/users
  * @access  Admin
  */
@@ -94,13 +99,12 @@ export const getAllUsers = async (req, res, next) => {
 };
 
 /**
- * Update user balance (admin only)
+ * @desc    Update user balance with Transactional Audit Trail
  * @route   PATCH /api/admin/users/:id/balance
  * @access  Admin
  */
 export const updateBalance = async (req, res, next) => {
   const session = await mongoose.startSession();
-
   try {
     session.startTransaction();
 
@@ -108,23 +112,26 @@ export const updateBalance = async (req, res, next) => {
     const userId = req.params.id;
 
     if (!amount || isNaN(amount) || amount <= 0) {
-      throw new ApiError(400, 'Valid positive amount required');
+      throw new ApiError(400, 'A valid positive numerical amount is required.');
     }
 
     const user = await User.findById(userId).session(session);
-    if (!user) throw new ApiError(404, 'User not found');
+    if (!user) throw new ApiError(404, 'Protocol Error: Targeted user node not found.');
 
-    const current = user.balances.get(walletType) || 0;
-    const updated = type === 'debit' ? current - Number(amount) : current + Number(amount);
+    const currentBalance = user.balances.get(walletType) || 0;
+    const updatedBalance = type === 'debit' 
+      ? Number((currentBalance - Number(amount)).toFixed(2)) 
+      : Number((currentBalance + Number(amount)).toFixed(2));
 
-    if (updated < 0) {
-      throw new ApiError(400, 'Balance cannot go negative');
+    if (updatedBalance < 0) {
+      throw new ApiError(400, 'Operation denied: Balance cannot drop below zero.');
     }
 
-    user.balances.set(walletType, updated);
+    // Update the Map
+    user.balances.set(walletType, updatedBalance);
     user.markModified('balances');
 
-    // Log audit entry
+    // Create Immutable Audit Log
     await AuditLog.create(
       [{
         admin: req.user._id,
@@ -134,8 +141,8 @@ export const updateBalance = async (req, res, next) => {
           walletType,
           type,
           amount: Number(amount),
-          oldBalance: current,
-          newBalance: updated,
+          oldBalance: currentBalance,
+          newBalance: updatedBalance,
         },
       }],
       { session }
@@ -146,30 +153,27 @@ export const updateBalance = async (req, res, next) => {
 
     res.json({
       success: true,
-      message: 'Balance updated',
-      newBalance: updated,
+      message: `Balance for ${walletType} updated successfully.`,
+      newBalance: updatedBalance,
     });
   } catch (err) {
     await session.abortTransaction();
-    next(err instanceof ApiError ? err : new ApiError(500, 'Balance update failed'));
+    next(err instanceof ApiError ? err : new ApiError(500, 'Transaction failed: Balance update aborted.'));
   } finally {
     session.endSession();
   }
 };
 
 /**
- * Update user profile fields (admin only)
+ * @desc    Update user profile fields
  * @route   PATCH /api/admin/users/:id
- * @access  Admin
  */
 export const updateUserEntity = async (req, res, next) => {
   try {
     const allowedUpdates = ['fullName', 'email', 'phone', 'role', 'isActive', 'banned'];
     const updates = Object.keys(req.body).filter(key => allowedUpdates.includes(key));
 
-    if (updates.length === 0) {
-      throw new ApiError(400, 'No valid fields to update');
-    }
+    if (updates.length === 0) throw new ApiError(400, 'No valid fields provided for update.');
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
@@ -177,9 +181,8 @@ export const updateUserEntity = async (req, res, next) => {
       { new: true, runValidators: true }
     ).select('-password');
 
-    if (!user) throw new ApiError(404, 'User not found');
+    if (!user) throw new ApiError(404, 'User not found.');
 
-    // Log audit
     await AuditLog.create({
       admin: req.user._id,
       action: 'user_update',
@@ -187,39 +190,33 @@ export const updateUserEntity = async (req, res, next) => {
       details: { updatedFields: updates },
     });
 
-    res.json({
-      success: true,
-      user,
-    });
+    res.json({ success: true, user });
   } catch (err) {
-    next(err instanceof ApiError ? err : new ApiError(500, 'User update failed'));
+    next(err instanceof ApiError ? err : new ApiError(500, 'User update failed.'));
   }
 };
 
 /**
- * Delete user and related data (admin only)
+ * @desc    Nuclear Delete: Removes user and all associated financial/ID data
  * @route   DELETE /api/admin/users/:id
- * @access  Admin
  */
 export const deleteUserEntity = async (req, res, next) => {
   const session = await mongoose.startSession();
-
   try {
     session.startTransaction();
 
     const userId = req.params.id;
-
     const user = await User.findById(userId).session(session);
-    if (!user) throw new ApiError(404, 'User not found');
+    if (!user) throw new ApiError(404, 'User not found.');
 
-    // Delete related records
-    await KYC.deleteMany({ user: userId }).session(session);
-    await Withdrawal.deleteMany({ user: userId }).session(session);
-    // Add other related models if needed (e.g., Deposits, Investments)
+    // Cascade Delete
+    await Promise.all([
+      KYC.deleteMany({ user: userId }).session(session),
+      Withdrawal.deleteMany({ user: userId }).session(session),
+      Deposit.deleteMany({ user: userId }).session(session),
+      User.findByIdAndDelete(userId).session(session)
+    ]);
 
-    await User.findByIdAndDelete(userId).session(session);
-
-    // Audit log
     await AuditLog.create(
       [{
         admin: req.user._id,
@@ -231,23 +228,18 @@ export const deleteUserEntity = async (req, res, next) => {
     );
 
     await session.commitTransaction();
-
-    res.json({
-      success: true,
-      message: 'User and related data deleted',
-    });
+    res.json({ success: true, message: 'User node and associated data purged.' });
   } catch (err) {
     await session.abortTransaction();
-    next(err instanceof ApiError ? err : new ApiError(500, 'User deletion failed'));
+    next(err instanceof ApiError ? err : new ApiError(500, 'Purge failed.'));
   } finally {
     session.endSession();
   }
 };
 
 /**
- * Get audit logs (admin only)
+ * @desc    Get Audit Trail for administrative actions
  * @route   GET /api/admin/audit-logs
- * @access  Admin
  */
 export const getAuditLogs = async (req, res, next) => {
   try {
@@ -264,22 +256,9 @@ export const getAuditLogs = async (req, res, next) => {
     res.json({
       success: true,
       logs,
-      pagination: {
-        total,
-        page: Number(page),
-        pages: Math.ceil(total / limit),
-      },
+      pagination: { total, page: Number(page), pages: Math.ceil(total / limit) },
     });
   } catch (err) {
-    next(new ApiError(500, 'Failed to fetch audit logs'));
+    next(new ApiError(500, 'Audit trail unreachable.'));
   }
-};
-
-export default {
-  getDashboardStats,
-  getAllUsers,
-  updateBalance,
-  updateUserEntity,
-  deleteUserEntity,
-  getAuditLogs,
 };

@@ -1,148 +1,170 @@
-// src/pages/AdminStats.jsx - Production v8.4.1
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import { 
-  Users, Landmark, Activity, AlertCircle, 
-  RefreshCw, ShieldCheck, ArrowUpRight 
+  TrendingUp, Wallet, Users, Activity, 
+  BarChart3, PieChart, PieChart as PieIcon, 
+  ArrowUpRight, ArrowDownRight, Loader2 
 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { toast } from 'react-hot-toast';
+import { motion } from 'framer-motion';
 
 export default function AdminStats() {
-  const navigate = useNavigate();
-  const [stats, setStats] = useState(null);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchStats = async () => {
+  const fetchGlobalStats = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/admin/stats');
-      setStats(res.data.stats);
+      const { data } = await api.get('/admin/stats');
+      setData(data.stats);
     } catch (err) {
-      toast.error("Failed to load global ledger data.");
+      toast.error("Telemetry Offline: Failed to fetch platform metrics");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchStats(); }, []);
+  useEffect(() => {
+    fetchGlobalStats();
+  }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center gap-4">
-        <RefreshCw className="animate-spin text-yellow-500" size={32} />
-        <p className="text-[10px] font-black text-gray-600 uppercase tracking-[0.5em]">Synchronizing Analytics...</p>
-      </div>
-    );
-  }
-
-  const statCards = [
-    { label: 'Total Investors', val: stats.totalUsers, icon: Users, color: 'text-blue-500', bg: 'bg-blue-500/5' },
-    { label: 'Platform Liquidity', val: `€${(stats.totalLiquidity || 0).toLocaleString()}`, icon: Landmark, color: 'text-emerald-500', bg: 'bg-emerald-500/5' },
-    { label: 'Active Trade Nodes', val: stats.activePlans, icon: Activity, color: 'text-yellow-500', bg: 'bg-yellow-500/5' },
-    { label: 'Pending Payouts', val: stats.pendingWithdrawals, icon: AlertCircle, color: 'text-red-500', bg: 'bg-red-500/5' },
-  ];
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[#020408]">
+      <Loader2 className="animate-spin text-rose-500 mb-4" size={48} />
+      <p className="text-[10px] font-black uppercase tracking-[0.5em] text-gray-500">Calculating Global Liquidity...</p>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#020617] p-6 md:p-12 text-white font-sans">
-      <div className="max-w-7xl mx-auto space-y-10">
-        
-        {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <ShieldCheck className="text-yellow-500" size={24} />
-              <h1 className="text-4xl font-black italic uppercase tracking-tighter">System Pulse</h1>
-            </div>
-            <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.4em]">Node Protocol v8.4.1 Audit Dashboard</p>
-          </div>
-          <div className="flex gap-4">
-             <button 
-               onClick={fetchStats} 
-               className="p-4 bg-[#0a0c10] border border-white/5 rounded-2xl hover:bg-white/5 transition-all active:scale-95 shadow-xl"
-             >
-               <RefreshCw size={20} className="text-gray-400" />
-             </button>
-          </div>
-        </header>
-
-        {/* Metric Tiles */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statCards.map((s, i) => (
-            <div key={i} className="bg-[#0a0c10] border border-white/5 p-8 rounded-[3rem] shadow-2xl relative overflow-hidden group hover:border-yellow-500/20 transition-all">
-              <div className={`absolute -right-4 -bottom-4 h-28 w-28 opacity-5 group-hover:scale-110 group-hover:opacity-10 transition-all duration-500 ${s.color}`}>
-                <s.icon size={112} />
-              </div>
-              
-              <div className={`w-12 h-12 ${s.bg} rounded-2xl flex items-center justify-center mb-6 border border-white/5`}>
-                 <s.icon className={s.color} size={20} />
-              </div>
-
-              <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-2">{s.label}</p>
-              <h2 className="text-3xl font-black italic tracking-tighter text-white">
-                {s.val}
-              </h2>
-            </div>
-          ))}
-        </div>
-
-        {/* Strategic Alerts & Shortcuts */}
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Payout Alert */}
-          {stats.pendingWithdrawals > 0 ? (
-            <div className="bg-red-500/5 border border-red-500/10 rounded-[2.5rem] p-10 flex flex-col justify-between items-start gap-6">
-              <div>
-                <div className="flex items-center gap-3 mb-4 text-red-500">
-                  <AlertCircle size={24} />
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.3em]">Critical Action Required</h4>
-                </div>
-                <p className="text-red-200/40 text-[10px] font-bold uppercase leading-relaxed tracking-widest max-w-md">
-                  There are currently <b>{stats.pendingWithdrawals}</b> withdrawal requests pending authorization. 
-                  Protocol v8.4.1 requires manual review of these hashes within 24 hours.
-                </p>
-              </div>
-              <button 
-                onClick={() => navigate('/admin/withdrawals')}
-                className="bg-red-500 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-white hover:text-red-500 transition-all shadow-lg shadow-red-500/10 flex items-center gap-3"
-              >
-                Open Payout Queue <ArrowUpRight size={14} />
-              </button>
-            </div>
-          ) : (
-             <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-[2.5rem] p-10 flex items-center gap-6">
-                <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center text-emerald-500">
-                   <ShieldCheck size={24} />
-                </div>
-                <p className="text-emerald-200/40 text-[10px] font-black uppercase tracking-[0.3em]">
-                   All liquidity extraction requests have been settled.
-                </p>
-             </div>
-          )}
-
-          {/* Operational Status */}
-          <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-10 flex flex-col justify-center">
-             <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Global Node Status</span>
-                <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" /> Operational
-                </span>
-             </div>
-             <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden mt-4">
-                <div className="h-full bg-yellow-500 w-[94%] shadow-[0_0_15px_rgba(234,179,8,0.3)]" />
-             </div>
-             <p className="text-[9px] text-gray-600 font-bold uppercase mt-4 tracking-widest">
-               Platform Health: 99.9% Uptime (Rio Node Cluster B)
-             </p>
-          </div>
-        </div>
-
-        {/* Footer Ledger Identity */}
-        <div className="text-center py-10 opacity-20">
-          <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.8em]">
-            Trustra Capital International • Authorized Personnel Only
+    <div className="space-y-10 pb-20 animate-in fade-in duration-700">
+      {/* HEADER SECTION */}
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-4xl font-black uppercase italic tracking-tighter">
+            Platform <span className="text-rose-500">Intelligence</span>
+          </h1>
+          <p className="text-[10px] font-black uppercase text-gray-600 tracking-[0.4em] mt-2">
+            Real-Time Asset Under Management (AUM) & Node Metrics
           </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[9px] font-black text-gray-500 uppercase">Last Synchronized</p>
+          <p className="text-[11px] font-mono text-white">{new Date(data.timestamp).toLocaleString()}</p>
+        </div>
+      </div>
+
+      {/* CORE METRIC GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <MetricCard 
+          label="Total Investors" 
+          value={data.totalUsers} 
+          subValue={`${data.activeUsers} Active Nodes`}
+          icon={Users} 
+          color="text-blue-500" 
+        />
+        <MetricCard 
+          label="Identity Backlog" 
+          value={data.pendingKyc} 
+          subValue="Awaiting Verification"
+          icon={Activity} 
+          color="text-yellow-500" 
+        />
+        <MetricCard 
+          label="Capital Egress" 
+          value={data.pendingWithdrawals} 
+          subValue="Pending Requests"
+          icon={ArrowUpRight} 
+          color="text-rose-500" 
+        />
+        <MetricCard 
+          label="Platform Status" 
+          value="STABLE" 
+          subValue="All Gateways Online"
+          icon={TrendingUp} 
+          color="text-emerald-500" 
+        />
+      </div>
+
+      {/* LIQUIDITY DISTRIBUTION */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 bg-[#0a0f1e] border border-white/5 rounded-[3rem] p-10">
+          <div className="flex items-center justify-between mb-10">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-rose-500/10 rounded-2xl">
+                <Wallet className="text-rose-500" size={24} />
+              </div>
+              <h3 className="text-xl font-black uppercase italic italic tracking-tighter">Liquidity Pools</h3>
+            </div>
+            <BarChart3 className="text-gray-800" size={32} />
+          </div>
+
+          <div className="space-y-6">
+            {data.totalLiquidity.map((pool) => (
+              <LiquidityRow key={pool._id} label={pool._id} value={pool.total} />
+            ))}
+          </div>
+        </div>
+
+        {/* SYSTEM HEALTH / SIDEBAR */}
+        <div className="space-y-8">
+          <div className="bg-gradient-to-br from-rose-600 to-rose-900 rounded-[3rem] p-10 text-white shadow-2xl shadow-rose-900/20">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60 mb-2">Operational Integrity</p>
+            <h4 className="text-2xl font-black italic uppercase tracking-tighter mb-6">Security Clearance</h4>
+            <div className="space-y-4">
+              <div className="flex justify-between text-[11px] font-bold border-b border-white/10 pb-2">
+                <span className="opacity-60 uppercase">Auth Protocol</span>
+                <span>JWT-AES256</span>
+              </div>
+              <div className="flex justify-between text-[11px] font-bold border-b border-white/10 pb-2">
+                <span className="opacity-60 uppercase">DB Clusters</span>
+                <span className="text-emerald-300 uppercase">Synchronized</span>
+              </div>
+              <div className="flex justify-between text-[11px] font-bold">
+                <span className="opacity-60 uppercase">Withdrawal Lock</span>
+                <span>ENABLED</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+/* HELPER COMPONENTS */
+
+const MetricCard = ({ label, value, subValue, icon: Icon, color }) => (
+  <motion.div 
+    whileHover={{ y: -5 }}
+    className="bg-[#0a0f1e] border border-white/5 p-8 rounded-[2.5rem] relative overflow-hidden group transition-all"
+  >
+    <div className={`absolute -right-4 -bottom-4 opacity-5 group-hover:opacity-10 transition-opacity ${color}`}>
+      <Icon size={120} />
+    </div>
+    <p className="text-[10px] font-black uppercase text-gray-500 tracking-[0.3em] mb-1">{label}</p>
+    <h2 className={`text-4xl font-black italic tracking-tighter mb-2 ${color}`}>{value}</h2>
+    <p className="text-[9px] font-bold text-gray-600 uppercase tracking-widest">{subValue}</p>
+  </motion.div>
+);
+
+const LiquidityRow = ({ label, value }) => {
+  // Simple logic to set percentage bar (usually based on a goal or max)
+  const percentage = Math.min((value / 100000) * 100, 100); 
+
+  return (
+    <div className="group">
+      <div className="flex justify-between items-end mb-2">
+        <p className="text-xs font-black uppercase text-white group-hover:text-rose-500 transition-colors">{label}</p>
+        <p className="text-sm font-mono font-black text-white">€{value.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+      </div>
+      <div className="w-full h-3 bg-white/5 rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }}
+          animate={{ width: `${percentage}%` }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          className="h-full bg-gradient-to-r from-rose-600 to-rose-400"
+        />
+      </div>
+    </div>
+  );
+};
