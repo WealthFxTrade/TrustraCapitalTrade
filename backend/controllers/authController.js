@@ -1,68 +1,95 @@
+import User from '../models/User.js';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+};
+
 /**
- * POST /api/auth/login
- * Validates credentials and returns a session token.
+ * @desc    Register new user
+ * @route   POST /api/auth/register
+ * @access  Public
  */
-export const login = async (req, res, next) => {
+export const registerUser = async (req, res) => {
+  const { username, email, password, referralCode } = req.body;
+
   try {
-    const { email, password } = req.body;
-
-    // ── 1. Input Validation ──────────────────
-    if (!email || !password) {
-      throw new ApiError(400, 'Protocol Email and Access Cipher are required');
+    // 1. Basic Validation
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: "All identification fields required." });
     }
 
-    // ── 2. Find User ─────────────────────────
-    // We explicitly select '+password' because it's hidden by default in the User Schema
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
-
-    if (!user) {
-      throw new ApiError(401, 'Invalid Access Cipher or Email');
+    // 2. Check for existing user
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: "Identity already registered in the protocol." });
     }
 
-    // ── 3. Verify Password ───────────────────
-    // Assumes you have a comparePassword method on your User model
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      throw new ApiError(401, 'Invalid Access Cipher or Email');
-    }
+    // 3. Hash Password (if not handled by middleware in User.js)
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    // ── 4. Verify Account Status ─────────────
-    if (!user.isActive) {
-      throw new ApiError(403, 'Account protocol suspended. Contact administration.');
-    }
-
-    // ── 5. Generate Token & Respond ──────────
-    const token = signToken(user);
-
-    res.status(200).json({
-      success: true,
-      token,
-      user: sanitizeUser(user)
+    // 4. Initialize User with Rio Protocol Schema
+    const user = await User.create({
+      username,
+      email,
+      password: hashedPassword,
+      referralCode: Math.random().toString(36).substring(7).toUpperCase(),
+      referredBy: referralCode || null,
+      // Initialize the Mongoose Map
+      balances: {
+        'EUR': 0,
+        'ROI': 0,
+        'COMMISSION': 0
+      },
+      lastRoiAt: null,
+      ledger: []
     });
 
-  } catch (err) {
-    next(err);
+    if (user) {
+      res.status(201).json({
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        token: generateToken(user._id),
+      });
+      console.log(`[AUTH] New Node Initialized: ${username}`);
+    } else {
+      res.status(400).json({ message: "Invalid user data received." });
+    }
+  } catch (error) {
+    console.error("CRITICAL AUTH ERROR:", error);
+    res.status(500).json({ 
+      message: "Internal Server Error", 
+      error: error.message 
+    });
   }
 };
 
 /**
- * GET /api/auth/me
- * Restores session based on JWT from the Protect middleware.
+ * @desc    Authenticate user & get token
+ * @route   POST /api/auth/login
+ * @access  Public
  */
-export const getMe = async (req, res, next) => {
-  try {
-    // req.user is populated by the 'protect' middleware
-    const user = await User.findById(req.user.id);
-    
-    if (!user) {
-      throw new ApiError(404, 'User protocol not found');
-    }
+export const loginUser = async (req, res) => {
+  const { email, password } = req.body;
 
-    res.status(200).json({
-      success: true,
-      user: sanitizeUser(user)
-    });
-  } catch (err) {
-    next(err);
+  try {
+    const user = await User.findOne({ email });
+
+    if (user && (await bcrypt.compare(password, user.password))) {
+      res.json({
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        activePlan: user.activePlan,
+        token: generateToken(user._id),
+      });
+    } else {
+      res.status(401).json({ message: "Invalid Cipher or Identity." });
+    }
+  } catch (error) {
+    res.status(500).json({ message: "Authentication protocol failure." });
   }
 };
