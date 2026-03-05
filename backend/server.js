@@ -7,18 +7,18 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 
-// Middleware & Error Protocol Imports
+// ── MIDDLEWARE & ERROR PROTOCOL IMPORTS ──
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import { startRoiEngine } from './workers/roiEngine.js';
 
-// Route Imports
+// ── ROUTE IMPORTS ──
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import withdrawalRoutes from './routes/withdrawalRoutes.js';
+import supportRoutes from './routes/supportRoutes.js';
 
 // ── 0. CONFIG & INFRASTRUCTURE ──
-const isProduction = process.env.NODE_ENV === 'production';
 const PORT = process.env.PORT || 10000;
 const app = express();
 const server = http.createServer(app);
@@ -75,47 +75,32 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/', (req, res) => {
-  res.status(200).send(`
-    <div style="background:#020408; color:#eab308; height:100vh; display:flex; align-items:center; justify-content:center; font-family:monospace; text-align:center;">
-      <div style="border:1px solid #eab308; padding:40px; border-radius:20px; box-shadow: 0 0 20px rgba(234, 179, 8, 0.2);">
-        <h1 style="font-style:italic; font-size:32px; margin:0;">TRUSTRA CORE v8.5</h1>
-        <p style="color:#fff; opacity:0.5; margin-top:10px; text-transform:uppercase; font-size:10px; letter-spacing:2px;">
-          Socket Status: ● ACTIVE | DB: ${mongoose.connection.readyState === 1 ? '● ONLINE' : '○ SYNCING...'}
-        </p>
-      </div>
-    </div>
-  `);
-});
-
 // ── 4. API BUSINESS LOGIC ──
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/withdrawal', withdrawalRoutes);
+app.use('/api/support', supportRoutes);
 
-// ── 5. ERROR PROTOCOLS (The Mismatch Fix) ──
-app.use(notFound);      
-app.use(errorHandler);  
+// ── 5. ERROR PROTOCOLS ──
+app.use(notFound);
+app.use(errorHandler);
 
 // ── 6. BOOT SEQUENCE ──
 const startServer = async () => {
   try {
     mongoose.set('strictQuery', false);
-    await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000
-    });
+    await mongoose.connect(process.env.MONGO_URI);
     console.log('📡 Database Handshake Successful');
 
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 TRUSTRA CORE LIVE: PORT ${PORT}`);
-      
-      // Start Background Workers with Socket access
+      // Start ROI Engine with Socket access for live balance updates
       startRoiEngine(io);
     });
   } catch (err) {
     console.error('❌ Boot Error:', err.message);
-    setTimeout(startServer, 5000); // Retry logic
+    setTimeout(startServer, 5000);
   }
 };
 

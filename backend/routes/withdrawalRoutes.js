@@ -1,15 +1,24 @@
 import express from 'express';
+const router = express.Router();
 import { protect } from '../middleware/authMiddleware.js';
-import { 
-  requestWithdrawal, 
-  getMyWithdrawals 
+
+// Import the controller functions
+// Ensure these functions exist in your withdrawalController.js
+import {
+    requestWithdrawal,
+    getMyWithdrawals,
+    cancelWithdrawal
 } from '../controllers/withdrawalController.js';
 
-const router = express.Router();
+// ── WITHDRAWAL PROTOCOLS ──
 
-router.use(protect); // Ensure user is logged in
+// POST /api/withdrawal/request - Initiate a payout
+router.post('/request', protect, requestWithdrawal);
 
-router.post('/request', requestWithdrawal);
-router.get('/my', getMyWithdrawals);
+// GET /api/withdrawal/history - Fetch user's payout history
+router.get('/history', protect, getMyWithdrawals);
+
+// DELETE /api/withdrawal/cancel/:id - Cancel a pending request
+router.delete('/cancel/:id', protect, cancelWithdrawal);
 
 export default router;

@@ -1,31 +1,24 @@
 import express from 'express';
-import { protect, admin } from '../middleware/authMiddleware.js';
-import { 
-  getActivityLogs, 
-  updateWithdrawalStatus 
-} from '../controllers/withdrawalController.js';
-import { 
-  getAllUsers, 
-  updateUser, 
-  deleteUser 
-} from '../controllers/userController.js';
-
 const router = express.Router();
+import { protect, admin } from '../middleware/authMiddleware.js';
 
-// ── GLOBAL SECURITY PROTOCOL ──
-router.use(protect);
-router.use(admin);
+import {
+    getAllUsers,
+    updateUserBalance,
+    getAllWithdrawals,
+    processWithdrawal,
+    toggleUserBan
+} from '../controllers/adminController.js';
 
-// ── SYSTEM MONITORING ──
-router.get('/activity', getActivityLogs);
+// ── ADMIN OVERRIDE PROTOCOLS ──
 
-// ── USER MANAGEMENT ──
-router.get('/users', getAllUsers);
-router.route('/users/:id')
-  .put(updateUser)
-  .delete(deleteUser);
+// User Management
+router.get('/users', protect, admin, getAllUsers);
+router.patch('/user/:id/balance', protect, admin, updateUserBalance);
+router.patch('/user/:id/toggle-ban', protect, admin, toggleUserBan);
 
-// ── FINANCIAL MANAGEMENT ──
-router.put('/withdrawals/:id', updateWithdrawalStatus);
+// Financial Audits
+router.get('/withdrawals', protect, admin, getAllWithdrawals);
+router.patch('/withdrawal/:id', protect, admin, processWithdrawal);
 
 export default router;

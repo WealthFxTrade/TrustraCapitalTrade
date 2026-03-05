@@ -1,4 +1,3 @@
-// models/User.js - Production Optimized v8.4.3 (OTP Enabled)
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
@@ -19,7 +18,7 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true,
-    select: false, // Prevents password leaking in API calls
+    select: false,
   },
   phone: {
     type: String,
@@ -32,6 +31,7 @@ const userSchema = new mongoose.Schema({
   },
 
   // ── WALLET INFRASTRUCTURE ──
+  // This Map stores multiple chain addresses (BTC, ETH, USDT)
   depositAddresses: {
     type: Map,
     of: String,
@@ -41,6 +41,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     sparse: true,
     index: true,
+  },
+  ethAddress: {
+    type: String,
+    sparse: true,
   },
 
   // ── GLOBAL COUNTER LOGIC ──
@@ -54,6 +58,7 @@ const userSchema = new mongoose.Schema({
   },
 
   // ── FINANCIALS ──
+  // Defaulting keys to match your Dashboard keys
   balances: {
     type: Map,
     of: Number,
@@ -81,25 +86,25 @@ const userSchema = new mongoose.Schema({
     default: 'unverified',
   },
 
-  // ── UNIVERSAL OTP PROTOCOL (NEW) ──
-  otpCode: { 
-    type: String, 
-    default: null 
+  // ── UNIVERSAL OTP PROTOCOL ──
+  otpCode: {
+    type: String,
+    default: null
   },
-  otpExpires: { 
-    type: Date, 
-    default: null 
+  otpExpires: {
+    type: Date,
+    default: null
   },
-  isEmailVerified: { 
-    type: Boolean, 
-    default: false 
+  isEmailVerified: {
+    type: Boolean,
+    default: false
   }
 
 }, {
   timestamps: true,
 });
 
-// ── MIDDLEWARE ──
+// ── MIDDLEWARE: PW HASHING ──
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   try {
@@ -111,7 +116,7 @@ userSchema.pre('save', async function (next) {
   }
 });
 
-// Compare password method
+// Compare password method for login authentication
 userSchema.methods.comparePassword = async function (candidate) {
   return bcrypt.compare(candidate, this.password);
 };
@@ -124,4 +129,3 @@ userSchema.index(
 
 const User = mongoose.model('User', userSchema);
 export default User;
-
