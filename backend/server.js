@@ -9,7 +9,8 @@ import helmet from 'helmet';
 
 // ── MIDDLEWARE & ERROR PROTOCOL IMPORTS ──
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
-import { startRoiEngine } from './workers/roiEngine.js';
+// Matching the import name from our profitEngine.js
+import { initializeProfitDistributor } from './utils/profitEngine.js'; 
 
 // ── ROUTE IMPORTS ──
 import authRoutes from './routes/auth.js';
@@ -39,6 +40,9 @@ const io = new Server(server, {
   }
 });
 
+// Make 'io' accessible in our routes via req.app.get('socketio')
+app.set('socketio', io);
+
 io.on('connection', (socket) => {
   socket.on('join_terminal', (userId) => {
     if (userId) {
@@ -54,7 +58,13 @@ io.on('connection', (socket) => {
 
 // ── 2. GLOBAL MIDDLEWARE ──
 app.use(helmet({ contentSecurityPolicy: false }));
+
+/** * CRITICAL: These must come BEFORE routes to prevent 
+ * the "Username Required" Internal Server Error 
+ */
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
@@ -95,11 +105,13 @@ const startServer = async () => {
 
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 TRUSTRA CORE LIVE: PORT ${PORT}`);
-      // Start ROI Engine with Socket access for live balance updates
-      startRoiEngine(io);
+      
+      // Start the Automated Profit Engine
+      initializeProfitDistributor();
     });
   } catch (err) {
     console.error('❌ Boot Error:', err.message);
+    // Exponential backoff for database connection retries
     setTimeout(startServer, 5000);
   }
 };
