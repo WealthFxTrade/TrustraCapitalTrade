@@ -4,10 +4,9 @@ import {
   CheckCircle2, 
   XCircle, 
   Search, 
-  Filter, 
   ExternalLink, 
   ArrowUpRight 
-} from 'lucide-react'; // Fixed: Clock is PascalCase
+} from 'lucide-react'; 
 import api from '../../api/api';
 import toast from 'react-hot-toast';
 
@@ -16,9 +15,9 @@ export default function AdminWithdrawals() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // ── DATA FETCHING ──
   const fetchWithdrawals = async () => {
     try {
-      // Points to getAdminWithdrawals logic in our unified controller
       const { data } = await api.get('/admin/withdrawals');
       setWithdrawals(data.withdrawals);
     } catch (err) {
@@ -28,24 +27,28 @@ export default function AdminWithdrawals() {
     }
   };
 
-  useEffect(() => { fetchWithdrawals(); }, []);
+  useEffect(() => {
+    fetchWithdrawals();
+  }, []);
 
+  // ── ACTION HANDLERS ──
   const processAction = async (id, status) => {
     const confirmMsg = status === 'completed' 
       ? "Confirm this extraction as successful?" 
-      : "Reject this extraction? Funds will be auto-refunded to user.";
+      : "Reject this extraction? Funds will be auto-refunded to user ROI.";
       
     if (!window.confirm(confirmMsg)) return;
 
     try {
       await api.patch(`/admin/withdrawal/${id}`, { status });
       toast.success(`Protocol updated: ${status}`);
-      fetchWithdrawals(); // Refresh registry
+      fetchWithdrawals(); 
     } catch (err) {
-      toast.error("Handshake failed during processing.");
+      toast.error(err.response?.data?.message || "Handshake failed during processing.");
     }
   };
 
+  // ── FILTERING LOGIC ──
   const filtered = withdrawals.filter(w => 
     w.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     w.address?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -59,10 +62,11 @@ export default function AdminWithdrawals() {
 
   return (
     <div className="p-8 space-y-8 animate-in fade-in duration-500">
+      {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black uppercase tracking-tighter text-white">Extraction Oversight</h2>
-          <p className="text-gray-500 text-xs font-mono uppercase tracking-widest mt-1">Zurich HQ / Withdrawal Registry</p>
+          <p className="text-gray-500 text-[10px] font-mono uppercase tracking-widest mt-1">Zurich HQ / Withdrawal Registry</p>
         </div>
 
         <div className="relative">
@@ -70,39 +74,43 @@ export default function AdminWithdrawals() {
           <input 
             type="text"
             placeholder="Search User or Wallet..."
-            className="bg-white/[0.03] border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white focus:border-yellow-500/50 outline-none w-64"
+            className="bg-white/[0.03] border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white focus:border-yellow-500/50 outline-none w-64 transition-all"
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
+      {/* Main List */}
       <div className="grid gap-4">
         {filtered.length === 0 ? (
           <div className="text-center py-20 bg-white/[0.01] border border-dashed border-white/5 rounded-3xl">
-            <p className="text-gray-600 font-mono text-[10px] uppercase">No pending extractions in current node</p>
+            <p className="text-gray-600 font-mono text-[10px] uppercase tracking-widest">No pending extractions in current node</p>
           </div>
         ) : (
           filtered.map((w) => (
-            <div key={w._id} className="bg-white/[0.02] border border-white/5 rounded-2xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:border-white/10 transition-all">
+            <div key={w._id} className="bg-white/[0.02] border border-white/5 rounded-2xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:border-white/10 transition-all group">
               <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-xl ${getStatusBg(w.status)}`}>
+                <div className={`p-3 rounded-xl ${getStatusBg(w.status)} transition-colors`}>
                   <StatusIcon status={w.status} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-white uppercase">{w.username}</span>
-                    <span className="text-[10px] text-gray-500 font-mono">{w.email}</span>
+                    <span className="text-xs font-black text-white uppercase tracking-tight">{w.username}</span>
+                    <span className="text-[10px] text-gray-500 font-mono tracking-tighter italic">{w.email}</span>
                   </div>
                   <div className="mt-2 space-y-1">
                     <p className="text-lg font-black text-white tracking-tighter">€{w.amount.toLocaleString()}</p>
-                    <p className="text-[9px] text-gray-500 font-mono uppercase flex items-center gap-1">
-                      Dest: <span className="text-yellow-500/80">{w.address}</span>
-                      <ExternalLink size={10} className="cursor-pointer" />
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[9px] text-gray-500 font-mono uppercase truncate max-w-[150px] md:max-w-none">
+                        Dest: <span className="text-yellow-500/80 select-all">{w.address}</span>
+                      </p>
+                      <ExternalLink size={10} className="text-gray-700 hover:text-white cursor-pointer transition-colors" />
+                    </div>
                   </div>
                 </div>
               </div>
 
+              {/* Action Area */}
               <div className="flex items-center gap-3">
                 {w.status === 'pending' ? (
                   <>
@@ -120,9 +128,9 @@ export default function AdminWithdrawals() {
                     </button>
                   </>
                 ) : (
-                  <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${getStatusColor(w.status)} bg-white/[0.03]`}>
+                  <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${getStatusColor(w.status)} bg-white/[0.03] border border-white/5`}>
                     {w.status}
-                  </status>
+                  </span>
                 )}
               </div>
             </div>
@@ -133,7 +141,7 @@ export default function AdminWithdrawals() {
   );
 }
 
-// ── UTILS ──
+// ── UI HELPERS ──
 function StatusIcon({ status }) {
   if (status === 'pending') return <Clock size={18} className="text-yellow-500 animate-pulse" />;
   if (status === 'completed') return <CheckCircle2 size={18} className="text-emerald-500" />;
