@@ -1,21 +1,22 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, LogOut, User, DollarSign, ShieldCheck } from 'lucide-react';
-// 1. Import the hook
-import { useAuth } from '../context/AuthContext'; 
+// Corrected path: moving up two levels from src/components/layout to reach src/context
+import { useAuth } from '../../context/AuthContext';
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
-  
-  // 2. Consume the context directly
+
+  // Consume the context provided by AuthProvider
   const { user, logout, initialized } = useAuth();
-  
-  // Logic helpers
+
+  // Logic helpers for role-based UI and active states
   const isAuthenticated = !!user;
   const isAdmin = user?.isAdmin || user?.role === 'admin';
   const isActive = (path) => location.pathname === path;
 
+  // Public links accessible to everyone
   const navLinks = [
     { path: '/', label: 'Home' },
     { path: '/plans', label: 'Investment Plans' },
@@ -26,11 +27,11 @@ export default function Navbar() {
     <nav className="bg-[#020617] border-b border-white/5 sticky top-0 z-50 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-20 items-center">
-          
-          {/* Logo Section */}
+
+          {/* Logo Section - Trustra Capital Brand */}
           <Link to="/" className="flex items-center space-x-3 group">
             <div className="w-10 h-10 bg-yellow-600 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-600/20 group-hover:scale-105 transition-transform">
-               <DollarSign className="h-6 w-6 text-black font-bold" />
+              <DollarSign className="h-6 w-6 text-black font-bold" />
             </div>
             <div className="flex flex-col">
               <span className="text-lg font-black text-white uppercase tracking-tighter italic">Trustra</span>
@@ -52,7 +53,7 @@ export default function Navbar() {
               </Link>
             ))}
 
-            {/* Auth Section */}
+            {/* Auth Section - Only renders once Auth is initialized */}
             {initialized && (
               isAuthenticated ? (
                 <div className="flex items-center space-x-6 pl-6 border-l border-white/10">
@@ -60,7 +61,11 @@ export default function Navbar() {
                     to={isAdmin ? "/admin" : "/dashboard"}
                     className="flex items-center text-xs font-black uppercase tracking-widest text-slate-300 hover:text-yellow-500 transition-colors"
                   >
-                    {isAdmin ? <ShieldCheck className="h-4 w-4 mr-2" /> : <User className="h-4 w-4 mr-2" />}
+                    {isAdmin ? (
+                      <ShieldCheck className="h-4 w-4 mr-2 text-yellow-500" />
+                    ) : (
+                      <User className="h-4 w-4 mr-2" />
+                    )}
                     {isAdmin ? 'Admin Node' : 'Dashboard'}
                   </Link>
                   <button
@@ -90,7 +95,7 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile menu button */}
+          {/* Mobile menu toggle button */}
           <div className="md:hidden">
             <button
               onClick={() => setIsOpen(!isOpen)}
@@ -102,7 +107,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile menu (Trustra Styled) */}
+      {/* Mobile menu overlay */}
       {isOpen && (
         <div className="md:hidden bg-[#020617] border-b border-white/5 animate-in slide-in-from-top duration-300">
           <div className="px-4 pt-4 pb-8 space-y-2">
@@ -125,15 +130,22 @@ export default function Navbar() {
               {isAuthenticated ? (
                 <div className="space-y-2">
                   <Link
-                    to="/dashboard"
+                    to={isAdmin ? "/admin" : "/dashboard"}
                     className="flex items-center px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-[0.2em] text-slate-300 bg-white/5"
                     onClick={() => setIsOpen(false)}
                   >
-                    <User className="h-5 w-5 mr-3 text-yellow-600" />
-                    Secure Dashboard
+                    {isAdmin ? (
+                      <ShieldCheck className="h-5 w-5 mr-3 text-yellow-600" />
+                    ) : (
+                      <User className="h-5 w-5 mr-3 text-yellow-600" />
+                    )}
+                    {isAdmin ? 'Admin Terminal' : 'Secure Dashboard'}
                   </Link>
                   <button
-                    onClick={() => { logout(); setIsOpen(false); }}
+                    onClick={() => {
+                      logout();
+                      setIsOpen(false);
+                    }}
                     className="w-full flex items-center px-4 py-4 rounded-2xl text-xs font-black uppercase tracking-[0.2em] text-red-500 bg-red-500/5"
                   >
                     <LogOut className="h-5 w-5 mr-3" />
@@ -165,4 +177,3 @@ export default function Navbar() {
     </nav>
   );
 }
-

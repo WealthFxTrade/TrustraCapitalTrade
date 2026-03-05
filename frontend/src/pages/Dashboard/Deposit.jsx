@@ -7,9 +7,9 @@ import {
   Copy, Check, Loader2, ShieldCheck, AlertTriangle, ChevronLeft, Globe
 } from 'lucide-react';
 import api from '../../api/api';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 
-// Reusable Sidebar Link with Mainframe styling
+// ── REUSABLE SIDEBAR COMPONENT ──
 function SidebarLink({ to, icon: Icon, label, active = false }) {
   return (
     <Link
@@ -35,16 +35,18 @@ export default function Deposit() {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
 
+  // 🛰️ LOAD DEPOSIT ADDRESS FROM BACKEND
   const loadDepositAddress = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setError(null);
     try {
+      // Requesting the unique BTC vault address for this user node
       const res = await api.get('/user/deposit-address?asset=BTC');
       if (res.data?.address) {
         setDepositAddress(res.data.address);
       } else {
-        throw new Error('No address returned from server');
+        throw new Error('No address returned from gateway');
       }
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Node Handshake Failed';
@@ -55,8 +57,11 @@ export default function Deposit() {
     }
   }, [user]);
 
-  useEffect(() => { loadDepositAddress(); }, [loadDepositAddress]);
+  useEffect(() => { 
+    loadDepositAddress(); 
+  }, [loadDepositAddress]);
 
+  // 📋 CLIPBOARD LOGIC
   const copyToClipboard = useCallback(async () => {
     if (!depositAddress) return;
     try {
@@ -72,7 +77,7 @@ export default function Deposit() {
   return (
     <div className="flex min-h-screen bg-[#020408] text-white font-sans selection:bg-yellow-500/30 overflow-x-hidden">
       
-      {/* Sidebar - Persistent technical rail */}
+      {/* ── SIDEBAR: TECHNICAL RAIL ── */}
       <aside className="w-72 bg-[#05070a] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen p-8">
         <div className="flex items-center gap-3 mb-12">
           <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center">
@@ -90,15 +95,18 @@ export default function Deposit() {
           <SidebarLink to="/exchange" icon={Repeat} label="Exchange" />
         </nav>
 
-        <button onClick={logout} className="mt-auto flex items-center gap-4 px-6 py-4 text-gray-600 hover:text-red-500 transition-all text-[10px] font-black uppercase tracking-widest">
+        <button 
+          onClick={logout} 
+          className="mt-auto flex items-center gap-4 px-6 py-4 text-gray-600 hover:text-red-500 transition-all text-[10px] font-black uppercase tracking-widest"
+        >
           <LogOut size={18} /> Disconnect Node
         </button>
       </aside>
 
-      {/* Main Content Area */}
+      {/* ── MAIN CONTENT AREA ── */}
       <div className="flex-1 flex flex-col min-w-0">
-        
-        {/* Top Header - Global Status */}
+
+        {/* TOP HEADER: GLOBAL STATUS */}
         <header className="h-20 border-b border-white/5 bg-[#020408]/80 backdrop-blur-xl flex items-center justify-between px-6 md:px-10 sticky top-0 z-40">
           <div className="flex items-center gap-3">
              <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
@@ -112,8 +120,12 @@ export default function Deposit() {
 
         <main className="p-6 md:p-12 max-w-6xl mx-auto w-full space-y-12">
           
+          {/* TITLE BLOCK */}
           <div className="space-y-4">
-            <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-yellow-500 transition-colors">
+            <button 
+              onClick={() => navigate(-1)} 
+              className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-yellow-500 transition-colors"
+            >
               <ChevronLeft size={14} /> Previous Module
             </button>
             <h1 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter">
@@ -122,40 +134,50 @@ export default function Deposit() {
           </div>
 
           {error ? (
+            /* ── ERROR STATE ── */
             <div className="bg-red-500/5 border border-red-500/20 rounded-[2.5rem] p-12 text-center space-y-6">
               <AlertTriangle size={48} className="mx-auto text-red-500" />
-              <h3 className="text-xl font-black uppercase italic">Node Initialization Failed</h3>
+              <h3 className="text-xl font-black uppercase italic text-white">Node Initialization Failed</h3>
               <p className="text-gray-500 text-sm max-w-md mx-auto">{error}</p>
-              <button onClick={loadDepositAddress} className="bg-white text-black px-10 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-yellow-500 transition-all">
+              <button 
+                onClick={loadDepositAddress} 
+                className="bg-white text-black px-10 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-yellow-500 transition-all"
+              >
                 Attempt Reconnect
               </button>
             </div>
           ) : (
+            /* ── DEPOSIT TERMINAL ── */
             <div className="grid lg:grid-cols-5 gap-8">
-              
-              {/* Vault Card (Left) */}
+
+              {/* VAULT CARD (LEFT) */}
               <div className="lg:col-span-3 bg-[#0a0c10] border border-white/5 rounded-[3.5rem] p-8 md:p-12 relative overflow-hidden group shadow-2xl">
                 <div className="absolute top-0 right-0 p-12 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
                   <ShieldCheck size={200} />
                 </div>
 
                 <div className="relative z-10 flex flex-col items-center gap-10">
-                  <div className="p-6 bg-white rounded-[2.5rem] shadow-[0_0_50px_rgba(255,255,255,0.1)]">
+                  {/* QR NODE */}
+                  <div className="p-6 bg-white rounded-[2.5rem] shadow-[0_0_50px_rgba(255,255,255,0.1)] transition-transform group-hover:scale-[1.02]">
                     {loading ? (
                       <div className="w-48 h-48 flex items-center justify-center">
                         <Loader2 className="animate-spin text-yellow-500" size={40} />
                       </div>
                     ) : (
-                      <QRCodeSVG value={depositAddress || ''} size={192} level="H" />
+                      <QRCodeSVG value={depositAddress || ''} size={192} level="H" includeMargin={false} />
                     )}
                   </div>
 
+                  {/* ADDRESS STRING */}
                   <div className="w-full space-y-6">
                     <div className="text-center">
                       <p className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">Encrypted Receiving String</p>
                     </div>
-                    
-                    <div onClick={copyToClipboard} className={`group flex items-center justify-between bg-black/40 border ${copied ? 'border-emerald-500/50' : 'border-white/5'} p-6 rounded-2xl cursor-pointer hover:border-yellow-500/30 transition-all`}>
+
+                    <div 
+                      onClick={copyToClipboard} 
+                      className={`group flex items-center justify-between bg-black/40 border ${copied ? 'border-emerald-500/50' : 'border-white/5'} p-6 rounded-2xl cursor-pointer hover:border-yellow-500/30 transition-all`}
+                    >
                       <code className="text-xs md:text-sm font-mono text-gray-300 break-all select-none">
                         {loading ? 'Decrypting node address...' : depositAddress}
                       </code>
@@ -167,24 +189,34 @@ export default function Deposit() {
                 </div>
               </div>
 
-              {/* Instructions Panel (Right) */}
+              {/* INSTRUCTIONS PANEL (RIGHT) */}
               <div className="lg:col-span-2 space-y-6">
-                <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] h-full">
+                <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] h-full flex flex-col shadow-xl">
                   <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-8 flex items-center gap-3">
                     <ShieldCheck size={16} className="text-yellow-500" /> Protocol Requirements
                   </h3>
-                  
-                  <div className="space-y-8">
+
+                  <div className="space-y-8 flex-1">
                     {[
                       { title: 'Asset Verification', text: 'Strictly Bitcoin (BTC). Multi-chain cross-pollination will result in asset loss.' },
-                      { title: 'Confirmation Cycle', text: 'Typically 2–6 network validations (20-90 min).' },
-                      { title: 'Persistent Node', text: 'This address is tied to your ID and can be reused for future provisioning.' }
+                      { title: 'Confirmation Cycle', text: 'Typically 2–6 network validations required (est. 20-90 min).' },
+                      { title: 'Persistent Node', text: 'This address is uniquely tied to your ID and can be reused for future provisioning.' }
                     ].map((item, i) => (
                       <div key={i} className="space-y-2 border-l-2 border-yellow-500/20 pl-6">
-                        <h4 className="text-[10px] font-black text-white uppercase italic tracking-widest">{item.title}</h4>
-                        <p className="text-[11px] text-gray-500 leading-relaxed font-bold uppercase tracking-tighter">{item.text}</p>
+                        <h4 className="text-[10px] font-black text-white uppercase italic tracking-widest">
+                          {item.title}
+                        </h4>
+                        <p className="text-[11px] text-gray-500 leading-relaxed font-bold uppercase tracking-tighter">
+                          {item.text}
+                        </p>
                       </div>
                     ))}
+                  </div>
+
+                  <div className="mt-12 p-5 bg-white/5 rounded-2xl border border-white/5">
+                    <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest leading-relaxed">
+                      Transactions are monitored by <span className="text-white">Trustra Compliance Node 8.4</span>. Ensure you copy the address exactly to avoid transmission loss.
+                    </p>
                   </div>
                 </div>
               </div>

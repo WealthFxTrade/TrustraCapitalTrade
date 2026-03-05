@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import CryptoJS from 'crypto-js'; 
+import CryptoJS from 'crypto-js';
 import api from '../api/api';
+import { API_ENDPOINTS } from '../constants/api'; // 🟢 Added this import
 
 const AuthContext = createContext();
 const TOKEN_KEY = 'trustra_token';
@@ -30,6 +31,7 @@ export function AuthProvider({ children }) {
         mode: CryptoJS.mode.CBC,
         padding: CryptoJS.pad.Pkcs7
       });
+      // Return hex string to match backend decryption expectations
       return encrypted.ciphertext.toString(CryptoJS.enc.Hex);
     } catch (err) {
       console.error("🔒 Protocol Error: Encryption failed", err);
@@ -41,7 +43,8 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return dispatch({ type: 'AUTH_CLEAR' });
     try {
-      const { data } = await api.get('/auth/me');
+      // 🟢 Updated to use constant
+      const { data } = await api.get(API_ENDPOINTS.AUTH.ME);
       dispatch({ type: 'AUTH_SUCCESS', payload: data.user });
     } catch (error) {
       localStorage.removeItem(TOKEN_KEY);
@@ -53,7 +56,11 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     const cipher = encryptPassword(password);
-    const { data } = await api.post('/auth/login', { email, password: cipher });
+    if (!cipher) throw new Error("Encryption protocol failed");
+
+    // 🟢 Updated to use constant
+    const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, { email, password: cipher });
+    
     localStorage.setItem(TOKEN_KEY, data.token);
     dispatch({ type: 'AUTH_SUCCESS', payload: data.user });
     return data;
@@ -61,7 +68,11 @@ export function AuthProvider({ children }) {
 
   const signup = async (email, password, fullName) => {
     const cipher = encryptPassword(password);
-    const { data } = await api.post('/auth/register', { fullName, email, password: cipher });
+    if (!cipher) throw new Error("Encryption protocol failed");
+
+    // 🟢 Updated to use constant
+    const { data } = await api.post(API_ENDPOINTS.AUTH.REGISTER, { fullName, email, password: cipher });
+    
     localStorage.setItem(TOKEN_KEY, data.token);
     dispatch({ type: 'AUTH_SUCCESS', payload: data.user });
     return data;

@@ -1,30 +1,33 @@
-// Detect if running locally or on Render
+// constants/api.js
 export const API_URL = import.meta.env.MODE === 'development'
   ? 'http://localhost:10000/api'
-  : (import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api');
+  : '/api'; // In production, Vercel proxies /api to your Render URL
 
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
-    VERIFY: '/auth/me',
+    ME: '/auth/me',
   },
   USER: {
-    PROFILE: '/user/profile',
     DASHBOARD: '/user/dashboard',
-    KYC_SUBMIT: '/user/kyc-submit',
+    PROFILE: '/user/profile',
+    UPDATE: '/user/update',
   },
   WITHDRAWAL: {
     REQUEST: '/withdrawal/request',
-    MY_LIST: '/withdrawal/my',
+    HISTORY: '/withdrawal/history',
   },
   ADMIN: {
-    ACTIVITY: '/admin/activity',
     USERS: '/admin/users',
+    WITHDRAWALS: '/admin/withdrawals',
+    UPDATE_BALANCE: '/admin/user', 
   }
 };
 
-// HELPER: Builds the full URL (e.g., http://localhost:10000/api/auth/login)
+/**
+ * HELPER: Construct full URLs if needed outside the Axios instance
+ */
 export function getApiUrl(endpoint) {
   const cleanBase = API_URL.replace(/\/+$/, '');
   const cleanPath = endpoint.replace(/^\/+/, '');
