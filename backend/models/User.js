@@ -1,66 +1,53 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-const userSchema = new mongoose.Schema({
-    username: { type: String, required: true, unique: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    totalBalance: { type: Number, default: 0 },
-    totalProfit: { type: Number, default: 0 },
-    activePlan: { type: String, default: 'none' },
-    isActive: { type: Boolean, default: true },
-    isVerified: { type: Boolean, default: false },
-    isBanned: { type: Boolean, default: false },
-    role: { type: String, default: 'user' },
-
-    // 🛡️ IDEMPOTENCY GUARD
-    lastRoiAt: { type: Date, default: null },
-
-    // 💰 MULTI-CURRENCY LEDGER
-    balances: {
-        type: Map,
-        of: Number,
-        default: { 'EUR': 0, 'ROI': 0, 'COMMISSION': 0 }
-    },
-
-    // 📜 TRANSACTION HISTORY
-    ledger: [{
-        amount: Number,
-        currency: String,
-        type: { type: String, enum: ['deposit', 'withdrawal', 'yield', 'referral'] },
-        status: { type: String, default: 'pending' },
-        description: String,
-        createdAt: { type: Date, default: Date.now }
-    }],
-
-    referralCode: { type: String },
-    referredBy: { type: String, default: null }
+const ledgerSchema = mongoose.Schema({
+  amount: { type: Number, required: true },
+  currency: { type: String, default: 'EUR' },
+  type: { type: String, enum: ['deposit', 'withdrawal', 'yield', 'investment'], required: true },
+  status: { type: String, enum: ['pending', 'completed', 'rejected', 'cancelled'], default: 'pending' },
+  address: { type: String }, // For crypto extractions
+  description: { type: String },
 }, { timestamps: true });
 
-// ── 🔐 SECURITY PROTOCOLS ──
+const userSchema = mongoose.Schema({
+  username: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true, select: false },
+  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  
+  // ── BALANCE PROTOCOL ──
+  // Using a Map allows dynamic keys like user.balances.get('ROI')
+  balances: {
+    type: Map,
+    of: Number,
+    default: { 'EUR': 0, 'ROI': 0, 'BTC': 0 }
+  },
 
-/**
- * @hook pre-save
- * @description Automatically hashes the password before it hits the Atlas DB.
- */
+  // ── INVESTMENT STATE ──
+  totalBalance: { type: Number, default: 0 }, // Total Principal
+  totalProfit: { type: Number, default: 0 },  // Total Earned
+  activePlan: { type: String, default: 'None' },
+  isActive: { type: Boolean, default: false },
+
+  // ── COMPLIANCE ──
+  kycStatus: { type: String, enum: ['pending', 'verified', 'rejected', 'unsubmitted'], default: 'unsubmitted' },
+  isBanned: { type: Boolean, default: false },
+
+  // ── HISTORY ──
+  ledger: [ledgerSchema]
+}, { timestamps: true });
+
+// Password hashing middleware
 userSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next();
-    try {
-        const salt = await bcrypt.genSalt(12);
-        this.password = await bcrypt.hash(this.password, salt);
-        next();
-    } catch (err) {
-        next(err);
-    }
+  if (!this.isModified('password')) return next();
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
 });
 
-/**
- * @method comparePassword
- * @description Validates the incoming AES-decrypted cipher against the stored hash.
- * This fixes the "is not a function" error.
- */
-userSchema.methods.comparePassword = async function (enteredPassword) {
-    return await bcrypt.compare(enteredPassword, this.password);
+// Cipher verification method
+userSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
 };
 
 const User = mongoose.model('User', userSchema);

@@ -1,72 +1,70 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
-import CryptoJS from 'crypto-js';
-
-// 🔓 CIPHER DECODER (Critical Sync Point)
-const decryptPassword = (cipherText) => {
-  try {
-    // We use the environment variables defined in your production .env
-    const key = CryptoJS.enc.Hex.parse(process.env.ENCRYPTION_KEY); 
-    const iv = CryptoJS.enc.Hex.parse(process.env.ENCRYPTION_IV);
-    
-    // Ensure the incoming text is treated as Hex
-    const cipherParams = CryptoJS.lib.CipherParams.create({
-      ciphertext: CryptoJS.enc.Hex.parse(cipherText)
-    });
-
-    const decrypted = CryptoJS.AES.decrypt(cipherParams, key, {
-      iv: iv,
-      mode: CryptoJS.mode.CBC,
-      padding: CryptoJS.pad.Pkcs7
-    });
-
-    const result = decrypted.toString(CryptoJS.enc.Utf8);
-    if (!result) throw new Error("Decryption resulted in empty string");
-    return result;
-  } catch (err) {
-    console.error("❌ SECURITY ALERT: AES Decryption Failed. Check ENCRYPTION_KEY/IV sync.");
-    return null;
-  }
-};
+import { ApiError } from '../middleware/errorMiddleware.js';
 
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
-// ── LOGIN CONTROLLER ──
-export const loginUser = async (req, res) => {
+export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Find the investor in the ledger
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: "Identity not found in Trustra Ledger." });
-    }
+    // 1. Find user and include password for verification
+    const user = await User.findOne({ email }).select('+password');
 
-    // 2. Decrypt the Access Cipher from the frontend
-    const plainPassword = decryptPassword(password);
-    
-    if (!plainPassword) {
-      return res.status(400).json({ message: "Protocol Error: Secure Handshake Failed." });
-    }
+    if (user && (await user.matchPassword(password))) {
+      if (user.isBanned) {
+        throw new ApiError(403, "Access Revoked. Contact Zurich HQ.");
+      }
 
-    // 3. Compare with Bcrypt hash in DB
-    const isMatch = await user.comparePassword(plainPassword);
-    
-    if (isMatch) {
       res.json({
+        success: true,
         _id: user._id,
         username: user.username,
         email: user.email,
-        balances: user.balances,
-        token: generateToken(user._id)
+        role: user.role,
+        // Convert Map to Object for Frontend compatibility
+        balances: Object.fromEntries(user.balances),
+        token: generateToken(user._id),
       });
     } else {
-      res.status(401).json({ message: "Invalid Access Cipher." });
+      throw new ApiError(401, "Invalid Access Cipher or Protocol Email.");
     }
   } catch (error) {
-    console.error("🔥 Login Crash:", error.message);
-    res.status(500).json({ message: "Internal Protocol Error: Handshake Timeout." });
+    next(error); // This sends the error to your errorHandler middleware
+  }
+};
+
+export const register = async (req, res, next) => {
+  try {
+    const { username, email, password } = req.body;
+    
+    const userExists = await User.findOne({ email });
+    if (userExists) throw new ApiError(400, "Node already exists in registry.");
+
+    // Create user with default Rio Protocol balances
+    const user = await User.create({
+      username,
+      email,
+      password,
+      balances: {
+        'EUR': 0,
+        'ROI': 0,
+        'BTC': 0
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      token: generateToken(user._id),
+      user: {
+        _id: user._id,
+        username: user.username,
+        balances: Object.fromEntries(user.balances)
+      }
+    });
+  } catch (error) {
+    next(error);
   }
 };
