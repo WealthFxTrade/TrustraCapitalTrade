@@ -1,0 +1,15 @@
+{
+  "name": "trustra-capital-trade",
+  "version": "8.6.0",
+  "description": "Trustra Capital Core Gateway",
+  "main": "server.js",
+  "scripts": {
+    "server": "cd backend && npm run dev",
+    "client": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "clean": "rm -rf node_modules frontend/node_modules backend/node_modules"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

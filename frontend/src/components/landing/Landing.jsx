@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Zap, ShieldCheck, AlertTriangle, ArrowRight,
-  Star, Loader2, Menu, X, Phone, Mail
+  Zap, ShieldCheck, ArrowRight,
+  Star, Menu, X, Phone, Mail
 } from 'lucide-react';
 import RoiCalculator from './RoiCalculator';
 
@@ -40,9 +40,15 @@ const PlansGrid = () => {
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] opacity-50 mb-1">{plan.name}</h3>
                 <div className="text-3xl font-black italic mb-6 text-yellow-500">{plan.yield}</div>
                 <div className="space-y-4 mb-8 text-sm">
-                  <div className="flex justify-between"><span>Min Deposit</span><span className="font-bold">{plan.min}</span></div>
+                  <div className="flex justify-between text-gray-400"><span>Min Deposit</span><span className="font-bold text-white">{plan.min}</span></div>
                 </div>
-                <button onClick={() => navigate('/register', { state: { plan: plan.id } })} className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-xs font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all">Activate Node</button>
+                {/* ✅ CHANGE: Activate Node -> Activate Plan */}
+                <button 
+                  onClick={() => navigate('/signup', { state: { plan: plan.id } })} 
+                  className="w-full py-3 rounded-xl bg-white/5 border border-white/10 text-xs font-black uppercase tracking-widest hover:bg-yellow-500 hover:text-black hover:border-yellow-500 transition-all"
+                >
+                  Activate Plan
+                </button>
               </div>
             </div>
           ))}
@@ -57,7 +63,6 @@ export default function Landing() {
   const plansRef = useRef(null);
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [cryptoData, setCryptoData] = useState({ btc: { price: '...', change: '' }, eth: { price: '...', change: '' } });
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -77,8 +82,10 @@ export default function Landing() {
 
           {/* Desktop Actions */}
           <div className="hidden md:flex gap-6 items-center">
-            <button onClick={() => navigate('/login')} className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">Sign In</button>
-            <button onClick={() => navigate('/register')} className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-yellow-500 transition-all">Start Protocol</button>
+            {/* ✅ CHANGE: Sign In -> Login */}
+            <button onClick={() => navigate('/login')} className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">Login</button>
+            {/* ✅ CHANGE: Start Protocol -> Create Account */}
+            <button onClick={() => navigate('/signup')} className="bg-white text-black px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-yellow-500 transition-all">Create Account</button>
           </div>
 
           <button className="md:hidden p-2 text-gray-400" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -86,11 +93,13 @@ export default function Landing() {
           </button>
         </div>
 
-        {/* ✅ FIXED MOBILE DROPDOWN */}
+        {/* Mobile Dropdown */}
         {mobileMenuOpen && (
           <div className="md:hidden absolute top-full left-0 w-full bg-[#0a0c10] border-b border-white/20 p-8 flex flex-col gap-5 animate-in slide-in-from-top duration-300">
-            <button onClick={() => { navigate('/login'); setMobileMenuOpen(false); }} className="w-full py-4 text-[11px] font-black uppercase tracking-widest text-white border border-white/10 rounded-2xl">Login Protocol</button>
-            <button onClick={() => { navigate('/register'); setMobileMenuOpen(false); }} className="w-full py-4 bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-yellow-500/20">Initialize Account</button>
+            {/* ✅ CHANGE: Login Protocol -> Login */}
+            <button onClick={() => { navigate('/login'); setMobileMenuOpen(false); }} className="w-full py-4 text-[11px] font-black uppercase tracking-widest text-white border border-white/10 rounded-2xl">Login</button>
+            {/* ✅ CHANGE: Initialize Account -> Create Account */}
+            <button onClick={() => { navigate('/signup'); setMobileMenuOpen(false); }} className="w-full py-4 bg-yellow-500 text-black text-[11px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-yellow-500/20">Create Account</button>
           </div>
         )}
       </nav>
@@ -109,7 +118,8 @@ export default function Landing() {
             Institutional-grade algorithmic trading. Precision execution across global hubs.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6">
-            <button onClick={() => navigate('/register')} className="w-full sm:w-auto bg-yellow-500 text-black px-12 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] flex items-center justify-center gap-3">Start Earning <ArrowRight size={18} /></button>
+            {/* ✅ Action points to /signup */}
+            <button onClick={() => navigate('/signup')} className="w-full sm:w-auto bg-yellow-500 text-black px-12 py-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] flex items-center justify-center gap-3">Start Earning <ArrowRight size={18} /></button>
           </div>
         </div>
       </section>
@@ -121,7 +131,7 @@ export default function Landing() {
       {/* Reviews */}
       <section className="py-24 px-6 border-y border-white/5 bg-white/[0.01]">
         <div className="max-w-7xl mx-auto">
-          <h2 className="text-center text-[10px] font-black text-yellow-500 uppercase tracking-[0.5em] mb-16 italic text-center w-full">Global Pulse</h2>
+          <h2 className="text-center text-[10px] font-black text-yellow-500 uppercase tracking-[0.5em] mb-16 italic w-full">Global Pulse</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
             {REVIEWS.map((rev, i) => (
               <div key={i} className="p-8 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] group">
@@ -146,7 +156,6 @@ export default function Landing() {
             <h3 className="text-lg font-black italic uppercase text-yellow-500">Network Presence</h3>
             <p className="text-xs text-gray-500 uppercase font-bold tracking-wider leading-loose">USA Headquarters • Frankfurt • London • Tokyo Hubs.</p>
           </div>
-
           <div className="space-y-6">
             <h3 className="text-lg font-black italic uppercase text-yellow-500">Protocol Support</h3>
             <div className="space-y-4">
@@ -158,7 +167,6 @@ export default function Landing() {
               </a>
             </div>
           </div>
-
           <div className="space-y-6">
             <h3 className="text-lg font-black italic uppercase text-yellow-500">Infrastructure</h3>
             <div className="flex items-center gap-3 text-emerald-400 font-mono text-[10px] font-black uppercase tracking-widest">

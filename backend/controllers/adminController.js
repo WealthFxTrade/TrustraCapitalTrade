@@ -1,120 +1,86 @@
 import User from '../models/User.js';
-import Transaction from '../models/Transaction.js';
+import AuditLog from '../models/AuditLog.js';
+import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * @desc    Fetch Global System Metrics for Dashboard Cards
+ * @protocol getAllWithdrawals
+ * @desc    Fetches all pending and completed extraction requests across the network.
  */
-export const getAdminStats = async (req, res) => {
-    try {
-        const totalUsers = await User.countDocuments({ isBanned: false });
+export const getAllWithdrawals = async (req, res, next) => {
+  try {
+    // We search the ledger of all users for entries of type 'withdrawal'
+    const users = await User.find({ "ledger.type": "withdrawal" })
+      .select('username email ledger');
 
-        // Aggregate total successful deposits
-        const depositStats = await Transaction.aggregate([
-            { $match: { type: 'deposit', status: 'completed' } },
-            { $group: { _id: null, total: { $sum: '$amount' } } }
-        ]);
-
-        const pendingWithdrawals = await Transaction.countDocuments({ 
-            type: 'withdrawal', 
-            status: 'pending' 
-        });
-
-        const activeNodes = await User.countDocuments({ 
-            activePlan: { $ne: 'none' },
-            isActive: true 
-        });
-
-        res.status(200).json({
-            totalUsers,
-            totalDeposits: depositStats[0]?.total || 0,
-            pendingWithdrawals,
-            activeNodes
-        });
-    } catch (err) {
-        res.status(500).json({ message: "Metrics synchronization failed", error: err.message });
-    }
-};
-
-/**
- * @desc    Get all users for the User Directory
- */
-export const getAllUsers = async (req, res) => {
-    try {
-        const users = await User.find({}).select('-password').sort({ createdAt: -1 });
-        res.status(200).json(users);
-    } catch (err) {
-        res.status(500).json({ message: "Failed to fetch user ledger" });
-    }
-};
-
-/**
- * @desc    Update user balance manually (Admin Override)
- */
-export const updateUserBalance = async (req, res) => {
-    const { id } = req.params;
-    const { amount, type } = req.body; // type: 'add' or 'subtract'
-
-    try {
-        const user = await User.findById(id);
-        if (!user) return res.status(404).json({ message: "User not found" });
-
-        if (type === 'add') {
-            user.totalBalance += Number(amount);
-        } else {
-            user.totalBalance -= Number(amount);
+    // Flatten the ledger entries into a single list for the Admin HUD
+    let allWithdrawals = [];
+    users.forEach(user => {
+      user.ledger.forEach(entry => {
+        if (entry.type === 'withdrawal') {
+          allWithdrawals.push({
+            _id: entry._id,
+            userId: user._id,
+            username: user.username,
+            email: user.email,
+            amount: entry.amount,
+            currency: entry.currency,
+            address: entry.address,
+            status: entry.status,
+            createdAt: entry.createdAt
+          });
         }
+      });
+    });
 
-        await user.save();
-        res.status(200).json({ message: "Balance updated", newBalance: user.totalBalance });
-    } catch (err) {
-        res.status(500).json({ message: "Balance update failed" });
-    }
+    // Sort by newest first
+    allWithdrawals.sort((a, b) => b.createdAt - a.createdAt);
+
+    res.status(200).json({ success: true, withdrawals: allWithdrawals });
+  } catch (err) {
+    next(err);
+  }
 };
 
 /**
- * @desc    Get all withdrawal requests for the Queue
+ * @protocol processWithdrawal
+ * @desc    Approves or Rejects a pending extraction request.
  */
-export const getAllWithdrawals = async (req, res) => {
-    try {
-        const withdrawals = await Transaction.find({ type: 'withdrawal' })
-            .populate('user', 'username email')
-            .sort({ createdAt: -1 });
-        res.status(200).json(withdrawals);
-    } catch (err) {
-        res.status(500).json({ message: "Failed to fetch withdrawal queue" });
+export const processWithdrawal = async (req, res, next) => {
+  try {
+    const { id } = req.params; // Ledger Entry ID
+    const { status, adminComment } = req.body; // 'completed' or 'rejected'
+
+    const user = await User.findOne({ "ledger._id": id });
+    if (!user) throw new ApiError(404, "Transaction record not found in ledger.");
+
+    const entry = user.ledger.id(id);
+    
+    if (entry.status !== 'pending') {
+      throw new ApiError(400, "Transaction has already been processed.");
     }
-};
 
-/**
- * @desc    Approve or Reject a withdrawal
- */
-export const processWithdrawal = async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body; // 'completed' or 'failed'
-
-    try {
-        const withdrawal = await Transaction.findById(id);
-        if (!withdrawal) return res.status(404).json({ message: "Transaction not found" });
-
-        withdrawal.status = status;
-        await withdrawal.save();
-
-        res.status(200).json({ message: `Withdrawal ${status}` });
-    } catch (err) {
-        res.status(500).json({ message: "Failed to process withdrawal" });
+    if (status === 'rejected') {
+      // 🔄 Refund Protocol: Return the ROI to the user's balance
+      const currentRoi = user.balances.get('ROI') || 0;
+      user.balances.set('ROI', currentRoi + entry.amount);
+      entry.status = 'rejected';
+      entry.description += ` | Rejected: ${adminComment}`;
+    } else {
+      entry.status = 'completed';
+      entry.description += ` | Approved by Zurich HQ`;
     }
-};
 
-/**
- * @desc    Ban or Unban a user
- */
-export const toggleUserBan = async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id);
-        user.isBanned = !user.isBanned;
-        await user.save();
-        res.status(200).json({ message: user.isBanned ? "User Banned" : "User Unbanned" });
-    } catch (err) {
-        res.status(500).json({ message: "Toggle ban failed" });
-    }
+    // Log to Security Audit Trail
+    await AuditLog.create({
+      admin: req.user._id,
+      action: `WITHDRAWAL_${status.toUpperCase()}`,
+      targetUser: user._id,
+      details: `Processed ${entry.amount} ${entry.currency} extraction. Result: ${status}`
+    });
+
+    await user.save();
+    res.status(200).json({ success: true, message: `Extraction protocol ${status}.` });
+  } catch (err) {
+    next(err);
+  }
 };

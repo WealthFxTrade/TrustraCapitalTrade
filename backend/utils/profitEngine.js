@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import User from '../models/User.js';
 
 // Synchronized Rio v8.6 Daily Rates
+// These reflect the tiers established for the 2026 Zurich portfolio
 const RIO_DAILY_RATES = {
   'Rio Starter': 0.0025,  // 0.25% daily
   'Rio Basic': 0.0035,    // 0.35% daily
@@ -12,20 +13,21 @@ const RIO_DAILY_RATES = {
 
 /**
  * 🚀 THE ENGINE: runYieldDistribution
- * Core logic to calculate and inject daily ROI.
+ * Core logic to calculate and inject daily ROI based on active investment nodes.
  */
 export const runYieldDistribution = async () => {
   console.log('--- [RIO ENGINE] INITIATING DISTRIBUTION SEQUENCE ---');
-  
+
   // Define the boundary for "Today" (UTC Midnight)
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
   try {
-    // Find users who:
-    // 1. Are active and not banned
-    // 2. Have an investment plan
-    // 3. HAVEN'T been paid yet today (lastRoiAt < midnight OR null)
+    /**
+     * @query NodeSelection
+     * Filters for active, unbanned users with a valid plan who haven't 
+     * received an accrual yet in the current 24-hour cycle.
+     */
     const activeUsers = await User.find({
       isActive: true,
       isBanned: false,
@@ -44,32 +46,36 @@ export const runYieldDistribution = async () => {
     let updatedCount = 0;
 
     for (let user of activeUsers) {
+      // Retrieve rate based on plan; fallback to 0.1% if plan data is corrupted
       const rate = RIO_DAILY_RATES[user.activePlan] || 0.001;
-      const accruedAmount = user.totalBalance * rate;
+      
+      // Calculate profit based on the Principal EUR balance
+      const principal = user.balances.get('EUR') || 0;
+      const accruedAmount = principal * rate;
 
       if (accruedAmount <= 0) continue;
 
-      // 1. Update Map-based ROI balance
+      // 1. Update Map-based ROI balance (Profit Wallet)
       const currentRoi = user.balances.get('ROI') || 0;
       user.balances.set('ROI', currentRoi + accruedAmount);
 
-      // 2. Update Global Accumulators
-      user.totalProfit += accruedAmount;
+      // 2. Update Global Accumulators for Dashboard visualization
+      user.totalProfit = (user.totalProfit || 0) + accruedAmount;
 
-      // 3. Document the injection in the Ledger
+      // 3. Document the injection in the Immutable Ledger
       user.ledger.push({
         amount: accruedAmount,
         currency: 'EUR',
         type: 'yield',
         status: 'completed',
-        description: `Daily Rio Accrual: ${user.activePlan}`,
+        description: `Daily Rio Accrual: ${user.activePlan} Node`,
         createdAt: new Date()
       });
 
-      // 4. Update the Safety Timestamp
+      // 4. Update the Safety Timestamp to lock this node for the rest of today
       user.lastRoiAt = new Date();
 
-      // 5. Inform Mongoose of changes to complex types
+      // 5. Inform Mongoose of changes to complex Map types and Arrays
       user.markModified('balances');
       user.markModified('ledger');
 
@@ -88,15 +94,17 @@ export const runYieldDistribution = async () => {
 
 /**
  * ⏰ THE CLOCK: initializeProfitDistributor
- * Schedules the engine to run every midnight.
+ * Schedules the engine to run automatically every midnight.
  */
 export const initializeProfitDistributor = () => {
-  // Cron: 0 0 * * * (Every day at 00:00)
+  // Cron: 0 0 * * * (Triggers at exactly 00:00:00 every day)
   cron.schedule('0 0 * * *', async () => {
     try {
       await runYieldDistribution();
     } catch (err) {
-      console.error('[CRON ERROR]', err);
+      console.error('[CRON ERROR] Yield Distribution Interrupted:', err);
     }
   });
+
+  console.log('⏰ [RIO ENGINE] Scheduler Active: Distribution set for Midnight UTC.');
 };

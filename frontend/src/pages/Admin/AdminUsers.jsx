@@ -1,99 +1,92 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, Search, ShieldCheck, 
-  MoreVertical, UserMinus, UserCheck, 
-  Network, TrendingUp 
-} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Search, Edit3, ShieldAlert, X, Save, TrendingUp, Wallet } from 'lucide-react';
 import api from '../../api/api';
 import toast from 'react-hot-toast';
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
-  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingUser, setEditingUser] = useState(null);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const res = await api.get('/admin/users');
-        setUsers(res.data);
-      } catch (err) {
-        toast.error("Failed to sync user ledger.");
-      }
-    };
-    fetchUsers();
-  }, []);
+  // Modal State
+  const [editData, setEditData] = useState({ amount: '', balanceType: 'EUR', type: 'add' });
+
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get('/admin/users');
+      setUsers(res.data);
+    } catch (err) {
+      toast.error("Handshake failed with Registry");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchUsers(); }, []);
+
+  const handleUpdateBalance = async (e) => {
+    e.preventDefault();
+    const loadId = toast.loading("Writing to Ledger...");
+    try {
+      await api.put(`/admin/users/${editingUser._id}/balance`, editData);
+      toast.success("Ledger Synchronized", { id: loadId });
+      setEditingUser(null);
+      fetchUsers();
+    } catch (err) {
+      toast.error("Override Denied", { id: loadId });
+    }
+  };
 
   const filteredUsers = users.filter(u => 
-    u.email.toLowerCase().includes(search.toLowerCase()) || 
-    u.username?.toLowerCase().includes(search.toLowerCase())
+    u.email?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    u.username?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
-    <div className="min-h-screen bg-[#020408] text-white p-8 pt-24">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
-        <div>
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter mb-2">User Directory</h1>
-          <p className="text-[10px] font-bold opacity-30 uppercase tracking-[0.3em]">Protocol Membership Oversight</p>
-        </div>
-        
+    <div className="space-y-8">
+      {/* ── HEADER & SEARCH ── */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+        <h2 className="text-2xl font-black italic uppercase tracking-tighter">Identity Registry</h2>
         <div className="relative w-full md:w-96">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
           <input 
-            type="text" 
-            placeholder="Search by Hash or Identity..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl focus:border-yellow-500 outline-none font-mono text-sm"
+            type="text" placeholder="Search Node ID/Email..."
+            className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl outline-none focus:border-yellow-500 text-xs font-bold transition-all"
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
       </div>
 
+      {/* ── USER TABLE ── */}
       <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="border-b border-white/5 bg-white/[0.02]">
-              <th className="p-6 text-[10px] font-black uppercase tracking-widest opacity-40">User Identity</th>
-              <th className="p-6 text-[10px] font-black uppercase tracking-widest opacity-40">Balance</th>
-              <th className="p-6 text-[10px] font-black uppercase tracking-widest opacity-40">Node Hierarchy (Referrer)</th>
-              <th className="p-6 text-[10px] font-black uppercase tracking-widest opacity-40">Status</th>
-              <th className="p-6 text-[10px] font-black uppercase tracking-widest opacity-40 text-right">Actions</th>
+        <table className="w-full text-left">
+          <thead className="bg-white/[0.02] text-[10px] font-black uppercase tracking-widest text-gray-500">
+            <tr>
+              <th className="p-6">Investor Node</th>
+              <th className="p-6">Capital (EUR)</th>
+              <th className="p-6">Yield (ROI)</th>
+              <th className="p-6 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {filteredUsers.map((user) => (
-              <tr key={user._id} className="hover:bg-white/[0.01] transition-colors">
+            {filteredUsers.map(u => (
+              <tr key={u._id} className="hover:bg-white/[0.01] transition-colors group">
                 <td className="p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-yellow-500/10 rounded-full flex items-center justify-center text-yellow-500 font-black italic text-xs">
-                      {user.username?.substring(0, 2).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-sm font-black italic">{user.username}</p>
-                      <p className="text-[10px] opacity-30 font-mono">{user.email}</p>
-                    </div>
+                  <div className="flex flex-col">
+                    <span className="font-bold italic text-sm text-white">{u.username}</span>
+                    <span className="text-[10px] font-mono text-gray-500">{u.email}</span>
                   </div>
                 </td>
-                <td className="p-6 font-mono text-emerald-400 font-bold">
-                  €{user.totalBalance?.toLocaleString()}
-                </td>
-                <td className="p-6">
-                  <div className="flex items-center gap-2">
-                    <Network size={14} className="text-blue-400" />
-                    <span className="text-[10px] font-black uppercase tracking-widest opacity-60">
-                      {user.referredBy || 'Direct Entry'}
-                    </span>
-                  </div>
-                </td>
-                <td className="p-6">
-                  <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${
-                    user.isVerified ? 'bg-emerald-500/10 text-emerald-500' : 'bg-red-500/10 text-red-500'
-                  }`}>
-                    {user.isVerified ? 'Verified' : 'Unverified'}
-                  </span>
-                </td>
+                <td className="p-6 font-mono text-xs font-bold text-white">€{u.balances?.EUR?.toLocaleString() || 0}</td>
+                <td className="p-6 font-mono text-xs font-bold text-yellow-500">€{u.balances?.ROI?.toLocaleString() || 0}</td>
                 <td className="p-6 text-right">
-                  <button className="p-2 hover:bg-white/5 rounded-lg transition-all opacity-40 hover:opacity-100">
-                    <MoreVertical size={18} />
+                  <button 
+                    onClick={() => { setEditingUser(u); setEditData({ ...editData, amount: '' }); }}
+                    className="p-3 bg-white/5 rounded-xl hover:bg-yellow-500 hover:text-black transition-all"
+                  >
+                    <Edit3 size={16} />
                   </button>
                 </td>
               </tr>
@@ -101,6 +94,64 @@ export default function AdminUsers() {
           </tbody>
         </table>
       </div>
+
+      {/* ── OVERRIDE MODAL ── */}
+      <AnimatePresence>
+        {editingUser && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-black/60">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-[#0a0c10] border border-white/10 p-10 rounded-[3rem] w-full max-w-md shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-xl font-black italic uppercase italic">Balance Override</h3>
+                <button onClick={() => setEditingUser(null)} className="text-gray-500 hover:text-white"><X /></button>
+              </div>
+
+              <form onSubmit={handleUpdateBalance} className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    type="button" onClick={() => setEditData({...editData, balanceType: 'EUR'})}
+                    className={`p-4 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${editData.balanceType === 'EUR' ? 'bg-white text-black border-white' : 'border-white/10 text-gray-500'}`}
+                  >
+                    <Wallet size={14} className="inline mr-2" /> Capital
+                  </button>
+                  <button 
+                    type="button" onClick={() => setEditData({...editData, balanceType: 'ROI'})}
+                    className={`p-4 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all ${editData.balanceType === 'ROI' ? 'bg-yellow-500 text-black border-yellow-500' : 'border-white/10 text-gray-500'}`}
+                  >
+                    <TrendingUp size={14} className="inline mr-2" /> Yield
+                  </button>
+                </div>
+
+                <div className="flex gap-2 p-1 bg-white/5 rounded-xl">
+                  {['add', 'subtract'].map(op => (
+                    <button
+                      key={op} type="button" onClick={() => setEditData({...editData, type: op})}
+                      className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${editData.type === op ? 'bg-white/10 text-white' : 'text-gray-600'}`}
+                    >
+                      {op}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Amount (EUR)</label>
+                  <input 
+                    type="number" required placeholder="0.00"
+                    className="w-full bg-black border border-white/10 p-5 rounded-2xl text-yellow-500 font-bold focus:border-yellow-500 outline-none"
+                    value={editData.amount} onChange={(e) => setEditData({...editData, amount: e.target.value})}
+                  />
+                </div>
+
+                <button className="w-full py-6 bg-yellow-500 text-black font-black uppercase italic rounded-2xl flex items-center justify-center gap-3 hover:bg-white transition-all">
+                  Confirm Ledger Write <Save size={18} />
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
