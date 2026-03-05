@@ -6,11 +6,11 @@ import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
+import path from 'path'; // 🛰️ Added for production paths
 
 // ── MIDDLEWARE & ERROR PROTOCOL IMPORTS ──
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
-// Matching the import name from our profitEngine.js
-import { initializeProfitDistributor } from './utils/profitEngine.js'; 
+import { initializeProfitDistributor } from './utils/profitEngine.js';
 
 // ── ROUTE IMPORTS ──
 import authRoutes from './routes/auth.js';
@@ -19,10 +19,10 @@ import adminRoutes from './routes/adminRoutes.js';
 import withdrawalRoutes from './routes/withdrawalRoutes.js';
 import supportRoutes from './routes/supportRoutes.js';
 
-// ── 0. CONFIG & INFRASTRUCTURE ──
 const PORT = process.env.PORT || 10000;
 const app = express();
 const server = http.createServer(app);
+const __dirname = path.resolve(); // 🛰️ Resolve absolute path
 
 // ✅ Robust CORS Handshake
 const allowedOrigins = [
@@ -40,7 +40,6 @@ const io = new Server(server, {
   }
 });
 
-// Make 'io' accessible in our routes via req.app.get('socketio')
 app.set('socketio', io);
 
 io.on('connection', (socket) => {
@@ -50,18 +49,16 @@ io.on('connection', (socket) => {
       console.log(`📡 Terminal Sync: Node ${userId} connected`);
     }
   });
-
   socket.on('disconnect', () => {
     console.log('📡 Terminal Link severed');
   });
 });
 
 // ── 2. GLOBAL MIDDLEWARE ──
-app.use(helmet({ contentSecurityPolicy: false }));
-
-/** * CRITICAL: These must come BEFORE routes to prevent 
- * the "Username Required" Internal Server Error 
- */
+app.use(helmet({ 
+  contentSecurityPolicy: false, // Required to allow external fonts/images in some environments
+  crossOriginEmbedderPolicy: false 
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -76,7 +73,13 @@ app.use(cors({
   credentials: true
 }));
 
-// ── 3. SYSTEM & HEALTH ROUTES ──
+// ── 3. API BUSINESS LOGIC ──
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/withdrawal', withdrawalRoutes);
+app.use('/api/support', supportRoutes);
+
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'online',
@@ -85,12 +88,19 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// ── 4. API BUSINESS LOGIC ──
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/withdrawal', withdrawalRoutes);
-app.use('/api/support', supportRoutes);
+// ── 4. PRODUCTION STATIC SERVING ──
+/**
+ * If NODE_ENV is production, we serve the frontend build from the dist folder.
+ * This makes the entire app accessible on a single port.
+ */
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '/dist')));
+
+  // Direct all non-API requests to the React index.html
+  app.get('*', (req, res) =>
+    res.sendFile(path.resolve(__dirname, 'dist', 'index.html'))
+  );
+}
 
 // ── 5. ERROR PROTOCOLS ──
 app.use(notFound);
@@ -105,13 +115,10 @@ const startServer = async () => {
 
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 TRUSTRA CORE LIVE: PORT ${PORT}`);
-      
-      // Start the Automated Profit Engine
       initializeProfitDistributor();
     });
   } catch (err) {
     console.error('❌ Boot Error:', err.message);
-    // Exponential backoff for database connection retries
     setTimeout(startServer, 5000);
   }
 };

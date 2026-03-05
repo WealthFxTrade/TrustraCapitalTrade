@@ -1,53 +1,57 @@
 import express from 'express';
-import {
-  getUserProfile,
-  getMyDepositAddress,
-  updatePassword,
-  getYieldHistory,
-  getAllUsers,
-  updateUser,
-  deleteUser,
-  compoundYield,    // 🛰️ Added
-  requestWithdrawal // 🛰️ Added
-} from '../controllers/userController.js';
-import { submitKyc, getKycStatus } from '../controllers/kycController.js';
-import { protect, admin } from '../middleware/authMiddleware.js';
-import upload from '../middleware/multerConfig.js';
-
 const router = express.Router();
 
-// ── 1. CORE USER PROTOCOLS (Protected) ──
-router.use(protect);
+// Middleware
+import { protect } from '../middleware/authMiddleware.js';
 
-router.get('/profile', getUserProfile);
-router.get('/yield-history', getYieldHistory);
+// Controller Imports
+import { 
+    getUserProfile, 
+    updateProfile, 
+    getLedger 
+} from '../controllers/userController.js';
 
-/** * 🛰️ SYNC ALIAS 
- * Your frontend logs show it's hitting /vault-addresses. 
- * We map both to ensure zero-fail synchronization.
+import { 
+    subscribeToPlan 
+} from '../controllers/investController.js';
+
+import { 
+    requestWithdrawal 
+} from '../controllers/withdrawalController.js';
+
+import { 
+    submitKyc 
+} from '../controllers/kycController.js';
+
+/**
+ * ── 1. IDENTITY & PROFILE ──
+ * Accessing the user's private data node
  */
-router.get('/deposit-address', getMyDepositAddress);
-router.get('/vault-addresses', getMyDepositAddress); 
+router.get('/profile', protect, getUserProfile);
+router.put('/profile/update', protect, updateProfile);
 
-router.put('/update-password', updatePassword);
+/**
+ * ── 2. FINANCIAL LEDGER ──
+ * Retrieving historical transaction data (ROI, Yield, Deposits)
+ */
+router.get('/ledger', protect, getLedger);
 
-// ── 2. FINANCIAL EXECUTION ──
-router.post('/compound-yield', compoundYield); // ⚡ For the "Inject Yield" button
-router.post('/withdraw', requestWithdrawal);   // 💸 For the "Extraction" node
+/**
+ * ── 3. INVESTMENT PROTOCOLS ──
+ * Activating Rio Yield Nodes
+ */
+router.post('/invest/subscribe', protect, subscribeToPlan);
 
-// ── 3. IDENTITY (KYC) INGRESS ──
-const kycFields = upload.fields([
-  { name: 'frontImage', maxCount: 1 },
-  { name: 'backImage', maxCount: 1 },
-  { name: 'selfieImage', maxCount: 1 }
-]);
-router.post('/kyc-submit', kycFields, submitKyc);
-router.get('/kyc-status', getKycStatus);
+/**
+ * ── 4. EXTRACTION PROTOCOLS ──
+ * Requesting BTC/ETH/USDT withdrawals
+ */
+router.post('/withdraw/request', protect, requestWithdrawal);
 
-// ── 4. ADMINISTRATIVE OVERRIDE (Protected + Admin) ──
-router.get('/all', admin, getAllUsers);
-router.route('/:id')
-  .put(admin, updateUser)
-  .delete(admin, deleteUser);
+/**
+ * ── 5. KYC VERIFICATION ──
+ * Uploading identity documents to Zurich HQ
+ */
+router.post('/kyc/submit', protect, submitKyc);
 
 export default router;

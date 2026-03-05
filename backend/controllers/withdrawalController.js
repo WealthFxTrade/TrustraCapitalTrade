@@ -1,92 +1,116 @@
 import User from '../models/User.js';
-import Withdrawal from '../models/Withdrawal.js';
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * @desc    Initiate a new withdrawal request (Locks Capital)
- * @route   POST /api/withdrawal/request
+ * @protocol requestWithdrawal
+ * @desc    Validates ROI balance and creates a pending extraction request in the ledger.
  */
 export const requestWithdrawal = async (req, res, next) => {
-    try {
-        const { amount, asset, address, network } = req.body;
-        const user = await User.findById(req.user.id);
+  try {
+    const { amount, currency, address } = req.body;
+    const user = await User.findById(req.user._id);
 
-        if (!user) throw new ApiError(404, 'Node identity not found');
+    if (!user) throw new ApiError(404, "User node not found.");
 
-        // 1. Balance Verification
-        if (user.totalBalance < amount) {
-            throw new ApiError(400, 'Insufficient Capital Allocation for this request');
-        }
+    const withdrawalAmount = parseFloat(amount);
 
-        // 2. Create Withdrawal Record
-        const withdrawal = await Withdrawal.create({
-            user: user._id,
-            amount,
-            asset: asset || 'BTC',
-            address,
-            network,
-            status: 'pending'
-        });
-
-        // 3. Capital Locking Logic: Deduct from balance immediately
-        user.totalBalance -= amount;
-        await user.save();
-
-        res.status(201).json({
-            success: true,
-            message: 'Withdrawal protocol initiated. Pending Admin Audit.',
-            data: withdrawal
-        });
-    } catch (err) {
-        next(err);
+    // 1. Minimum Threshold Security (Standard Zurich Protocol)
+    if (withdrawalAmount < 50) {
+      throw new ApiError(400, "Minimum extraction threshold is €50.");
     }
+
+    // 2. ROI Balance Validation
+    const availableRoi = user.balances.get('ROI') || 0;
+
+    if (availableRoi < withdrawalAmount) {
+      throw new ApiError(400, "Insufficient ROI balance for this extraction.");
+    }
+
+    // 3. Deduction Protocol (Immediate Hold)
+    // Funds are held to prevent double-spending during HQ review.
+    user.balances.set('ROI', availableRoi - withdrawalAmount);
+
+    // 4. Record in Immutable Ledger
+    user.ledger.push({
+      amount: withdrawalAmount,
+      currency: currency || 'EUR',
+      address: address, // The destination wallet address
+      type: 'withdrawal',
+      status: 'pending',
+      description: `Extraction request to: ${address}`,
+      createdAt: new Date()
+    });
+
+    // 5. State Synchronization
+    user.markModified('balances');
+    user.markModified('ledger');
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Extraction request transmitted to Zurich HQ. Status: Pending.",
+      balances: Object.fromEntries(user.balances)
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 /**
- * @desc    Fetch history for the authenticated node
- * @route   GET /api/withdrawal/history
- */
-export const getMyWithdrawals = async (req, res, next) => {
-    try {
-        const history = await Withdrawal.find({ user: req.user.id })
-            .sort({ createdAt: -1 });
-
-        res.status(200).json({ success: true, data: history });
-    } catch (err) {
-        next(err);
-    }
-};
-
-/**
- * @desc    Cancel a pending request & Refund Capital
- * @route   DELETE /api/withdrawal/cancel/:id
+ * @protocol cancelWithdrawal
+ * @desc    Allows a user to retract a pending request and automatically refund their ROI wallet.
  */
 export const cancelWithdrawal = async (req, res, next) => {
-    try {
-        const withdrawal = await Withdrawal.findOne({
-            _id: req.params.id,
-            user: req.user.id,
-            status: 'pending' // Only allow cancellation of pending requests
-        });
+  try {
+    const { id } = req.params; // The unique ID of the ledger entry
+    const user = await User.findById(req.user._id);
 
-        if (!withdrawal) {
-            throw new ApiError(404, 'Request not found or already processed');
-        }
+    // Access the specific sub-document in the ledger array
+    const entry = user.ledger.id(id);
 
-        // 1. Mark as cancelled
-        withdrawal.status = 'cancelled';
-        await withdrawal.save();
+    if (!entry) throw new ApiError(404, "Transaction record not found.");
+    if (entry.status !== 'pending') throw new ApiError(400, "Cannot retract a processed transaction.");
 
-        // 2. Capital Refund: Return the locked funds to the user
-        const user = await User.findById(req.user.id);
-        user.totalBalance += withdrawal.amount;
-        await user.save();
+    // 1. Refund Protocol
+    const currentRoi = user.balances.get('ROI') || 0;
+    user.balances.set('ROI', currentRoi + entry.amount);
 
-        res.status(200).json({
-            success: true,
-            message: 'Withdrawal cancelled. Capital refunded to Node.'
-        });
-    } catch (err) {
-        next(err);
-    }
+    // 2. Update Entry Status for Audit Trail
+    entry.status = 'cancelled';
+    entry.description += " | User retracted request.";
+
+    user.markModified('balances');
+    user.markModified('ledger');
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Extraction retracted. Funds restored to ROI node.",
+      balances: Object.fromEntries(user.balances)
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @protocol getMyWithdrawals
+ * @desc    Synchronizes with routes/withdrawalRoutes.js to provide user-specific history.
+ */
+export const getMyWithdrawals = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('ledger');
+    
+    // Filter for withdrawal types and sort by date descending
+    const extractions = user.ledger
+      .filter(item => item.type === 'withdrawal')
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    res.status(200).json({
+      success: true,
+      withdrawals: extractions
+    });
+  } catch (err) {
+    next(err);
+  }
 };
