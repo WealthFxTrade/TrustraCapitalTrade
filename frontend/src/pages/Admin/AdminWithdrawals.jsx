@@ -1,92 +1,153 @@
 import React, { useState, useEffect } from 'react';
-import { CreditCard, Check, X, ExternalLink, clock } from 'lucide-react';
+import { 
+  Clock, 
+  CheckCircle2, 
+  XCircle, 
+  Search, 
+  Filter, 
+  ExternalLink, 
+  ArrowUpRight 
+} from 'lucide-react'; // Fixed: Clock is PascalCase
 import api from '../../api/api';
 import toast from 'react-hot-toast';
 
 export default function AdminWithdrawals() {
-  const [requests, setRequests] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const fetchRequests = async () => {
+  const fetchWithdrawals = async () => {
     try {
+      // Points to getAdminWithdrawals logic in our unified controller
       const { data } = await api.get('/admin/withdrawals');
-      setRequests(data.withdrawals);
+      setWithdrawals(data.withdrawals);
     } catch (err) {
-      toast.error("Failed to sync extraction ledger.");
+      toast.error("Failed to sync with withdrawal registry.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchRequests(); }, []);
+  useEffect(() => { fetchWithdrawals(); }, []);
 
-  const handleAction = async (id, status) => {
-    const comment = status === 'rejected' ? window.prompt("Reason for rejection:") : "Approved";
-    if (status === 'rejected' && !comment) return;
+  const processAction = async (id, status) => {
+    const confirmMsg = status === 'completed' 
+      ? "Confirm this extraction as successful?" 
+      : "Reject this extraction? Funds will be auto-refunded to user.";
+      
+    if (!window.confirm(confirmMsg)) return;
 
-    const loadId = toast.loading("Processing Extraction...");
     try {
-      await api.patch(`/admin/withdrawal/${id}`, { status, adminComment: comment });
-      toast.success(`Request ${status}`, { id: loadId });
-      fetchRequests();
+      await api.patch(`/admin/withdrawal/${id}`, { status });
+      toast.success(`Protocol updated: ${status}`);
+      fetchWithdrawals(); // Refresh registry
     } catch (err) {
-      toast.error("Handshake Failed", { id: loadId });
+      toast.error("Handshake failed during processing.");
     }
   };
 
+  const filtered = withdrawals.filter(w => 
+    w.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    w.address?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) return (
+    <div className="flex h-64 items-center justify-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
+    </div>
+  );
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-black italic uppercase tracking-tighter">Extraction Ledger</h2>
-        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Pending Liquidity Outflows</p>
+    <div className="p-8 space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black uppercase tracking-tighter text-white">Extraction Oversight</h2>
+          <p className="text-gray-500 text-xs font-mono uppercase tracking-widest mt-1">Zurich HQ / Withdrawal Registry</p>
+        </div>
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+          <input 
+            type="text"
+            placeholder="Search User or Wallet..."
+            className="bg-white/[0.03] border border-white/10 rounded-xl py-2 pl-10 pr-4 text-xs text-white focus:border-yellow-500/50 outline-none w-64"
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
       </div>
 
-      <div className="bg-[#05070a] border border-white/5 rounded-[2rem] overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-white/[0.02] text-[10px] font-black uppercase tracking-widest text-gray-500">
-            <tr>
-              <th className="p-6">Investor</th>
-              <th className="p-6">Amount</th>
-              <th className="p-6">Destination Node</th>
-              <th className="p-6">Status</th>
-              <th className="p-6 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5 font-mono text-[11px]">
-            {requests.map((req) => (
-              <tr key={req._id} className="hover:bg-white/[0.01]">
-                <td className="p-6">
-                  <p className="text-white font-bold">{req.username}</p>
-                  <p className="text-[9px] text-gray-600">{req.email}</p>
-                </td>
-                <td className="p-6">
-                  <span className="text-yellow-500 font-black">€{req.amount.toLocaleString()}</span>
-                </td>
-                <td className="p-6">
-                  <p className="text-gray-400 truncate w-32">{req.address}</p>
-                  <span className="text-[8px] px-1 bg-white/5 rounded text-gray-500 uppercase">{req.currency}</span>
-                </td>
-                <td className="p-6">
-                  <span className={`uppercase font-black text-[9px] ${
-                    req.status === 'pending' ? 'text-yellow-500' : 
-                    req.status === 'completed' ? 'text-emerald-500' : 'text-red-500'
-                  }`}>
-                    {req.status}
-                  </span>
-                </td>
-                <td className="p-6 text-right">
-                  {req.status === 'pending' && (
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => handleAction(req._id, 'rejected')} className="p-2 hover:bg-red-500/20 text-red-500 rounded-lg transition-all"><X size={16} /></button>
-                      <button onClick={() => handleAction(req._id, 'completed')} className="p-2 bg-emerald-500 text-black rounded-lg hover:bg-white transition-all"><Check size={16} /></button>
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="grid gap-4">
+        {filtered.length === 0 ? (
+          <div className="text-center py-20 bg-white/[0.01] border border-dashed border-white/5 rounded-3xl">
+            <p className="text-gray-600 font-mono text-[10px] uppercase">No pending extractions in current node</p>
+          </div>
+        ) : (
+          filtered.map((w) => (
+            <div key={w._id} className="bg-white/[0.02] border border-white/5 rounded-2xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-6 hover:border-white/10 transition-all">
+              <div className="flex items-start gap-4">
+                <div className={`p-3 rounded-xl ${getStatusBg(w.status)}`}>
+                  <StatusIcon status={w.status} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-white uppercase">{w.username}</span>
+                    <span className="text-[10px] text-gray-500 font-mono">{w.email}</span>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-lg font-black text-white tracking-tighter">€{w.amount.toLocaleString()}</p>
+                    <p className="text-[9px] text-gray-500 font-mono uppercase flex items-center gap-1">
+                      Dest: <span className="text-yellow-500/80">{w.address}</span>
+                      <ExternalLink size={10} className="cursor-pointer" />
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {w.status === 'pending' ? (
+                  <>
+                    <button 
+                      onClick={() => processAction(w._id, 'rejected')}
+                      className="px-6 py-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[10px] font-black uppercase rounded-xl transition-all border border-red-500/20"
+                    >
+                      Reject
+                    </button>
+                    <button 
+                      onClick={() => processAction(w._id, 'completed')}
+                      className="px-6 py-2 bg-emerald-500 text-black text-[10px] font-black uppercase rounded-xl hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
+                    >
+                      Approve
+                    </button>
+                  </>
+                ) : (
+                  <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${getStatusColor(w.status)} bg-white/[0.03]`}>
+                    {w.status}
+                  </status>
+                )}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );
+}
+
+// ── UTILS ──
+function StatusIcon({ status }) {
+  if (status === 'pending') return <Clock size={18} className="text-yellow-500 animate-pulse" />;
+  if (status === 'completed') return <CheckCircle2 size={18} className="text-emerald-500" />;
+  return <XCircle size={18} className="text-red-500" />;
+}
+
+function getStatusBg(status) {
+  if (status === 'pending') return 'bg-yellow-500/10';
+  if (status === 'completed') return 'bg-emerald-500/10';
+  return 'bg-red-500/10';
+}
+
+function getStatusColor(status) {
+  if (status === 'pending') return 'text-yellow-500';
+  if (status === 'completed') return 'text-emerald-500';
+  return 'text-red-500';
 }
