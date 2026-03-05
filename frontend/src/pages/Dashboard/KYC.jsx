@@ -1,241 +1,133 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { 
-  ShieldCheck, Upload, FileText, UserCheck, 
-  ChevronRight, Loader2, AlertCircle, Camera,
-  CheckCircle2, Lock
+  ShieldCheck, Upload, FileText, CheckCircle2, 
+  AlertCircle, ArrowRight, Loader2, Camera 
 } from 'lucide-react';
 import api from '../../api/api';
 import toast from 'react-hot-toast';
-import { useAuth } from '../../context/AuthContext';
 
 export default function KYC() {
-  const { user, refreshAuth } = useAuth();
-  const navigate = useNavigate();
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState(1);
-  
-  // Form State
-  const [files, setFiles] = useState({
-    idFront: null,
-    idBack: null,
-    selfie: null
-  });
+  const [status, setStatus] = useState('unverified'); // unverified, pending, verified
 
-  const handleFileChange = (e, type) => {
-    const file = e.target.files[0];
-    if (file && file.size > 5 * 1024 * 1024) {
-      return toast.error("File exceeds 5MB limit");
+  const handleFileChange = (e) => {
+    const selected = e.target.files[0];
+    if (selected) {
+      setFile(selected);
+      setPreview(URL.createObjectURL(selected));
     }
-    setFiles(prev => ({ ...prev, [type]: file }));
   };
 
-  const handleSubmit = async () => {
-    if (!files.idFront || !files.idBack || !files.selfie) {
-      return toast.error("All identification nodes must be uploaded.");
-    }
-
+  const handleUpload = async () => {
+    if (!file) return toast.error("Please select a valid document.");
+    
     setLoading(true);
-    const loadToast = toast.loading("Syncing Identity with Compliance Ledger...");
+    const formData = new FormData();
+    formData.append('document', file);
 
     try {
-      const formData = new FormData();
-      formData.append('idFront', files.idFront);
-      formData.append('idBack', files.idBack);
-      formData.append('selfie', files.selfie);
-
-      await api.post('/user/kyc-submit', formData, {
+      await api.post('/user/kyc-upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-
-      toast.success("Identity Sequence Initiated", { id: loadToast });
-      setStep(3); // Success step
-      refreshAuth();
+      setStatus('pending');
+      toast.success("Document transmitted to Zurich Compliance.");
     } catch (err) {
-      toast.error(err.response?.data?.message || "Encryption Handshake Failed", { id: loadToast });
+      toast.error("Transmission failed. Check network link.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020408] text-white p-6 md:p-12 pt-28 font-sans">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-[#020408] text-white p-6 lg:p-12 pt-28">
+      <div className="max-w-3xl mx-auto">
         
-        {/* ── HEADER ── */}
-        <header className="mb-16 text-center">
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="inline-block p-4 bg-yellow-500/10 rounded-3xl text-yellow-500 mb-6"
-          >
-            <ShieldCheck size={40} />
-          </motion.div>
-          <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter mb-4">
-            Identity <span className="text-yellow-500">Audit</span>
-          </h1>
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] max-w-md mx-auto">
-            Verification required for institutional-grade liquidity extraction.
+        {/* HEADER */}
+        <div className="mb-12">
+          <div className="flex items-center gap-3 mb-4">
+            <ShieldCheck className="text-yellow-500" size={20} />
+            <span className="text-[10px] font-black uppercase tracking-[0.5em] text-yellow-500/60">
+              Identity Protocol
+            </span>
+          </div>
+          <h1 className="text-4xl font-black italic uppercase tracking-tighter">Clearance Level 1</h1>
+          <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest mt-2">
+            Required for institutional node access
           </p>
-        </header>
-
-        {/* ── PROGRESS RAIL ── */}
-        <div className="flex justify-center mb-16 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div 
-              key={i}
-              className={`h-1.5 w-16 rounded-full transition-all duration-500 ${
-                step >= i ? 'bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.4)]' : 'bg-white/5'
-              }`}
-            />
-          ))}
         </div>
 
-        <AnimatePresence mode="wait">
-          {step === 1 && (
-            <motion.div 
-              key="step1"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="bg-[#0a0c10] border border-white/5 p-10 rounded-[3rem] text-center"
-            >
-              <h3 className="text-2xl font-black uppercase italic mb-6">Prerequisites</h3>
-              <div className="grid md:grid-cols-3 gap-6 mb-10">
-                <div className="p-6 bg-white/5 rounded-[2rem] border border-white/5">
-                  <FileText className="mx-auto mb-4 text-yellow-500" />
-                  <p className="text-[10px] font-black uppercase tracking-widest">Valid ID</p>
-                </div>
-                <div className="p-6 bg-white/5 rounded-[2rem] border border-white/5">
-                  <Camera className="mx-auto mb-4 text-yellow-500" />
-                  <p className="text-[10px] font-black uppercase tracking-widest">Clear Selfie</p>
-                </div>
-                <div className="p-6 bg-white/5 rounded-[2rem] border border-white/5">
-                  <Lock className="mx-auto mb-4 text-yellow-500" />
-                  <p className="text-[10px] font-black uppercase tracking-widest">Encrypted</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setStep(2)}
-                className="w-full py-6 bg-white text-black font-black uppercase italic tracking-[0.2em] rounded-2xl hover:bg-yellow-500 transition-all"
-              >
-                Begin Audit Sequence
-              </button>
-            </motion.div>
-          )}
+        {status === 'unverified' ? (
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white/[0.03] border border-white/10 rounded-[3rem] p-10 backdrop-blur-3xl"
+          >
+            <div className="flex items-center gap-6 mb-10 p-6 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl">
+              <AlertCircle className="text-yellow-500" size={24} />
+              <p className="text-[11px] font-bold uppercase leading-relaxed opacity-70">
+                Upload a clear photo of your Passport or National ID. Documents are encrypted and stored in an offline vault.
+              </p>
+            </div>
 
-          {step === 2 && (
-            <motion.div 
-              key="step2"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="space-y-6"
-            >
-              <div className="grid md:grid-cols-2 gap-6">
-                {/* ID Front */}
-                <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] relative overflow-hidden">
-                  <input 
-                    type="file" 
-                    id="idFront" 
-                    className="hidden" 
-                    onChange={(e) => handleFileChange(e, 'idFront')} 
-                    accept="image/*"
-                  />
-                  <label htmlFor="idFront" className="cursor-pointer block text-center">
-                    {files.idFront ? (
-                      <CheckCircle2 className="mx-auto mb-4 text-emerald-500" size={32} />
-                    ) : (
-                      <Upload className="mx-auto mb-4 text-gray-700" size={32} />
-                    )}
-                    <p className="text-[10px] font-black uppercase tracking-widest">ID Card / Passport Front</p>
-                    {files.idFront && <p className="text-[9px] text-emerald-500 mt-2">{files.idFront.name}</p>}
-                  </label>
-                </div>
-
-                {/* ID Back */}
-                <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] relative overflow-hidden">
-                  <input 
-                    type="file" 
-                    id="idBack" 
-                    className="hidden" 
-                    onChange={(e) => handleFileChange(e, 'idBack')} 
-                    accept="image/*"
-                  />
-                  <label htmlFor="idBack" className="cursor-pointer block text-center">
-                    {files.idBack ? (
-                      <CheckCircle2 className="mx-auto mb-4 text-emerald-500" size={32} />
-                    ) : (
-                      <Upload className="mx-auto mb-4 text-gray-700" size={32} />
-                    )}
-                    <p className="text-[10px] font-black uppercase tracking-widest">ID Card / Passport Back</p>
-                    {files.idBack && <p className="text-[9px] text-emerald-500 mt-2">{files.idBack.name}</p>}
-                  </label>
-                </div>
-              </div>
-
-              {/* Selfie Upload */}
-              <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] relative overflow-hidden">
+            <div className="space-y-8">
+              <div className="relative group">
                 <input 
                   type="file" 
-                  id="selfie" 
-                  className="hidden" 
-                  onChange={(e) => handleFileChange(e, 'selfie')} 
-                  accept="image/*"
+                  accept="image/*,.pdf"
+                  onChange={handleFileChange}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
-                <label htmlFor="selfie" className="cursor-pointer block text-center">
-                  <div className="w-20 h-20 bg-white/5 rounded-full mx-auto mb-4 flex items-center justify-center border border-white/10">
-                    {files.selfie ? <CheckCircle2 className="text-emerald-500" size={32} /> : <Camera className="text-gray-700" size={32} />}
-                  </div>
-                  <p className="text-[10px] font-black uppercase tracking-widest">Live Identification Portrait (Selfie)</p>
-                </label>
+                <div className="border-2 border-dashed border-white/10 rounded-[2rem] p-16 flex flex-col items-center justify-center gap-4 group-hover:border-yellow-500/30 transition-all">
+                  {preview ? (
+                    <img src={preview} alt="Preview" className="w-48 h-32 object-cover rounded-xl border border-white/20" />
+                  ) : (
+                    <>
+                      <div className="p-5 bg-white/5 rounded-full text-yellow-500">
+                        <Camera size={32} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-40">
+                        Drop file or click to browse
+                      </span>
+                    </>
+                  )}
+                </div>
               </div>
 
               <button 
-                onClick={handleSubmit}
-                disabled={loading}
-                className="w-full py-6 bg-yellow-500 text-black font-black uppercase italic tracking-[0.2em] rounded-2xl hover:bg-white transition-all flex items-center justify-center gap-3 disabled:opacity-20 shadow-2xl shadow-yellow-500/10"
+                onClick={handleUpload}
+                disabled={loading || !file}
+                className="w-full py-8 bg-white text-black font-black uppercase italic tracking-tighter rounded-[2rem] flex items-center justify-center gap-4 hover:bg-yellow-500 transition-all disabled:opacity-20"
               >
-                {loading ? <Loader2 className="animate-spin" /> : <>Upload Documents <ChevronRight size={18} /></>}
+                {loading ? <Loader2 className="animate-spin" /> : 'Begin Handshake'}
+                <ArrowRight size={20} />
               </button>
-            </motion.div>
-          )}
-
-          {step === 3 && (
-            <motion.div 
-              key="step3"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              className="bg-[#0a0c10] border border-white/5 p-12 rounded-[3.5rem] text-center"
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white/[0.03] border border-emerald-500/20 rounded-[3rem] p-16 text-center"
+          >
+            <div className="h-20 w-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-8">
+              <CheckCircle2 size={40} />
+            </div>
+            <h2 className="text-2xl font-black italic uppercase mb-4">Transmission Received</h2>
+            <p className="text-sm opacity-40 max-w-xs mx-auto mb-10 uppercase font-bold tracking-widest leading-loose">
+              Zurich HQ is verifying your credentials. Status will update within 12–24 hours.
+            </p>
+            <div className="h-[1px] w-full bg-white/5 mb-10" />
+            <button 
+              onClick={() => window.location.href = '/dashboard'}
+              className="text-[10px] font-black uppercase tracking-[0.3em] text-yellow-500 hover:text-white transition-colors"
             >
-              <div className="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-8 border border-emerald-500/20">
-                <UserCheck size={40} />
-              </div>
-              <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-4">Audit Pending</h3>
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] max-w-sm mx-auto leading-relaxed mb-10">
-                Your data is being cross-referenced with global compliance standards. Status update within 24-48 hours.
-              </p>
-              <button 
-                onClick={() => navigate('/dashboard')}
-                className="px-10 py-4 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white hover:text-black transition-all"
-              >
-                Return to Terminal
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* ── SECURITY FOOTER ── */}
-        <footer className="mt-12 flex items-center justify-center gap-8 opacity-20">
-           <div className="flex items-center gap-2">
-             <Lock size={12} />
-             <span className="text-[8px] font-black uppercase tracking-widest">AES-256</span>
-           </div>
-           <div className="flex items-center gap-2">
-             <ShieldCheck size={12} />
-             <span className="text-[8px] font-black uppercase tracking-widest">ISO 27001</span>
-           </div>
-        </footer>
+              Return to Terminal
+            </button>
+          </motion.div>
+        )}
       </div>
     </div>
   );
