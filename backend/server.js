@@ -11,7 +11,7 @@ import { Server } from 'socket.io';
 import connectDB from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import authRoutes from './routes/authRoutes.js';
-import userRoutes from './routes/userRoutes.js'; 
+import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import { initRioEngine } from './utils/rioEngine.js';
 
@@ -73,23 +73,29 @@ io.on('connection', (socket) => {
 });
 
 // ── API ROUTES ──
-app.use('/api/auth', authRoutes);   
-app.use('/api/user', userRoutes);   
-app.use('/api/admin', adminRoutes); 
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ── PROFIT ENGINE (HEARTBEAT) ──
 initRioEngine(io);
 
-// ── STATIC ASSET MANAGEMENT ──
-// This must come AFTER API routes to ensure /api calls aren't intercepted by the wildcard
+// ── STATIC ASSET MANAGEMENT (RENDER COMPATIBLE) ──
 if (process.env.NODE_ENV === 'production') {
-  // Serve the static files from the Vite build
-  app.use(express.static(path.join(__dirname, '/frontend/dist')));
+  // Move UP from the /backend folder to find /frontend/dist
+  const frontendPath = path.join(__dirname, '..', 'frontend', 'dist');
+  
+  // Serve static files
+  app.use(express.static(frontendPath));
 
-  // Support for SPAs: Redirect all non-API requests to index.html
-  app.get('*', (req, res) =>
-    res.sendFile(path.resolve(__dirname, 'frontend', 'dist', 'index.html'))
-  );
+  // Handle SPA routing: Send index.html for all non-API requests
+  app.get('*', (req, res) => {
+    // Safety check to ensure we don't serve HTML for failed API calls
+    if (req.originalUrl.startsWith('/api')) {
+      return res.status(404).json({ message: 'API Route Not Found' });
+    }
+    res.sendFile(path.resolve(frontendPath, 'index.html'));
+  });
 } else {
   app.get('/', (req, res) => res.send('Trustra API Online... Node: Zurich-Mainnet-01'));
 }
