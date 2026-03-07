@@ -1,37 +1,49 @@
 import express from 'express';
 const router = express.Router();
 
-// Middleware Imports
+/**
+ * 🔐 Middleware Imports
+ */
 import { protect, admin } from '../middleware/authMiddleware.js';
 
-// Controller Imports
+/**
+ * 🎮 Controller Imports
+ * Synchronized with adminController.js exports
+ */
 import {
   getUsers,
   updateUserBalance,
-  getWithdrawals,
-  updateWithdrawalStatus,
+  getWithdrawals,      // Matches Controller
+  processWithdrawal,   // Replaced 'updateWithdrawalStatus' to fix crash
   getSystemHealth,
   triggerManualRoi,
-  getGlobalLedger
+  getGlobalLedger,
 } from '../controllers/adminController.js';
 
 /**
- * ── ADMIN COMMAND CENTER ROUTES ──
- * Root Prefix: /api/admin
- * Access Level: Private (Admin Only)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * 👑 TRUSTRA ADMIN COMMAND CENTER
+ * Prefix: /api/admin
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
-// Identity & Node Management
+// ── 👤 IDENTITY & INVESTOR REGISTRY ──
 router.get('/users', protect, admin, getUsers);
 router.put('/users/:id/balance', protect, admin, updateUserBalance);
 
-// Capital Flow Oversight
+// ── 💰 CAPITAL FLOW & WITHDRAWALS ──
 router.get('/withdrawals', protect, admin, getWithdrawals);
-router.patch('/withdrawal/:id', protect, admin, updateWithdrawalStatus);
+
+// Process a withdrawal (Approve/Reject with auto-refund logic)
+// Matched to processWithdrawal in controller
+router.patch('/withdrawal/:id', protect, admin, processWithdrawal);
+
 router.get('/ledger', protect, admin, getGlobalLedger);
 
-// Infrastructure & Solvency
-router.get('/system-health', protect, admin, getSystemHealth);
+// ── 🛰️ CORE INFRASTRUCTURE & AUTOMATION ──
+router.get('/health', protect, admin, getSystemHealth);
+
+// Manual override for the RIO Engine: Force yield distribution
 router.post('/trigger-roi', protect, admin, triggerManualRoi);
 
 export default router;

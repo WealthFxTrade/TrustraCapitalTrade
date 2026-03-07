@@ -1,18 +1,19 @@
 /**
- * @desc    Custom Error Class for API responses
+ * 🛰️ Custom API Error Class
+ * Allows throwing errors with specific status codes: 
+ * throw new ApiError(404, 'Node not found');
  */
 export class ApiError extends Error {
   constructor(statusCode, message) {
     super(message);
     this.statusCode = statusCode;
     this.success = false;
-    // Maintains proper stack trace for where our error was thrown
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
 /**
- * @desc    404 Not Found Middleware
+ * 🚨 404 Not Found Middleware
  */
 export const notFound = (req, res, next) => {
   const error = new ApiError(404, `Not Found - ${req.originalUrl}`);
@@ -20,29 +21,37 @@ export const notFound = (req, res, next) => {
 };
 
 /**
- * @desc    Global Error Handling Middleware
+ * 🛠️ Global Error Handler
  */
 export const errorHandler = (err, req, res, next) => {
-  // If headers were already sent, delegate to default Express error handler
-  if (res.headersSent) {
-    return next(err);
+  let statusCode = err.statusCode || (res.statusCode === 200 ? 500 : res.statusCode);
+  let message = err.message;
+
+  // 🧩 Handle Mongoose Specifics
+  if (err.name === 'CastError' && err.kind === 'ObjectId') {
+    statusCode = 404;
+    message = 'Resource not found: Invalid ID format.';
   }
 
-  const statusCode = err.statusCode || 500;
-  const isProd = process.env.NODE_ENV === 'production';
+  if (err.name === 'ValidationError') {
+    statusCode = 400;
+    message = Object.values(err.errors).map((val) => val.message).join(', ');
+  }
 
-  // Log errors for the developer (Render/Vercel logs)
-  console.error(`❌ [${req.method}] ${req.path} Error:`, err.message);
-  if (!isProd) console.error(err.stack);
+  if (err.code === 11000) {
+    statusCode = 400;
+    message = `Duplicate field value entered: ${Object.keys(err.keyValue)}`;
+  }
+
+  // 📡 Termux Console Log
+  console.error(`[SYSTEM ERROR] ${req.method} ${req.url}:`, {
+    message: err.message,
+    status: statusCode
+  });
 
   res.status(statusCode).json({
     success: false,
-    status: statusCode,
-    message: isProd && statusCode === 500 ? 'An internal server error occurred' : err.message,
-    // Hide stack trace in production for security
-    stack: isProd ? undefined : err.stack,
-    path: req.originalUrl,
-    timestamp: new Date().toISOString(),
+    message: message,
+    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   });
 };
-

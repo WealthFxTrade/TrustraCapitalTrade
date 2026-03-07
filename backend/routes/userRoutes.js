@@ -1,56 +1,103 @@
+// routes/userRoutes.js
 import express from 'express';
 const router = express.Router();
 
-// Middleware
+// ── Middleware ──
+// All user routes require authentication
 import { protect } from '../middleware/authMiddleware.js';
 
-// Controller Imports
-import { 
-    getUserProfile, 
-    updateProfile, 
-    getLedger 
+// ── Controller Imports ──
+// Profile & settings
+import {
+  getUserProfile,
+  updateProfile,
 } from '../controllers/userController.js';
 
-import { 
-    subscribeToPlan 
+// Ledger & yield
+import {
+  getLedger,         // Your own ledger (user-specific)
+  compoundYield,     // Snowball / compounding protocol
+} from '../controllers/userController.js';
+
+// Investment & plans
+import {
+  subscribeToPlan,   // Activate Rio plan
 } from '../controllers/investController.js';
 
-import { 
-    requestWithdrawal 
+// Withdrawal
+import {
+  requestWithdrawal, // Submit withdrawal request
 } from '../controllers/withdrawalController.js';
 
-import { 
-    submitKyc 
+// KYC
+import {
+  submitKyc,         // Upload KYC documents
 } from '../controllers/kycController.js';
 
 /**
- * ── 1. IDENTITY & PROFILE ──
- * Accessing the user's private data node
+ * ──────────────────────────────────────────────
+ * USER ROUTES
+ * Root Prefix: /api/user
+ * Access Level: Private (Authenticated Users Only)
+ * ──────────────────────────────────────────────
+ */
+
+// ── 1. IDENTITY & PROFILE ──
+/**
+ * @route   GET /api/user/profile
+ * @desc    Get current user's profile details
+ * @access  Private
  */
 router.get('/profile', protect, getUserProfile);
-router.put('/profile/update', protect, updateProfile);
 
 /**
- * ── 2. FINANCIAL LEDGER ──
- * Retrieving historical transaction data (ROI, Yield, Deposits)
+ * @route   PUT /api/user/profile/update
+ * @desc    Update user profile (name, phone, etc.)
+ * @access  Private
+ * @body    { name?: string, phone?: string, username?: string }
+ */
+router.put('/profile/update', protect, updateProfile);
+
+// ── 2. FINANCIAL LEDGER & YIELD ──
+/**
+ * @route   GET /api/user/ledger
+ * @desc    Get user's own transaction history (ledger)
+ * @access  Private
+ * @query   ?limit=20&page=1&type=yield|deposit|withdrawal
  */
 router.get('/ledger', protect, getLedger);
 
 /**
- * ── 3. INVESTMENT PROTOCOLS ──
- * Activating Rio Yield Nodes
+ * @route   POST /api/user/compound-yield
+ * @desc    Manually compound ROI yield into principal (Snowball Protocol)
+ * @access  Private
  */
-router.post('/invest/subscribe', protect, subscribeToPlan);
+router.post('/compound-yield', protect, compoundYield);
 
+// ── 3. INVESTMENT PROTOCOLS ──
 /**
- * ── 4. EXTRACTION PROTOCOLS ──
- * Requesting BTC/ETH/USDT withdrawals
+ * @route   POST /api/user/invest
+ * @desc    Subscribe to a Rio investment plan
+ * @access  Private
+ * @body    { plan: string, amount: number }
+ */
+router.post('/invest', protect, subscribeToPlan);
+
+// ── 4. EXTRACTION PROTOCOLS ──
+/**
+ * @route   POST /api/user/withdraw/request
+ * @desc    Submit a withdrawal request
+ * @access  Private
+ * @body    { amount: number, vault: 'EUR'|'ROI', address?: string }
  */
 router.post('/withdraw/request', protect, requestWithdrawal);
 
+// ── 5. KYC VERIFICATION ──
 /**
- * ── 5. KYC VERIFICATION ──
- * Uploading identity documents to Zurich HQ
+ * @route   POST /api/user/kyc/submit
+ * @desc    Submit KYC documents for verification
+ * @access  Private
+ * @body    FormData with files (ID, selfie, etc.)
  */
 router.post('/kyc/submit', protect, submitKyc);
 

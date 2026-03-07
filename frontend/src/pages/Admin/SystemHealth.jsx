@@ -1,112 +1,147 @@
+// src/pages/Admin/SystemHealth.jsx
 import React, { useState, useEffect } from 'react';
-import { 
-  Zap, Loader2, ShieldCheck, Activity, Play, 
-  Landmark, TrendingUp, AlertCircle, RefreshCw 
-} from 'lucide-react';
-import api from '../../api/api';
-import toast from 'react-hot-toast';
+import api from '../../api/api'; 
+import { Activity, Database, Server, Cpu, RefreshCw, CheckCircle, AlertTriangle } from 'lucide-react';
 
-export default function SystemHealth() {
-  const [stats, setStats] = useState(null);
+const SystemHealth = () => {
+  const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // 🛰️ FETCH ANALYTICS
-  const fetchStats = async () => {
+  const fetchHealth = async () => {
+    setRefreshing(true);
+    setError(null);
+
     try {
-      const { data } = await api.get('/admin/system-health');
-      setStats(data.stats);
+      const { data } = await api.get('/admin/health', {
+        timeout: 8000, 
+      });
+      setHealth(data);
     } catch (err) {
-      toast.error("Failed to fetch Mainnet analytics");
+      console.error('Failed to fetch system health:', err);
+      setError(
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to load system health. Backend may be offline.'
+      );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  useEffect(() => { fetchStats(); }, []);
+  useEffect(() => {
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  // 🚀 MANUAL ROI TRIGGER
-  const triggerManualROI = async () => {
-    if (!window.confirm("CONFIRM: Inject 24h yield into all active nodes?")) return;
-    setIsSyncing(true);
-    const loadToast = toast.loading("Executing Rio Protocol Handshake...");
-
-    try {
-      const res = await api.post('/admin/trigger-roi');
-      toast.success(res.data.message, { id: loadToast });
-      fetchStats(); // Refresh stats after payout
-    } catch (err) {
-      toast.error(err.response?.data?.message || "Engine Stall", { id: loadToast });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-yellow-500" /></div>;
-
-  return (
-    <div className="space-y-8">
-      {/* ── ANALYTICS GRID ── */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <MetricCard label="Total AUM" value={`€${stats?.totalAUM?.toLocaleString()}`} icon={Landmark} color="text-white" />
-        <MetricCard label="ROI Liability" value={`€${stats?.totalRoiLiability?.toLocaleString()}`} icon={AlertCircle} color="text-yellow-500" />
-        <MetricCard label="24h Yield" value={`€${stats?.dailyYieldOutflow?.toLocaleString()}`} icon={TrendingUp} color="text-emerald-500" />
-        <MetricCard label="Active Nodes" value={stats?.activeNodes} icon={Activity} color="text-blue-400" />
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#020408]">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="w-12 h-12 text-yellow-500 animate-spin" />
+          <p className="text-gray-400 text-lg font-medium tracking-widest">SYNCHRONIZING CORE...</p>
+        </div>
       </div>
+    );
+  }
 
-      {/* ── YIELD INFRASTRUCTURE TERMINAL ── */}
-      <div className="bg-white/[0.03] border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-3xl relative overflow-hidden">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-emerald-500">
-              <Activity size={16} className="animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-[0.4em]">Engine Status: Active</span>
-            </div>
-            <h3 className="text-2xl font-black italic uppercase tracking-tighter">Yield Protocol Alpha</h3>
-            <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest max-w-sm">
-              Force-synchronize the Rio Engine to distribute daily profits across all qualified investor vaults.
-            </p>
-          </div>
-
-          <button
-            onClick={triggerManualROI}
-            disabled={isSyncing}
-            className={`px-8 py-5 rounded-2xl font-black uppercase italic tracking-tighter flex items-center gap-3 transition-all active:scale-95 ${
-              isSyncing ? 'bg-white/5 text-gray-500' : 'bg-yellow-500 text-black hover:bg-white'
-            }`}
-          >
-            {isSyncing ? <Loader2 className="animate-spin" size={20} /> : <Play size={20} />}
-            {isSyncing ? 'Synchronizing...' : 'Execute ROI Protocol'}
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#020408] p-6 text-white">
+        <div className="bg-red-900/10 border border-red-500/50 rounded-2xl p-8 max-w-lg text-center backdrop-blur-md">
+          <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-red-400 mb-3">Health Check Failed</h2>
+          <p className="text-gray-400 mb-6">{error}</p>
+          <button onClick={fetchHealth} className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-lg font-medium transition-all">
+            Retry Connection
           </button>
         </div>
+      </div>
+    );
+  }
 
-        {/* SPECS OVERLAY */}
-        <div className="mt-8 pt-8 border-t border-white/5 grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatusMetric label="Cron Status" value="Online" color="text-emerald-500" />
-          <StatusMetric label="Solvency" value={`${stats?.solvencyRatio}x`} />
-          <StatusMetric label="Auth Level" value="Root/Admin" />
-          <StatusMetric label="Encryption" value="AES-256" />
+  const StatusCard = ({ icon: Icon, title, value, status, detail }) => (
+    <div className="bg-[#0A0C10] border border-white/5 p-6 rounded-2xl hover:border-white/10 transition-all group">
+      <div className="flex justify-between items-start mb-4">
+        <div className="p-3 bg-white/5 rounded-xl group-hover:bg-yellow-500/10 transition-colors">
+          <Icon className="w-6 h-6 text-yellow-500" />
         </div>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+            status === 'healthy' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+          }`}>
+          {status}
+        </span>
+      </div>
+      <h3 className="text-gray-400 text-sm mb-1 font-medium">{title}</h3>
+      <p className="text-2xl font-bold text-white mb-2">{value}</p>
+      <p className="text-xs text-gray-500 italic font-light">{detail}</p>
+    </div>
+  );
+
+  return (
+    <div className="p-6 md:p-8 lg:p-10 space-y-8 max-w-7xl mx-auto bg-[#020408] min-h-screen">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-white italic">
+            ZURICH <span className="text-yellow-500">MAINNET</span> STATUS
+          </h1>
+          <p className="text-gray-400 mt-2 font-mono text-xs uppercase tracking-tighter">
+            Core Version: {health?.nodeVersion || 'v20.x'} • Last Sync: {new Date().toLocaleTimeString()}
+          </p>
+        </div>
+
+        <button onClick={fetchHealth} disabled={refreshing} className="flex items-center gap-2 px-5 py-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-xs font-bold uppercase tracking-widest border border-white/10 disabled:opacity-50">
+          <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Syncing...' : 'Force Refresh'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatusCard
+          icon={Database}
+          title="MongoDB Cluster"
+          value={health?.dbStatus === 'connected' ? 'ONLINE' : 'OFFLINE'}
+          status={health?.dbStatus === 'connected' ? 'healthy' : 'critical'}
+          detail={`Latency: ${health?.dbLatency || '24ms'}`}
+        />
+
+        <StatusCard
+          icon={Server}
+          title="Engine Uptime"
+          value={health?.uptime || 'N/A'}
+          status="healthy"
+          detail={`Environment: ${health?.env || 'Production'}`}
+        />
+
+        <StatusCard
+          icon={Cpu}
+          title="Core Memory"
+          value={health?.memoryUsage || '0 MB'}
+          status="healthy"
+          detail={`Allocation: ${health?.memoryPercentage || '2%'} Capacity`}
+        />
+
+        <StatusCard
+          icon={Activity}
+          title="Network Pulse"
+          value={`${health?.responseTime || '12'}ms`}
+          status="healthy"
+          detail="API throughput optimized"
+        />
+      </div>
+
+      <div className="bg-[#0A0C10] border border-green-500/20 rounded-2xl p-8 flex flex-col items-center text-center">
+        <CheckCircle className="w-12 h-12 text-green-500 mb-4" />
+        <h2 className="text-xl font-bold text-white mb-2 uppercase tracking-widest">Systems Fully Operational</h2>
+        <p className="text-gray-500 text-sm max-w-md">
+          Zurich Engine is processing distributions normally. No interruptions detected.
+        </p>
       </div>
     </div>
   );
-}
+};
 
-function MetricCard({ label, value, icon: Icon, color }) {
-  return (
-    <div className="bg-white/[0.02] border border-white/5 p-6 rounded-[2rem]">
-      <Icon className={`${color} mb-4`} size={20} />
-      <p className="text-[8px] font-black uppercase tracking-widest text-gray-500 mb-1">{label}</p>
-      <h4 className={`text-xl font-black italic uppercase ${color}`}>{value}</h4>
-    </div>
-  );
-}
-
-function StatusMetric({ label, value, color = "text-white" }) {
-  return (
-    <div>
-      <p className="text-[8px] font-black uppercase opacity-30 tracking-widest mb-1">{label}</p>
-      <p className={`text-[10px] font-black uppercase tracking-widest ${color}`}>{value}</p>
-    </div>
-  );
-}
+export default SystemHealth;

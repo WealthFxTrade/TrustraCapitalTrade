@@ -1,13 +1,21 @@
-import path from 'path';
+// backend/server.js
+import { fileURLToPath } from 'url';
+import path from 'path';                                                                
+
+// Polyfill __dirname and __filename in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 
-// Internal Imports
+// Internal imports
 import connectDB from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 import authRoutes from './routes/authRoutes.js';
@@ -17,96 +25,110 @@ import { initRioEngine } from './utils/rioEngine.js';
 
 dotenv.config();
 
-// Initialize Database Connection
-connectDB();
-
 const app = express();
 const httpServer = createServer(app);
-const __dirname = path.resolve();
 
-// ── MULTI-ORIGIN CORS LOGIC ──
-const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',')
-  : ['http://localhost:5173', 'https://trustra-capital-trade.vercel.app'];
+// ── DATABASE CONNECTION ──
+connectDB();
+
+// ── MIDDLEWARE ──
+app.use(helmet({
+  contentSecurityPolicy: false, // Set to false if serving frontend from same domain
+}));
+
+// Dynamic CORS Configuration
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://trustra-capital-trade.vercel.app',
+];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
-      return callback(null, true);
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl) or allowed origins
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      callback(null, true);
     } else {
-      return callback(new Error('CORS Policy Violation'), false);
+      callback(new Error('CORS Policy Violation: Origin not authorized'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// ── SOCKET.IO REAL-TIME ENGINE ──
+// ── SOCKET.IO SETUP ──
 const io = new Server(httpServer, {
   cors: {
     origin: allowedOrigins,
-    credentials: true
-  }
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
+// Make io accessible globally via req.app.get('io')
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  const userId = socket.handshake.query.userId;
+  // Support both auth-based and query-based handshakes
+  const userId = socket.handshake.auth?.userId || socket.handshake.query?.userId;
+  
   if (userId) {
-    socket.join(userId);
-    console.log(`📡 Terminal Sync: Node ${userId} connected`);
+    socket.join(userId.toString());
+    console.log(`📡 Node Synced: User ${userId} connected (${socket.id})`);
   }
+
   socket.on('disconnect', () => {
-    console.log('🔌 Node Disconnected');
+    console.log(`🔌 Node Offline: ${socket.id}`);
   });
 });
 
-// ── API ROUTES ──
+// ── ROUTES ──
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 
-// ── PROFIT ENGINE (HEARTBEAT) ──
+// ── RIO ENGINE INITIALIZATION ──
+// Pass io to the engine for automated midnight distributions
 initRioEngine(io);
 
-// ── STATIC ASSET MANAGEMENT (RENDER COMPATIBLE) ──
+// ── PRODUCTION: SERVE FRONTEND DIST ──
 if (process.env.NODE_ENV === 'production') {
-  // Move UP from the /backend folder to find /frontend/dist
   const frontendPath = path.join(__dirname, '..', 'frontend', 'dist');
-  
-  // Serve static files
+  console.log(`📦 Serving Static Assets: ${frontendPath}`);
+
   app.use(express.static(frontendPath));
 
-  // Handle SPA routing: Send index.html for all non-API requests
   app.get('*', (req, res) => {
-    // Safety check to ensure we don't serve HTML for failed API calls
+    // Prevent API routes from falling through to index.html
     if (req.originalUrl.startsWith('/api')) {
-      return res.status(404).json({ message: 'API Route Not Found' });
+      return res.status(404).json({ message: 'Resource Not Found' });
     }
     res.sendFile(path.resolve(frontendPath, 'index.html'));
   });
 } else {
-  app.get('/', (req, res) => res.send('Trustra API Online... Node: Zurich-Mainnet-01'));
+  app.get('/', (req, res) => {
+    res.json({ status: 'Online', mode: 'Development', node: process.version });
+  });
 }
 
 // ── ERROR HANDLING ──
 app.use(notFound);
 app.use(errorHandler);
 
-// ── SERVER ACTIVATION ──
+// ── START SERVER ──
 const PORT = process.env.PORT || 10000;
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 TRUSTRA CORE LIVE: PORT ${PORT}`);
-  console.log(`🌍 MODE: ${process.env.NODE_ENV}`);
+  console.log(`🚀 TRUSTRA CORE LIVE | PORT: ${PORT}`);
+  console.log(`🌍 ENVIRONMENT: ${process.env.NODE_ENV || 'development'}`);
 });
