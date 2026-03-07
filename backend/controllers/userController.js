@@ -1,85 +1,78 @@
+import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
-import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * @protocol getUserProfile
- * @desc    Retrieves full user node data, including balance maps and kyc status
+ * @desc    Get user profile node
+ * @route   GET /api/users/profile
+ * @access  Private
  */
-export const getUserProfile = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user._id).select('-password');
+export const getUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if (user) {
+    res.json({
+      _id: user._id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      balances: Object.fromEntries(user.balances),
+      activePlan: user.activePlan,
+      kycStatus: user.kycStatus
+    });
+  } else {
+    res.status(404);
+    throw new Error('User node not found');
+  }
+});
+
+/**
+ * @desc    Update user profile (Identity Shift)
+ * @route   PUT /api/users/profile/update
+ * @access  Private
+ */
+export const updateProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if (user) {
+    user.username = req.body.username || user.username;
+    user.email = req.body.email || user.email;
     
-    if (!user) {
-      throw new ApiError(404, "User node not found in registry.");
+    if (req.body.password) {
+      user.password = req.body.password;
     }
 
-    // Convert the Mongoose Map to a standard Object for the frontend
-    const balancesObject = Object.fromEntries(user.balances);
-
-    res.status(200).json({
-      success: true,
-      user: {
-        _id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        kycStatus: user.kycStatus,
-        activePlan: user.activePlan,
-        totalBalance: user.totalBalance, // Total Principal Invested
-        totalProfit: user.totalProfit,   // Cumulative ROI earned
-        balances: balancesObject,        // Current wallet states (EUR, BTC, ROI, etc.)
-        isActive: user.isActive,
-        createdAt: user.createdAt
-      }
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
- * @protocol getLedger
- * @desc    Fetches the immutable transaction history for the user
- */
-export const getLedger = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user._id).select('ledger');
-    
-    // Sort ledger by newest first
-    const sortedLedger = user.ledger.sort((a, b) => b.createdAt - a.createdAt);
-
-    res.status(200).json({
-      success: true,
-      ledger: sortedLedger
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-/**
- * @protocol updateProfile
- * @desc    Allows users to update basic metadata (non-financial)
- */
-export const updateProfile = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user._id);
-    
-    if (req.body.username) user.username = req.body.username;
-    if (req.body.email) user.email = req.body.email;
-    
-    // Safety check: Never allow balance updates through this endpoint
     const updatedUser = await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: "Profile node updated successfully.",
-      user: {
-        username: updatedUser.username,
-        email: updatedUser.email
-      }
+    res.json({
+      _id: updatedUser._id,
+      username: updatedUser.username,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      // Pass token back if session needs refresh
     });
-  } catch (err) {
-    next(err);
+  } else {
+    res.status(404);
+    throw new Error('Identity update failed: Node not found');
   }
-};
+});
+
+/**
+ * @desc    Get personal transaction ledger
+ * @route   GET /api/users/ledger
+ * @access  Private
+ */
+export const getLedger = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if (!user) {
+    res.status(404);
+    throw new Error('Ledger access denied: Node not found');
+  }
+
+  // Returns the user's specific history sorted by latest activity
+  const sortedLedger = user.ledger.sort((a, b) => 
+    new Date(b.createdAt) - new Date(a.createdAt)
+  );
+
+  res.json(sortedLedger);
+});

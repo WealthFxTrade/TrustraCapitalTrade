@@ -1,132 +1,209 @@
+import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
-import KYC from '../models/KYC.js';
-import AuditLog from '../models/AuditLog.js';
-import { ApiError } from '../middleware/errorMiddleware.js';
-import mongoose from 'mongoose';
-import os from 'os';
+import { runYieldDistribution } from '../utils/rioEngine.js';
 
 /**
- * ── 1. HQ ANALYTICS ──
+ * @desc    Get all users (Identity Registry)
+ * @route   GET /api/admin/users
+ * @access  Private/Admin
  */
-export const getAdminStats = async (req, res, next) => {
-  try {
-    const users = await User.find({ isBanned: false });
-    let totalCapital = 0;
-    let totalProfit = 0;
-
-    users.forEach(user => {
-      totalCapital += user.balances.get('EUR') || 0;
-      totalProfit += user.balances.get('ROI') || 0;
-    });
-
-    res.status(200).json({
-      success: true,
-      stats: {
-        totalCapital,
-        totalProfit,
-        activeUsers: users.length,
-        pendingKyc: await KYC.countDocuments({ status: 'pending' }),
-        systemStatus: 'Optimal'
-      }
-    });
-  } catch (err) { next(err); }
-};
+export const getUsers = asyncHandler(async (req, res) => {
+  const users = await User.find({}).select('-password').sort({ createdAt: -1 });
+  res.json(users);
+});
 
 /**
- * ── 2. USER & LEDGER MANAGEMENT ──
+ * @desc    Update user balance manually (Ledger Override)
+ * @route   PUT /api/admin/users/:id/balance
+ * @access  Private/Admin
  */
-export const getAllUsers = async (req, res, next) => {
-  try {
-    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
-    res.status(200).json({ success: true, count: users.length, users });
-  } catch (err) { next(err); }
-};
+export const updateUserBalance = asyncHandler(async (req, res) => {
+  const { amount, balanceType, type } = req.body;
+  const user = await User.findById(req.params.id);
 
-export const updateUserBalance = async (req, res, next) => {
-  try {
-    const { amount, balanceType, type } = req.body;
-    const user = await User.findById(req.params.id);
-    if (!user) throw new ApiError(404, "Node not found.");
+  if (!user) {
+    res.status(404);
+    throw new Error('Investor node not found');
+  }
 
-    const currentVal = user.balances.get(balanceType) || 0;
-    const numericAmount = parseFloat(amount);
+  const currentVal = user.balances.get(balanceType) || 0;
+  const change = Number(amount);
+  const newVal = type === 'add' ? currentVal + change : currentVal - change;
 
-    if (type === 'add') {
-      user.balances.set(balanceType, currentVal + numericAmount);
-    } else {
-      user.balances.set(balanceType, Math.max(0, currentVal - numericAmount));
+  // Update Map
+  user.balances.set(balanceType, newVal);
+
+  // Document in Immutable Ledger
+  user.ledger.push({
+    amount: type === 'add' ? change : -change,
+    currency: 'EUR',
+    type: 'deposit',
+    status: 'completed',
+    description: `ADMIN OVERRIDE: ${type.toUpperCase()} ${change} to ${balanceType} vault`
+  });
+
+  user.markModified('balances');
+  user.markModified('ledger');
+  await user.save();
+
+  // 🛰️ Real-time Socket Sync
+  const io = req.app.get('io');
+  if (io) {
+    io.to(user._id.toString()).emit('balanceUpdate', {
+      balances: Object.fromEntries(user.balances)
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'Ledger Synchronized',
+    balances: Object.fromEntries(user.balances)
+  });
+});
+
+/**
+ * @desc    Get all withdrawal requests
+ * @route   GET /api/admin/withdrawals
+ * @access  Private/Admin
+ */
+export const getWithdrawals = asyncHandler(async (req, res) => {
+  const usersWithWithdrawals = await User.find({ 'ledger.type': 'withdrawal' });
+
+  const withdrawals = usersWithWithdrawals.flatMap(user =>
+    user.ledger
+      .filter(entry => entry.type === 'withdrawal')
+      .map(w => ({
+        ...w.toObject(),
+        userName: user.username,
+        userId: user._id,
+        email: user.email
+      }))
+  ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  res.json(withdrawals);
+});
+
+/**
+ * @desc    Approve or Reject withdrawal with Auto-Refund
+ * @route   PATCH /api/admin/withdrawal/:id
+ * @access  Private/Admin
+ */
+export const updateWithdrawalStatus = asyncHandler(async (req, res) => {
+  const { status, userId } = req.body;
+  const user = await User.findById(userId);
+
+  if (!user) {
+    res.status(404);
+    throw new Error('Transaction record not found');
+  }
+
+  const transaction = user.ledger.id(req.params.id);
+
+  // 🛡️ REFUND PROTOCOL
+  // If rejected, move funds back from Hold to ROI vault
+  if (status === 'rejected' && transaction.status === 'pending') {
+    const currentRoi = user.balances.get('ROI') || 0;
+    user.balances.set('ROI', currentRoi + transaction.amount);
+    user.markModified('balances');
+  }
+
+  transaction.status = status;
+  user.markModified('ledger');
+  await user.save();
+
+  // 🛰️ Real-time Socket Sync
+  const io = req.app.get('io');
+  if (io) {
+    io.to(user._id.toString()).emit('balanceUpdate', {
+      balances: Object.fromEntries(user.balances)
+    });
+  }
+
+  res.json({
+    success: true,
+    message: `Transaction marked as ${status}`,
+    balances: Object.fromEntries(user.balances)
+  });
+});
+
+/**
+ * @desc    Global Financial Audit & Solvency Metrics
+ * @route   GET /api/admin/system-health
+ * @access  Private/Admin
+ */
+export const getSystemHealth = asyncHandler(async (req, res) => {
+  const users = await User.find({});
+
+  let totalAUM = 0;           // Total Assets (EUR)
+  let totalRoiLiability = 0;  // Total Owed (ROI)
+  let activeNodes = 0;        
+  let dailyYieldOutflow = 0;
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  users.forEach(user => {
+    if (user.balances) {
+      totalAUM += (user.balances.get('EUR') || 0);
+      totalRoiLiability += (user.balances.get('ROI') || 0);
     }
 
-    await user.save();
-    res.status(200).json({ success: true, message: "Ledger updated." });
-  } catch (err) { next(err); }
-};
+    if (user.activePlan && user.activePlan !== 'none') activeNodes++;
 
-export const toggleUserBan = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.params.id);
-    user.isBanned = !user.isBanned;
-    await user.save();
-    res.status(200).json({ success: true, isBanned: user.isBanned });
-  } catch (err) { next(err); }
-};
-
-/**
- * ── 3. WITHDRAWAL & AUDIT PROTOCOLS ──
- */
-export const getAllWithdrawals = async (req, res, next) => {
-  try {
-    // Aggregates withdrawals from all user ledgers
-    const users = await User.find({ "ledger.type": "withdrawal" }).select('username email ledger');
-    let withdrawals = [];
-    users.forEach(u => {
-      u.ledger.filter(l => l.type === 'withdrawal').forEach(w => {
-        withdrawals.push({ ...w.toObject(), username: u.username, email: u.email, userId: u._id });
-      });
-    });
-    res.status(200).json({ success: true, withdrawals: withdrawals.sort((a,b) => b.createdAt - a.createdAt) });
-  } catch (err) { next(err); }
-};
-
-export const processWithdrawal = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    const user = await User.findOne({ "ledger._id": id });
-    const entry = user.ledger.id(id);
-    
-    if (status === 'rejected') {
-      const currentRoi = user.balances.get('ROI') || 0;
-      user.balances.set('ROI', currentRoi + entry.amount);
+    if (user.ledger) {
+      const todayEntries = user.ledger.filter(entry =>
+        entry.type === 'yield' && new Date(entry.createdAt) >= startOfToday
+      );
+      todayEntries.forEach(y => dailyYieldOutflow += y.amount);
     }
-    entry.status = status;
-    await user.save();
-    res.status(200).json({ success: true, message: `Extraction ${status}` });
-  } catch (err) { next(err); }
-};
+  });
+
+  res.json({
+    success: true,
+    stats: {
+      totalAUM,
+      totalRoiLiability,
+      activeNodes,
+      totalInvestors: users.length,
+      dailyYieldOutflow,
+      solvencyRatio: totalRoiLiability > 0 ? (totalAUM / totalRoiLiability).toFixed(2) : '∞'
+    }
+  });
+});
 
 /**
- * ── 4. SYSTEM TELEMETRY ──
+ * @desc    Execute ROI Protocol Manually
+ * @route   POST /api/admin/trigger-roi
+ * @access  Private/Admin
  */
-export const getSystemHealth = async (req, res, next) => {
-  try {
-    const start = Date.now();
-    await mongoose.connection.db.admin().ping();
-    res.status(200).json({
-      success: true,
-      metrics: {
-        uptime: os.uptime(),
-        dbLatency: `${Date.now() - start}ms`,
-        platform: os.platform(),
-        memory: ((1 - os.freemem() / os.totalmem()) * 100).toFixed(2) + '%'
-      }
-    });
-  } catch (err) { next(err); }
-};
+export const triggerManualRoi = asyncHandler(async (req, res) => {
+  const io = req.app.get('io');
+  const processedCount = await runYieldDistribution(io);
 
-export const getAuditLogs = async (req, res, next) => {
-  try {
-    const logs = await AuditLog.find().populate('admin', 'username').sort({ timestamp: -1 }).limit(50);
-    res.status(200).json({ success: true, logs });
-  } catch (err) { next(err); }
-};
+  res.json({
+    success: true,
+    message: processedCount > 0 
+      ? `ROI Protocol Executed: ${processedCount} nodes synchronized.` 
+      : "No pending distributions for today."
+  });
+});
+
+/**
+ * @desc    Global Ledger Audit Trail
+ * @route   GET /api/admin/ledger
+ * @access  Private/Admin
+ */
+export const getGlobalLedger = asyncHandler(async (req, res) => {
+  const users = await User.find({});
+  
+  const globalLedger = users.flatMap(user => 
+    user.ledger.map(entry => ({
+      ...entry.toObject(),
+      username: user.username,
+      userId: user._id,
+      email: user.email
+    }))
+  ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  res.json(globalLedger.slice(0, 200));
+});

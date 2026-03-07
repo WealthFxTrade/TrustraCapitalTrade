@@ -1,8 +1,9 @@
 import cron from 'node-cron';
 import User from '../models/User.js';
 
-// Synchronized Rio v8.6 Daily Rates
-// These reflect the tiers established for the 2026 Zurich portfolio
+/**
+ * RIO v8.6 PORTFOLIO RATES (Zurich 2026 Standards)
+ */
 const RIO_DAILY_RATES = {
   'Rio Starter': 0.0025,  // 0.25% daily
   'Rio Basic': 0.0035,    // 0.35% daily
@@ -12,22 +13,16 @@ const RIO_DAILY_RATES = {
 };
 
 /**
- * 🚀 THE ENGINE: runYieldDistribution
- * Core logic to calculate and inject daily ROI based on active investment nodes.
+ * 🚀 runYieldDistribution
+ * Calculates and injects daily ROI into the Map-based balances.
  */
-export const runYieldDistribution = async () => {
+export const runYieldDistribution = async (io) => {
   console.log('--- [RIO ENGINE] INITIATING DISTRIBUTION SEQUENCE ---');
 
-  // Define the boundary for "Today" (UTC Midnight)
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
   try {
-    /**
-     * @query NodeSelection
-     * Filters for active, unbanned users with a valid plan who haven't 
-     * received an accrual yet in the current 24-hour cycle.
-     */
     const activeUsers = await User.find({
       isActive: true,
       isBanned: false,
@@ -46,23 +41,20 @@ export const runYieldDistribution = async () => {
     let updatedCount = 0;
 
     for (let user of activeUsers) {
-      // Retrieve rate based on plan; fallback to 0.1% if plan data is corrupted
       const rate = RIO_DAILY_RATES[user.activePlan] || 0.001;
-      
-      // Calculate profit based on the Principal EUR balance
       const principal = user.balances.get('EUR') || 0;
       const accruedAmount = principal * rate;
 
       if (accruedAmount <= 0) continue;
 
-      // 1. Update Map-based ROI balance (Profit Wallet)
+      // 1. Update Map-based ROI balance
       const currentRoi = user.balances.get('ROI') || 0;
       user.balances.set('ROI', currentRoi + accruedAmount);
 
-      // 2. Update Global Accumulators for Dashboard visualization
+      // 2. Update Global Accumulators
       user.totalProfit = (user.totalProfit || 0) + accruedAmount;
 
-      // 3. Document the injection in the Immutable Ledger
+      // 3. Document in the Immutable Ledger
       user.ledger.push({
         amount: accruedAmount,
         currency: 'EUR',
@@ -72,15 +64,22 @@ export const runYieldDistribution = async () => {
         createdAt: new Date()
       });
 
-      // 4. Update the Safety Timestamp to lock this node for the rest of today
       user.lastRoiAt = new Date();
 
-      // 5. Inform Mongoose of changes to complex Map types and Arrays
+      // IMPORTANT: Tell Mongoose the Map and Array have changed
       user.markModified('balances');
       user.markModified('ledger');
 
       await user.save();
       updatedCount++;
+
+      // 4. EMIT REAL-TIME UPDATE (If Socket.io is provided)
+      if (io) {
+        io.to(user._id.toString()).emit('balanceUpdate', {
+          balances: Object.fromEntries(user.balances),
+          totalProfit: user.totalProfit
+        });
+      }
     }
 
     console.log(`--- [RIO ENGINE] SUCCESS: ${updatedCount} NODES SYNCHRONIZED ---`);
@@ -88,23 +87,23 @@ export const runYieldDistribution = async () => {
 
   } catch (error) {
     console.error('--- [CRITICAL] ENGINE STALL ---', error);
-    throw error;
   }
 };
 
 /**
- * ⏰ THE CLOCK: initializeProfitDistributor
- * Schedules the engine to run automatically every midnight.
+ * ⏰ initRioEngine
+ * Primary entry point used by server.js
  */
-export const initializeProfitDistributor = () => {
-  // Cron: 0 0 * * * (Triggers at exactly 00:00:00 every day)
+export const initRioEngine = (io) => {
+  // Cron: 0 0 * * * (Every Midnight UTC)
   cron.schedule('0 0 * * *', async () => {
     try {
-      await runYieldDistribution();
+      await runYieldDistribution(io);
     } catch (err) {
       console.error('[CRON ERROR] Yield Distribution Interrupted:', err);
     }
   });
 
+  // Optional: Trigger a dry-run check on startup for missed distributions
   console.log('⏰ [RIO ENGINE] Scheduler Active: Distribution set for Midnight UTC.');
 };

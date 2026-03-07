@@ -1,40 +1,42 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CryptoJS from 'crypto-js';
+import io from 'socket.io-client'; // 🛰️ Added Socket.io Client
 import api from '../api/api';
+import { API_ENDPOINTS } from '../constants/api';
 
 const AuthContext = createContext();
 const TOKEN_KEY = 'trustra_token';
 
-const initialState = { 
-  user: null, 
-  isAuthenticated: false, 
-  initialized: false 
+const initialState = {
+  user: null,
+  isAuthenticated: false,
+  initialized: false
 };
 
-// ── AUTH REDUCER ENGINE ──
 function authReducer(state, action) {
   switch (action.type) {
-    case 'AUTH_SUCCESS': 
-      return { 
-        ...state, 
-        user: action.payload, 
-        isAuthenticated: true, 
-        initialized: true 
+    case 'AUTH_SUCCESS':
+      return {
+        ...state,
+        user: action.payload,
+        isAuthenticated: true,
+        initialized: true
       };
-    case 'UPDATE_USER': 
-      return { 
-        ...state, 
-        user: { ...state.user, ...action.payload } 
+    case 'UPDATE_USER':
+      // 🛡️ Handles deep updates for balances and profile changes
+      return {
+        ...state,
+        user: { ...state.user, ...action.payload }
       };
-    case 'AUTH_CLEAR': 
-      return { 
-        ...state, 
-        user: null, 
-        isAuthenticated: false, 
-        initialized: true 
+    case 'AUTH_CLEAR':
+      return {
+        ...state,
+        user: null,
+        isAuthenticated: false,
+        initialized: true
       };
-    default: 
+    default:
       return state;
   }
 }
@@ -46,8 +48,12 @@ export function AuthProvider({ children }) {
   // 🔐 AES-256-CBC ENCRYPTION PROTOCOL
   const encryptPassword = (password) => {
     try {
-      const key = CryptoJS.enc.Hex.parse(import.meta.env.VITE_ENCRYPTION_KEY);
-      const iv = CryptoJS.enc.Hex.parse(import.meta.env.VITE_ENCRYPTION_IV);
+      const keyHex = import.meta.env.VITE_ENCRYPTION_KEY;
+      const ivHex = import.meta.env.VITE_ENCRYPTION_IV;
+      if (!keyHex || !ivHex) return password;
+
+      const key = CryptoJS.enc.Hex.parse(keyHex);
+      const iv = CryptoJS.enc.Hex.parse(ivHex);
       const encrypted = CryptoJS.AES.encrypt(password, key, {
         iv: iv,
         mode: CryptoJS.mode.CBC,
@@ -55,19 +61,43 @@ export function AuthProvider({ children }) {
       });
       return encrypted.ciphertext.toString(CryptoJS.enc.Hex);
     } catch (err) {
-      console.error("Encryption Failure:", err);
-      return null;
+      return password;
     }
   };
 
-  // 🛰️ INITIALIZE SESSION
+  // 🛰️ REAL-TIME SYNC ENGINE (Socket.io)
+  useEffect(() => {
+    let socket;
+    if (state.isAuthenticated && state.user?._id) {
+      // Connect to the backend using the ID as the room key
+      socket = io(import.meta.env.VITE_API_URL || 'http://localhost:10000', {
+        query: { userId: state.user._id }
+      });
+
+      // Listen for Rio Engine distributions or Admin adjustments
+      socket.on('balanceUpdate', (data) => {
+        console.log("🏙️ Zurich Mainnet: Balance Sync Received");
+        dispatch({ type: 'UPDATE_USER', payload: data });
+      });
+    }
+
+    return () => {
+      if (socket) socket.disconnect();
+    };
+  }, [state.isAuthenticated, state.user?._id]);
+
+  // 🛠️ INITIALIZE SESSION
   const initAuth = useCallback(async () => {
     const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) return dispatch({ type: 'AUTH_CLEAR' });
-    
+    if (!token) {
+      dispatch({ type: 'AUTH_CLEAR' });
+      return;
+    }
+
     try {
-      const { data } = await api.get('/auth/me');
-      dispatch({ type: 'AUTH_SUCCESS', payload: data.user });
+      const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
+      // Ensure the payload is just the user object
+      dispatch({ type: 'AUTH_SUCCESS', payload: data.user || data });
     } catch (error) {
       localStorage.removeItem(TOKEN_KEY);
       dispatch({ type: 'AUTH_CLEAR' });
@@ -81,39 +111,37 @@ export function AuthProvider({ children }) {
   // 🔑 LOGIN HANDSHAKE
   const login = async (email, password) => {
     const cipher = encryptPassword(password);
-    const { data } = await api.post('/auth/login', { email, password: cipher });
-    
+    const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, {
+      email: email.trim(),
+      password: cipher
+    });
+
     localStorage.setItem(TOKEN_KEY, data.token);
-    dispatch({ type: 'AUTH_SUCCESS', payload: data.user });
+    dispatch({ type: 'AUTH_SUCCESS', payload: data });
     return data;
   };
 
   // 📝 REGISTRATION HANDSHAKE
-  const signup = async (email, password, fullName, phone) => {
+  const signup = async (email, password, fullName) => {
     const cipher = encryptPassword(password);
-    
-    // Convert "John Doe" to "john_doe" for Database consistency
     const username = fullName.trim().replace(/\s+/g, '_').toLowerCase();
 
-    const { data } = await api.post('/auth/register', {
+    const { data } = await api.post(API_ENDPOINTS.AUTH.REGISTER, {
+      name: fullName,
       username,
-      email,
-      password: cipher,
-      phone
+      email: email.trim(),
+      password: cipher
     });
 
     localStorage.setItem(TOKEN_KEY, data.token);
-    dispatch({ type: 'AUTH_SUCCESS', payload: data.user });
+    dispatch({ type: 'AUTH_SUCCESS', payload: data });
     return data;
   };
 
-  // 🔄 REACTIVE STATE UPDATE
-  // Use this to update balances/stats without re-logging
   const setUser = (userData) => {
     dispatch({ type: 'UPDATE_USER', payload: userData });
   };
 
-  // 🚪 TERMINATE SESSION
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     dispatch({ type: 'AUTH_CLEAR' });
@@ -121,20 +149,20 @@ export function AuthProvider({ children }) {
   }, [navigate]);
 
   return (
-    <AuthContext.Provider value={{ 
-      ...state, 
-      login, 
-      signup, 
-      logout, 
-      refreshAuth: initAuth, 
-      setUser 
+    <AuthContext.Provider value={{
+      ...state,
+      login,
+      signup,
+      logout,
+      refreshAuth: initAuth,
+      setUser
     }}>
-      {state.initialized ? (
-        children
-      ) : (
+      {!state.initialized ? (
         <div className="min-h-screen bg-[#020408] flex items-center justify-center">
            <div className="w-12 h-12 border-2 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin" />
         </div>
+      ) : (
+        children
       )}
     </AuthContext.Provider>
   );

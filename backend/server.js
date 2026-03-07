@@ -1,126 +1,106 @@
-import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
 import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
-import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 import cors from 'cors';
-import helmet from 'helmet';
-import path from 'path'; // 🛰️ Added for production paths
+import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 
-// ── MIDDLEWARE & ERROR PROTOCOL IMPORTS ──
+// Internal Imports
+import connectDB from './config/db.js';
 import { notFound, errorHandler } from './middleware/errorMiddleware.js';
-import { initializeProfitDistributor } from './utils/profitEngine.js';
-
-// ── ROUTE IMPORTS ──
-import authRoutes from './routes/auth.js';
-import userRoutes from './routes/userRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import userRoutes from './routes/userRoutes.js'; 
 import adminRoutes from './routes/adminRoutes.js';
-import withdrawalRoutes from './routes/withdrawalRoutes.js';
-import supportRoutes from './routes/supportRoutes.js';
+import { initRioEngine } from './utils/rioEngine.js';
 
-const PORT = process.env.PORT || 10000;
+dotenv.config();
+
+// Initialize Database Connection
+connectDB();
+
 const app = express();
-const server = http.createServer(app);
-const __dirname = path.resolve(); // 🛰️ Resolve absolute path
+const httpServer = createServer(app);
+const __dirname = path.resolve();
 
-// ✅ Robust CORS Handshake
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'http://localhost:5173',
-  'https://trustra-capital-trade.vercel.app'
-].filter(Boolean);
-
-// ── 1. SOCKET.IO REAL-TIME ENGINE ──
-const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-});
-
-app.set('socketio', io);
-
-io.on('connection', (socket) => {
-  socket.on('join_terminal', (userId) => {
-    if (userId) {
-      socket.join(userId.toString());
-      console.log(`📡 Terminal Sync: Node ${userId} connected`);
-    }
-  });
-  socket.on('disconnect', () => {
-    console.log('📡 Terminal Link severed');
-  });
-});
-
-// ── 2. GLOBAL MIDDLEWARE ──
-app.use(helmet({ 
-  contentSecurityPolicy: false, // Required to allow external fonts/images in some environments
-  crossOriginEmbedderPolicy: false 
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// ── MULTI-ORIGIN CORS LOGIC ──
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',')
+  : ['http://localhost:5173', 'https://trustra-capital-trade.vercel.app'];
 
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error('CORS Policy: Origin not allowed'), false);
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    } else {
+      return callback(new Error('CORS Policy Violation'), false);
     }
-    return callback(null, true);
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// ── 3. API BUSINESS LOGIC ──
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/withdrawal', withdrawalRoutes);
-app.use('/api/support', supportRoutes);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-app.get('/api/health', (req, res) => {
-  res.status(200).json({
-    status: 'online',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'syncing',
-    timestamp: new Date().toISOString()
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
+
+// ── SOCKET.IO REAL-TIME ENGINE ──
+const io = new Server(httpServer, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true
+  }
+});
+
+app.set('io', io);
+
+io.on('connection', (socket) => {
+  const userId = socket.handshake.query.userId;
+  if (userId) {
+    socket.join(userId);
+    console.log(`📡 Terminal Sync: Node ${userId} connected`);
+  }
+  socket.on('disconnect', () => {
+    console.log('🔌 Node Disconnected');
   });
 });
 
-// ── 4. PRODUCTION STATIC SERVING ──
-/**
- * If NODE_ENV is production, we serve the frontend build from the dist folder.
- * This makes the entire app accessible on a single port.
- */
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '/dist')));
+// ── API ROUTES ──
+app.use('/api/auth', authRoutes);   
+app.use('/api/user', userRoutes);   
+app.use('/api/admin', adminRoutes); 
 
-  // Direct all non-API requests to the React index.html
+// ── PROFIT ENGINE (HEARTBEAT) ──
+initRioEngine(io);
+
+// ── STATIC ASSET MANAGEMENT ──
+// This must come AFTER API routes to ensure /api calls aren't intercepted by the wildcard
+if (process.env.NODE_ENV === 'production') {
+  // Serve the static files from the Vite build
+  app.use(express.static(path.join(__dirname, '/frontend/dist')));
+
+  // Support for SPAs: Redirect all non-API requests to index.html
   app.get('*', (req, res) =>
-    res.sendFile(path.resolve(__dirname, 'dist', 'index.html'))
+    res.sendFile(path.resolve(__dirname, 'frontend', 'dist', 'index.html'))
   );
+} else {
+  app.get('/', (req, res) => res.send('Trustra API Online... Node: Zurich-Mainnet-01'));
 }
 
-// ── 5. ERROR PROTOCOLS ──
+// ── ERROR HANDLING ──
 app.use(notFound);
 app.use(errorHandler);
 
-// ── 6. BOOT SEQUENCE ──
-const startServer = async () => {
-  try {
-    mongoose.set('strictQuery', false);
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('📡 Database Handshake Successful');
-
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 TRUSTRA CORE LIVE: PORT ${PORT}`);
-      initializeProfitDistributor();
-    });
-  } catch (err) {
-    console.error('❌ Boot Error:', err.message);
-    setTimeout(startServer, 5000);
-  }
-};
-
-startServer();
+// ── SERVER ACTIVATION ──
+const PORT = process.env.PORT || 10000;
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 TRUSTRA CORE LIVE: PORT ${PORT}`);
+  console.log(`🌍 MODE: ${process.env.NODE_ENV}`);
+});

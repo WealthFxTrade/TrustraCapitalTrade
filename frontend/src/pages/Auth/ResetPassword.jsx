@@ -1,89 +1,73 @@
-// src/components/ResetPassword.jsx
-import { useState } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
+import React, { useState } from 'react';
+import { Key, Hash, Loader2, CheckCircle } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import api from '../../api/api';
+import toast from 'react-hot-toast';
 
 export default function ResetPassword() {
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const { state } = useLocation(); // Get email passed from previous page
   const navigate = useNavigate();
+  
+  const [formData, setFormData] = useState({
+    otp: '',
+    newPassword: '',
+    email: state?.email || ''
+  });
+  const [loading, setLoading] = useState(false);
 
   const handleReset = async (e) => {
     e.preventDefault();
-    if (!password || !confirm) return setError('All fields are required');
-    if (password !== confirm) return setError('Passwords do not match');
-
     setLoading(true);
-    setError('');
-    setSuccess('');
-
     try {
-      const res = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Reset failed');
-
-      setSuccess('Password reset successfully! Redirecting to login...');
-      setTimeout(() => navigate('/login'), 3000);
+      const { data } = await api.put('/auth/reset-password', formData);
+      toast.success(data.message);
+      navigate('/login');
     } catch (err) {
-      setError(err.message);
+      toast.error(err.response?.data?.message || "Reset Denied");
     } finally {
       setLoading(false);
     }
   };
 
-  if (!token) return <p className="text-center mt-10 text-red-400">Invalid reset link</p>;
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 p-6">
-      <div className="max-w-md w-full bg-gray-800 rounded-2xl p-8 glass">
-        <h1 className="text-3xl font-bold text-indigo-400 mb-6 text-center">Reset Password</h1>
+    <div className="min-h-screen flex items-center justify-center bg-[#020408] p-6">
+      <div className="w-full max-w-md bg-white/[0.02] border border-white/10 p-10 rounded-[2.5rem]">
+        <h2 className="text-2xl font-black italic uppercase text-white tracking-tighter mb-8 text-center">Update Access Cipher</h2>
+        
+        <form onSubmit={handleReset} className="space-y-6">
+          {/* OTP INPUT */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">6-Digit Auth Code</label>
+            <div className="relative">
+              <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
+              <input 
+                type="text" maxLength="6" required
+                className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-white font-mono tracking-[0.5em] text-center"
+                onChange={(e) => setFormData({...formData, otp: e.target.value})}
+              />
+            </div>
+          </div>
 
-        {success && <p className="text-green-400 text-center mb-4">{success}</p>}
-        {error && <p className="text-red-400 text-center mb-4">{error}</p>}
+          {/* NEW PASSWORD */}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">New Security Cipher</label>
+            <div className="relative">
+              <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
+              <input 
+                type="password" required
+                className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-2xl text-white outline-none focus:border-yellow-500"
+                onChange={(e) => setFormData({...formData, newPassword: e.target.value})}
+              />
+            </div>
+          </div>
 
-        <form onSubmit={handleReset} className="space-y-4">
-          <input
-            type="password"
-            placeholder="New Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-          />
-          <input
-            type="password"
-            placeholder="Confirm Password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            className="w-full p-4 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-indigo-500"
-          />
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-white font-bold text-lg transition disabled:opacity-50"
+          <button 
+            type="submit" disabled={loading}
+            className="w-full bg-emerald-500 hover:bg-white text-black font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-3 italic uppercase"
           >
-            {loading ? 'Resetting...' : 'Reset Password'}
+            {loading ? <Loader2 className="animate-spin" /> : <><CheckCircle size={18} /> Confirm Reset</>}
           </button>
         </form>
-
-        <p className="text-gray-400 text-center mt-6">
-          Back to{' '}
-          <Link to="/login" className="text-indigo-400 hover:underline">
-            Login
-          </Link>
-        </p>
       </div>
     </div>
   );

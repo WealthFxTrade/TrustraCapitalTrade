@@ -1,35 +1,19 @@
 // constants/api.js
 export const API_URL = import.meta.env.MODE === 'development'
   ? 'http://localhost:10000/api'
-  : '/api'; // In production, Vercel proxies /api to your Render URL
+  : 'https://trustra-capital-trade-backend.vercel.app/api'; 
 
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
-    REGISTER: '/auth/register',
-    ME: '/auth/me',
-  },
-  USER: {
-    DASHBOARD: '/user/dashboard',
-    PROFILE: '/user/profile',
-    UPDATE: '/user/update',
-  },
-  WITHDRAWAL: {
-    REQUEST: '/withdrawal/request',
-    HISTORY: '/withdrawal/history',
+    REGISTER: '/auth/auth', // MATCHES: router.post('/', registerUser) in authRoutes.js
+    LOGOUT: '/auth/logout',
+    PROFILE: '/auth/profile', // MATCHES: router.get('/profile', protect, getUserProfile)
   },
   ADMIN: {
     USERS: '/admin/users',
     WITHDRAWALS: '/admin/withdrawals',
-    UPDATE_BALANCE: '/admin/user', 
+    UPDATE_BALANCE: '/admin/user', // Usage: /admin/user/:id/balance
+    APPROVE_WITHDRAWAL: '/admin/withdrawal', // Usage: /admin/withdrawal/:id
   }
 };
-
-/**
- * HELPER: Construct full URLs if needed outside the Axios instance
- */
-export function getApiUrl(endpoint) {
-  const cleanBase = API_URL.replace(/\/+$/, '');
-  const cleanPath = endpoint.replace(/^\/+/, '');
-  return `${cleanBase}/${cleanPath}`;
-}

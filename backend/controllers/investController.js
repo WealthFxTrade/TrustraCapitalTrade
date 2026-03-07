@@ -21,24 +21,23 @@ export const subscribeToPlan = async (req, res, next) => {
     }
 
     // 2. Perform Atomic Swap: Liquid -> Invested
-    // Deduct from EUR Map
     user.balances.set('EUR', liquidBalance - investmentAmount);
-    
-    // Add to Active Investment Principal
-    // Note: We track this so the Profit Engine knows the 'Principal'
-    user.totalBalance = (user.totalBalance || 0) + investmentAmount;
 
-    // 3. Set the Protocol Tier
+    // 3. Update Investment State
+    user.totalBalance = (user.totalBalance || 0) + investmentAmount;
     user.activePlan = planName;
     user.isActive = true;
+    
+    // Set lastRoiAt to now to prevent immediate yield calculation if the cron runs shortly after
+    user.lastRoiAt = new Date();
 
-    // 4. Update Ledger
+    // 4. Update Ledger (Using negative to show deduction from EUR vault)
     user.ledger.push({
-      amount: investmentAmount,
+      amount: -investmentAmount, 
       currency: 'EUR',
       type: 'investment',
       status: 'completed',
-      description: `Subscription: ${planName} Activation`
+      description: `PROTOCOL ACTIVATION: ${planName.toUpperCase()} Node`
     });
 
     // 5. Save and Synchronize
@@ -49,7 +48,8 @@ export const subscribeToPlan = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `${planName} Node Activated. Yield distribution begins at 00:00 UTC.`,
-      balances: Object.fromEntries(user.balances)
+      balances: Object.fromEntries(user.balances),
+      activePlan: user.activePlan
     });
   } catch (err) {
     next(err);

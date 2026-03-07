@@ -10,24 +10,29 @@ import AdminRoute from './components/auth/AdminRoute';
 
 // ── LAYOUT INFRASTRUCTURE ──
 import MainLayout from './components/layout/MainLayout';
-import AdminLayout from './pages/Admin/AdminLayout'; // 🛰️ Added Admin Sidebar Layout
+import AdminLayout from './pages/Admin/AdminLayout';
 
-// ── LAZY LOADING PROTOCOLS (MASTER FILE PATHS) ──
+// ── LAZY LOADING: PUBLIC & AUTH ──
 const Landing = lazy(() => import('./components/landing/Landing'));
 const Login = lazy(() => import('./pages/Auth/Login'));
 const Signup = lazy(() => import('./pages/Auth/Signup'));
+// 🛰️ Recovery Routes
+const ForgotPassword = lazy(() => import('./pages/Auth/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/Auth/ResetPassword')); // Added
 
+// ── LAZY LOADING: INVESTOR SECTOR ──
 const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
 const Withdraw = lazy(() => import('./pages/Withdraw/Withdraw'));
 const Invest = lazy(() => import('./pages/Invest'));
 const Profile = lazy(() => import('./pages/Profile'));
 const KYCUpload = lazy(() => import('./pages/Dashboard/KYC'));
 
-// ── ADMIN SUITE ──
+// ── LAZY LOADING: ADMIN SUITE ──
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
 const AdminUsers = lazy(() => import('./pages/Admin/AdminUsers'));
 const AdminWithdrawals = lazy(() => import('./pages/Admin/AdminWithdrawals'));
 const SystemHealth = lazy(() => import('./pages/Admin/SystemHealth'));
+const GlobalLedger = lazy(() => import('./pages/Admin/GlobalLedger')); // Added
 
 const TerminalLoading = () => (
   <div className="min-h-screen bg-[#020408] flex flex-col items-center justify-center gap-4">
@@ -49,6 +54,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#020408] text-white selection:bg-yellow-500/30 relative overflow-x-hidden">
+      {/* 🏙️ VISUAL GRAIN OVERLAY */}
       <div className="fixed inset-0 pointer-events-none z-[999] opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app')]" />
 
       <Toaster
@@ -76,7 +82,11 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
 
-          {/* ── SECURE INVESTOR SECTOR (Main Navigation) ── */}
+          {/* 🛡️ RECOVERY SECTOR (UPDATED) */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+
+          {/* ── SECURE INVESTOR SECTOR ── */}
           <Route element={
             <ProtectedRoute>
               <MainLayout />
@@ -89,8 +99,7 @@ export default function App() {
             <Route path="/kyc" element={<KYCUpload />} />
           </Route>
 
-          {/* ── SYSTEM OVERSIGHT SECTOR (Admin Sidebar Navigation) ── */}
-          {/* ✅ UPDATED: Now uses AdminLayout for specialized HQ navigation */}
+          {/* ── SYSTEM OVERSIGHT SECTOR (ADMIN) ── */}
           <Route element={
             <AdminRoute>
               <AdminLayout />
@@ -101,6 +110,7 @@ export default function App() {
             <Route path="/admin/users" element={<AdminUsers />} />
             <Route path="/admin/withdrawals" element={<AdminWithdrawals />} />
             <Route path="/admin/health" element={<SystemHealth />} />
+            <Route path="/admin/ledger" element={<GlobalLedger />} /> {/* Added */}
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
