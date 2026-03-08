@@ -1,26 +1,44 @@
+// src/components/layout/MainLayout.jsx
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import {
-  LayoutDashboard, PieChart, RefreshCw, ArrowDownCircle,
-  ArrowUpCircle, ShieldCheck, Settings, LogOut, Menu, X, 
-  ShieldAlert, Activity, Zap, User, ChevronRight
+  LayoutDashboard,
+  PieChart,
+  RefreshCw,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  ShieldCheck,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  ShieldAlert,
+  Activity,
+  Zap,
+  User,
+  ChevronRight
 } from 'lucide-react';
 
+/**
+ * MainLayout - The primary shell for the Zurich Mainnet trading environment.
+ * Handles desktop navigation, mobile overlay, and global session states.
+ */
 export default function MainLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Synchronized with App.jsx routes for seamless navigation
   const menuItems = [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Node Tiers', path: '/plans', icon: Zap },
+    { label: 'Node Tiers', path: '/nodes', icon: Zap },
     { label: 'Investment', path: '/invest', icon: PieChart },
     { label: 'Exchange', path: '/exchange', icon: RefreshCw },
-    { label: 'Deposit', path: '/deposit', icon: ArrowDownCircle },
+    { label: 'Deposit', path: '/dashboard', icon: ArrowDownCircle }, // Pointed to dashboard vault
     { label: 'Withdraw', path: '/withdraw', icon: ArrowUpCircle },
-    { label: 'Compliance', path: '/kyc', icon: ShieldCheck },
+    { label: 'Compliance', path: '/compliance', icon: ShieldCheck },
   ];
 
   const handleLogout = () => {
@@ -32,13 +50,18 @@ export default function MainLayout() {
 
   return (
     <div className="min-h-screen bg-[#020408] text-slate-200 flex overflow-hidden font-sans selection:bg-yellow-500/30">
-      {/* 1. Grainy Overlay - Fixed z-index to not block clicks */}
+      
+      {/* 1. Grainy Overlay - Non-blocking aesthetic texture */}
       <div className="bg-grain fixed inset-0 pointer-events-none z-[100] opacity-10" />
 
-      {/* 2. Desktop Sidebar */}
+      {/* 2. Desktop Sidebar - Fixed Institutional Navigation */}
       <aside className="hidden lg:flex flex-col w-72 bg-[#05070a] border-r border-white/5 sticky top-0 h-screen overflow-y-auto z-[60]">
         <div className="p-8">
-          <div className="flex items-center gap-3 mb-12 cursor-pointer group" onClick={() => navigate('/dashboard')}>
+          {/* Brand Identity */}
+          <div 
+            className="flex items-center gap-3 mb-12 cursor-pointer group" 
+            onClick={() => navigate('/dashboard')}
+          >
             <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center shadow-lg shadow-yellow-500/20 group-hover:rotate-12 transition-all">
               <Zap className="text-black fill-current" size={20} />
             </div>
@@ -48,7 +71,10 @@ export default function MainLayout() {
           </div>
 
           <nav className="space-y-1.5">
-            <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.4em] mb-6 px-4 italic">Core Protocol</p>
+            <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.4em] mb-6 px-4 italic">
+              Core Protocol
+            </p>
+
             {menuItems.map((item) => (
               <Link
                 key={item.path}
@@ -60,20 +86,25 @@ export default function MainLayout() {
                 }`}
               >
                 <div className="flex items-center gap-4">
-                  <item.icon size={18} className={isActive(item.path) ? 'text-black' : 'text-slate-600 group-hover:text-yellow-500 transition-colors'} />
+                  <item.icon 
+                    size={18} 
+                    className={isActive(item.path) ? 'text-black' : 'text-slate-600 group-hover:text-yellow-500 transition-colors'} 
+                  />
                   {item.label}
                 </div>
                 {isActive(item.path) && <ChevronRight size={14} className="animate-pulse" />}
               </Link>
             ))}
 
-            {/* Admin Bypass */}
+            {/* Admin Bypass Terminal */}
             {user?.role === 'admin' && (
               <div className="mt-8 pt-8 border-t border-white/5">
                 <Link
                   to="/admin"
                   className={`flex items-center gap-4 px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all italic ${
-                    isActive('/admin') ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20' : 'text-rose-500/60 hover:text-rose-500 hover:bg-rose-500/5'
+                    isActive('/admin') 
+                      ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20' 
+                      : 'text-rose-500/60 hover:text-rose-500 hover:bg-rose-500/5'
                   }`}
                 >
                   <ShieldAlert size={18} /> Admin Terminal
@@ -83,11 +114,18 @@ export default function MainLayout() {
           </nav>
         </div>
 
+        {/* Sidebar Footer - User Metadata */}
         <div className="mt-auto p-8 space-y-2">
-          <Link to="/profile" className="flex items-center gap-3 px-5 py-3 text-[10px] font-black uppercase text-slate-500 hover:text-white transition-colors tracking-widest italic">
+          <Link 
+            to="/profile" 
+            className="flex items-center gap-3 px-5 py-3 text-[10px] font-black uppercase text-slate-500 hover:text-white transition-colors tracking-widest italic"
+          >
             <User size={16} /> Identity Node
           </Link>
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-5 py-3 text-[10px] font-black uppercase text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/5 rounded-2xl transition-all tracking-widest italic">
+          <button 
+            onClick={handleLogout} 
+            className="w-full flex items-center gap-3 px-5 py-3 text-[10px] font-black uppercase text-rose-500/70 hover:text-rose-500 hover:bg-rose-500/5 rounded-2xl transition-all tracking-widest italic"
+          >
             <LogOut size={16} /> Terminate
           </button>
         </div>
@@ -95,49 +133,61 @@ export default function MainLayout() {
 
       {/* 3. Main Display Area */}
       <div className="flex-1 flex flex-col min-w-0 relative h-screen">
+        
+        {/* Top Navigation Bar */}
         <header className="h-24 flex items-center justify-between px-6 lg:px-12 bg-[#020408]/80 backdrop-blur-xl sticky top-0 z-40 border-b border-white/5">
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => setIsMobileMenuOpen(true)} 
+            {/* Mobile Menu Trigger */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
               className="lg:hidden p-3 bg-white/5 rounded-xl text-yellow-500 hover:bg-yellow-500/10 transition-colors"
             >
               <Menu size={20} />
             </button>
+
             <div className="hidden md:flex items-center gap-4">
               <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/5 border border-emerald-500/10 rounded-full">
                 <Activity size={12} className="text-emerald-500 animate-pulse" />
-                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-emerald-500/80 italic">Network Stable</span>
+                <span className="text-[9px] font-black uppercase tracking-[0.3em] text-emerald-500/80 italic">
+                  Network Stable
+                </span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-6">
             <div className="flex flex-col items-end text-right">
-              <span className="text-[8px] font-black uppercase text-slate-600 tracking-widest italic leading-none mb-1">Session Node</span>
+              <span className="text-[8px] font-black uppercase text-slate-600 tracking-widest italic leading-none mb-1">
+                Session Node
+              </span>
               <span className="text-[10px] font-black text-white uppercase tracking-tighter truncate max-w-[120px] md:max-w-[200px]">
-                {user?.email}
+                {user?.email || 'gery.maes1@telenet.be'}
               </span>
             </div>
-            <div 
+            
+            {/* Profile Avatar with Verification Logic */}
+            <div
               onClick={() => navigate('/profile')}
               className={`h-11 w-11 rounded-xl border flex items-center justify-center font-black italic cursor-pointer hover:scale-105 transition-all ${
-                user?.kycStatus === 'verified' ? 'border-emerald-500/20 text-emerald-500 bg-emerald-500/5' : 'border-yellow-500/20 text-yellow-500 bg-yellow-500/5'
+                user?.kycStatus === 'verified' 
+                  ? 'border-emerald-500/20 text-emerald-500 bg-emerald-500/5' 
+                  : 'border-yellow-500/20 text-yellow-500 bg-yellow-500/5'
               }`}
             >
-              {user?.name?.charAt(0) || 'U'}
+              {user?.username?.charAt(0).toUpperCase() || 'U'}
             </div>
           </div>
         </header>
 
-        {/* 🛰️ ROUTE OUTLET: Where the Dashboard/Invest pages appear */}
+        {/* Main Content Scroll Area */}
         <main className="flex-1 overflow-y-auto relative z-10 custom-scrollbar scroll-smooth">
-          <div className="max-w-[1600px] mx-auto">
+          <div className="max-w-[1600px] mx-auto p-4 md:p-8">
             <Outlet />
           </div>
         </main>
       </div>
 
-      {/* 4. Mobile Navigation Hub */}
+      {/* 4. Mobile Navigation Hub - Full-screen Overlay */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-[200] bg-[#020408] p-8 flex flex-col animate-in fade-in duration-300">
           <div className="flex justify-between items-center mb-12">
@@ -145,17 +195,20 @@ export default function MainLayout() {
               <Zap className="text-yellow-500" size={32} />
               <span className="font-black italic uppercase tracking-tighter text-2xl">Trustra</span>
             </div>
-            <button onClick={() => setIsMobileMenuOpen(false)} className="p-4 bg-white/5 rounded-2xl text-white active:scale-95 transition-transform">
+            <button 
+              onClick={() => setIsMobileMenuOpen(false)} 
+              className="p-4 bg-white/5 rounded-2xl text-white active:scale-95 transition-transform"
+            >
               <X size={24} />
             </button>
           </div>
-          
+
           <nav className="grid grid-cols-1 gap-3 overflow-y-auto">
             {menuItems.map((item) => (
-              <Link 
-                key={item.path} 
-                to={item.path} 
-                onClick={() => setIsMobileMenuOpen(false)} 
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => setIsMobileMenuOpen(false)}
                 className={`flex items-center gap-6 p-6 rounded-[2rem] text-sm font-black uppercase italic tracking-widest transition-all ${
                   isActive(item.path) ? 'bg-yellow-500 text-black' : 'bg-white/5 text-white'
                 }`}
@@ -165,8 +218,8 @@ export default function MainLayout() {
             ))}
           </nav>
 
-          <button 
-            onClick={handleLogout} 
+          <button
+            onClick={handleLogout}
             className="mt-auto w-full p-8 text-rose-500 font-black uppercase italic tracking-[0.3em] border border-rose-500/10 rounded-[2.5rem] hover:bg-rose-500/5"
           >
             Disconnect Session

@@ -1,4 +1,3 @@
-// src/pages/Dashboard/Deposit.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
@@ -11,7 +10,6 @@ import {
 import api from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 
-// ── REUSABLE SIDEBAR LINK ──
 function SidebarLink({ to, icon: Icon, label, active = false }) {
   return (
     <Link
@@ -38,7 +36,6 @@ export default function Deposit() {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  // Load deposit address
   const loadDepositAddress = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -65,7 +62,6 @@ export default function Deposit() {
     loadDepositAddress();
   }, [loadDepositAddress]);
 
-  // Copy address
   const copyToClipboard = useCallback(async () => {
     if (!depositAddress) return toast.error('No address available to copy');
 
@@ -79,12 +75,9 @@ export default function Deposit() {
     }
   }, [depositAddress]);
 
-  // Clear error messages
   const getErrorMessage = (err) => {
     if (err.response?.data?.message) return err.response.data.message;
-
     const status = err.response?.status;
-
     if (status === 401 || status === 403) return 'Session expired. Please login again.';
     if (!err.response && err.request) return 'Cannot reach server. Check your internet connection.';
     if (status === 404) return 'Deposit address not available. Contact support.';
@@ -122,7 +115,6 @@ export default function Deposit() {
 
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* TOP HEADER */}
         <header className="h-20 border-b border-white/5 bg-[#020408]/80 backdrop-blur-xl flex items-center justify-between px-6 md:px-10 sticky top-0 z-40">
           <div className="flex items-center gap-3">
             <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
@@ -135,7 +127,6 @@ export default function Deposit() {
         </header>
 
         <main className="p-6 md:p-12 max-w-6xl mx-auto w-full space-y-12">
-          {/* TITLE BLOCK */}
           <div className="space-y-4">
             <button
               onClick={() => navigate(-1)}
@@ -148,7 +139,6 @@ export default function Deposit() {
             </h1>
           </div>
 
-          {/* ERROR STATE */}
           {error && (
             <div className="bg-red-900/40 border border-red-800 text-red-200 p-12 rounded-[2.5rem] text-center space-y-6">
               <AlertCircle size={64} className="mx-auto text-red-500" />
@@ -171,14 +161,12 @@ export default function Deposit() {
 
           {!error && (
             <div className="grid lg:grid-cols-5 gap-8">
-              {/* VAULT CARD (LEFT) */}
               <div className="lg:col-span-3 bg-[#0a0c10] border border-white/5 rounded-[3.5rem] p-8 md:p-12 relative overflow-hidden group shadow-2xl">
                 <div className="absolute top-0 right-0 p-12 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
                   <ShieldCheck size={200} />
                 </div>
 
                 <div className="relative z-10 flex flex-col items-center gap-10">
-                  {/* QR Code */}
                   <div className="p-6 bg-white rounded-[2.5rem] shadow-[0_0_50px_rgba(255,255,255,0.1)] transition-transform group-hover:scale-[1.02]">
                     {loading ? (
                       <div className="w-48 h-48 flex items-center justify-center">
@@ -193,7 +181,6 @@ export default function Deposit() {
                     )}
                   </div>
 
-                  {/* Address Display */}
                   <div className="w-full space-y-6">
                     <div className="text-center">
                       <p className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">Encrypted Receiving String</p>
@@ -216,7 +203,6 @@ export default function Deposit() {
                 </div>
               </div>
 
-              {/* INSTRUCTIONS PANEL (RIGHT) */}
               <div className="lg:col-span-2 space-y-6">
                 <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] h-full flex flex-col shadow-xl">
                   <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-8 flex items-center gap-3">

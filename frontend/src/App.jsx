@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -19,12 +20,14 @@ const Signup = lazy(() => import('./pages/Auth/Signup'));
 const ForgotPassword = lazy(() => import('./pages/Auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/Auth/ResetPassword'));
 
-// ── LAZY LOADED USER PAGES ──
+// ── LAZY LOADED USER PAGES (Zurich Mainnet Core) ──
 const Dashboard = lazy(() => import('./pages/Dashboard/Dashboard'));
-const Withdraw = lazy(() => import('./pages/Withdraw/Withdraw'));
+const NodeTiers = lazy(() => import('./pages/Nodes/NodeTiers'));
 const Invest = lazy(() => import('./pages/Invest'));
+const Exchange = lazy(() => import('./pages/Exchange/Exchange'));
+const Withdraw = lazy(() => import('./pages/Withdraw/Withdraw'));
 const Profile = lazy(() => import('./pages/Profile'));
-const KYCUpload = lazy(() => import('./pages/Dashboard/KYC'));
+const Compliance = lazy(() => import('./pages/Dashboard/KYC'));
 
 // ── LAZY LOADED ADMIN PAGES ──
 const AdminDashboard = lazy(() => import('./pages/Admin/AdminDashboard'));
@@ -34,7 +37,7 @@ const SystemHealth = lazy(() => import('./pages/Admin/SystemHealth'));
 const GlobalLedger = lazy(() => import('./pages/Admin/GlobalLedger'));
 
 /**
- * PageLoader - Professional loading state for Zurich Mainnet
+ * PageLoader - High-fidelity loading state for Zurich Mainnet
  */
 const PageLoader = () => (
   <div className="min-h-screen bg-[#020408] flex flex-col items-center justify-center gap-6">
@@ -62,7 +65,6 @@ export default function App() {
   useEffect(() => {
     nprogress.configure({ showSpinner: false, trickleSpeed: 200 });
     nprogress.start();
-
     const timer = setTimeout(() => {
       nprogress.done();
     }, 400);
@@ -111,10 +113,12 @@ export default function App() {
           {/* ── 🔐 PROTECTED USER VAULT ── */}
           <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/nodes" element={<NodeTiers />} />
             <Route path="/invest" element={<Invest />} />
+            <Route path="/exchange" element={<Exchange />} />
             <Route path="/withdraw" element={<Withdraw />} />
             <Route path="/profile" element={<Profile />} />
-            <Route path="/kyc" element={<KYCUpload />} />
+            <Route path="/compliance" element={<Compliance />} />
           </Route>
 
           {/* ── 👑 PROTECTED ADMIN TERMINAL ── */}

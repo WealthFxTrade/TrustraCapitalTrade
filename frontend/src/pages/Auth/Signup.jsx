@@ -1,27 +1,26 @@
+// src/pages/Auth/Signup.jsx
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'; // Added useSearchParams
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import {
-  ShieldCheck,
-  Mail,
-  Lock,
-  User,
-  Phone,
-  ArrowRight,
-  Loader2,
+  ShieldCheck, Mail, Lock, User, Phone,
+  ArrowRight, Loader2, Gift // Added Gift icon for referral feedback
 } from 'lucide-react';
 
 const Signup = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams(); // Catch the URL params
   const { signup, isAuthenticated, initialized } = useAuth();
 
   const [formData, setFormData] = useState({
     name: '',
+    username: '', // Added username field to match User model requirements
     email: '',
     phone: '',
     password: '',
     confirmPassword: '',
+    inviteCode: searchParams.get('invite') || '' // Auto-capture ?invite=CODE
   });
 
   const [loading, setLoading] = useState(false);
@@ -39,259 +38,99 @@ const Signup = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
+      return toast.error('Passwords do not match');
     }
-
     if (!agreed) {
-      toast.error('You must accept the terms and risk disclosure');
-      return;
+      return toast.error('You must accept the terms and risk disclosure');
     }
 
     setLoading(true);
-
     try {
-      await signup(
-        formData.email.trim(),
-        formData.password,
-        formData.name.trim(),
-        formData.phone.trim()
-      );
+      // Updated signup call to include username and inviteCode
+      await signup({
+        name: formData.name.trim(),
+        username: formData.username.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        phone: formData.phone.trim(),
+        inviteCode: formData.inviteCode.toUpperCase()
+      });
 
-      toast.success('Account created successfully. Welcome to Trustra Capital Trade.');
+      toast.success('Node Synchronized. Welcome to Trustra Capital Trade.');
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      // Full debug logging to browser console
-      console.error('Signup attempt failed:', {
-        message: err.message,
-        status: err.response?.status,
-        responseData: err.response?.data,
-        networkError: !err.response && !!err.request,
-        fullError: err.toString(),
-      });
-
-      let message = 'Unable to create account. Please try again.';
-
-      if (err.response?.data?.message) {
-        // Use exact message from backend when available
-        message = err.response.data.message;
-      } else if (err.response) {
-        // Classify based on HTTP status
-        const status = err.response.status;
-
-        if (status === 400) {
-          message = 'Please check the information you entered.';
-        } else if (status === 401 || status === 403) {
-          message = 'Authentication issue. Please try again.';
-        } else if (status === 409 || status === 422) {
-          message = 'This email or username is already registered.';
-        } else if (status === 429) {
-          message = 'Too many attempts. Please wait a moment.';
-        } else if (status >= 500) {
-          message = 'Service is temporarily unavailable. Please try again shortly.';
-        } else {
-          message = `Server error (${status})`;
-        }
-      } else if (err.request) {
-        // No response received (network failure, timeout, aborted, offline, etc.)
-        message = 'Cannot reach the server. Please check your internet connection.';
-      } else {
-        // Generic JavaScript error
-        message = err.message || 'An unexpected error occurred.';
-      }
-
-      toast.error(message, {
-        duration: 6500,
-        position: 'top-center',
-      });
+      const message = err.response?.data?.message || 'Handshake failed. Check credentials.';
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#020408] to-[#0a0c14] flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
+    <div className="min-h-screen bg-[#020408] flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-yellow-500/10 border border-yellow-500/20 mb-6 shadow-xl shadow-yellow-500/5">
-            <ShieldCheck className="w-10 h-10 text-yellow-500" />
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 mb-4">
+            <ShieldCheck className="w-8 h-8 text-yellow-500" />
           </div>
-          <h1 className="text-4xl font-black text-white tracking-tight">
-            Create <span className="text-yellow-500">Account</span>
+          <h1 className="text-3xl font-black text-white italic uppercase tracking-tighter">
+            Initialize <span className="text-yellow-500">Node</span>
           </h1>
-          <p className="mt-3 text-sm text-gray-500 font-medium tracking-wide uppercase">
-            Trustra Capital Trade • Secure Trading Platform
-          </p>
         </div>
 
-        <div className="bg-[#0f111a]/90 backdrop-blur-sm border border-white/5 rounded-3xl p-8 md:p-10 shadow-2xl shadow-black/40">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Name */}
-            <div>
-              <label htmlFor="name" className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                Full Name
-              </label>
+        <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            
+            {/* NAME & USERNAME GRID */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Full Name</label>
+                <input name="name" type="text" required value={formData.name} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Username</label>
+                <input name="username" type="text" required value={formData.username} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
+              </div>
+            </div>
+
+            {/* EMAIL */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Email Protocol</label>
+              <input name="email" type="email" required value={formData.email} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
+            </div>
+
+            {/* INVITE CODE (REFERRAL) */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Invite Code (Optional)</label>
               <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  autoComplete="name"
-                  placeholder="John Doe"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full bg-[#1a1d2e] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder-gray-500 focus:border-yellow-500/60 focus:ring-1 focus:ring-yellow-500/30 outline-none transition-all"
+                <input 
+                  name="inviteCode" 
+                  type="text" 
+                  value={formData.inviteCode} 
+                  onChange={handleChange} 
+                  placeholder="EX: TRSTR7"
+                  className={`w-full bg-white/5 border rounded-xl py-3 px-4 text-white text-sm outline-none transition-all ${formData.inviteCode ? 'border-yellow-500/50' : 'border-white/10'}`} 
                 />
+                {formData.inviteCode && <Gift className="absolute right-4 top-1/2 -translate-y-1/2 text-yellow-500 w-4 h-4" />}
               </div>
             </div>
 
-            {/* Email */}
-            <div>
-              <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  placeholder="name@example.com"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className="w-full bg-[#1a1d2e] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder-gray-500 focus:border-yellow-500/60 focus:ring-1 focus:ring-yellow-500/30 outline-none transition-all"
-                />
-              </div>
+            {/* PASSWORD GRID */}
+            <div className="grid grid-cols-2 gap-4">
+              <input name="password" type="password" required placeholder="Password" value={formData.password} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
+              <input name="confirmPassword" type="password" required placeholder="Confirm" value={formData.confirmPassword} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
             </div>
 
-            {/* Phone */}
-            <div>
-              <label htmlFor="phone" className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                Phone Number
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  inputMode="tel"
-                  pattern="\+?[0-9\s\-\(\)]{8,20}"
-                  required
-                  autoComplete="tel"
-                  placeholder="+1 (555) 123-4567"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="w-full bg-[#1a1d2e] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder-gray-500 focus:border-yellow-500/60 focus:ring-1 focus:ring-yellow-500/30 outline-none transition-all"
-                />
-              </div>
-              <p className="mt-1.5 text-xs text-gray-500">
-                Include country code (e.g. +1, +44, +234, +91)
-              </p>
+            <div className="flex items-start gap-3 py-2">
+              <input type="checkbox" checked={agreed} onChange={() => setAgreed(!agreed)} className="mt-1 accent-yellow-500" />
+              <p className="text-[10px] text-gray-500 uppercase font-bold leading-tight">I acknowledge the risk disclosure and institutional terms.</p>
             </div>
 
-            {/* Passwords */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
-                  <input
-                    id="password"
-                    name="password"
-                    type="password"
-                    required
-                    autoComplete="new-password"
-                    placeholder="••••••••"
-                    value={formData.password}
-                    onChange={handleChange}
-                    className="w-full bg-[#1a1d2e] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder-gray-500 focus:border-yellow-500/60 focus:ring-1 focus:ring-yellow-500/30 outline-none transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="confirmPassword" className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
-                  <input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type="password"
-                    required
-                    autoComplete="new-password"
-                    placeholder="••••••••"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    className="w-full bg-[#1a1d2e] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder-gray-500 focus:border-yellow-500/60 focus:ring-1 focus:ring-yellow-500/30 outline-none transition-all"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Terms */}
-            <div className="flex items-start gap-3 pt-2">
-              <input
-                id="terms"
-                type="checkbox"
-                checked={agreed}
-                onChange={() => setAgreed(!agreed)}
-                className="mt-1 w-5 h-5 bg-[#1a1d2e] border-white/20 rounded accent-yellow-500 cursor-pointer focus:ring-yellow-500/30"
-              />
-              <label htmlFor="terms" className="text-sm text-gray-400 leading-relaxed">
-                I agree to the{' '}
-                <Link to="/terms" className="text-yellow-500 hover:text-yellow-400 underline underline-offset-2">
-                  Terms of Service
-                </Link>{' '}
-                and confirm that I have read the{' '}
-                <Link to="/risk-disclosure" className="text-yellow-500 hover:text-yellow-400 underline underline-offset-2">
-                  Risk Disclosure
-                </Link>.
-              </label>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full flex items-center justify-center gap-2 py-4 px-6 font-bold uppercase tracking-wider rounded-xl transition-all duration-200 shadow-lg ${
-                loading
-                  ? 'bg-yellow-600/70 cursor-not-allowed'
-                  : 'bg-yellow-500 hover:bg-yellow-400 active:bg-yellow-600 text-black shadow-yellow-500/20 hover:shadow-yellow-500/30'
-              }`}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Creating Account...</span>
-                </>
-              ) : (
-                <>
-                  <span>Create Account</span>
-                  <ArrowRight className="w-5 h-5" />
-                </>
-              )}
+            <button disabled={loading} className="w-full py-4 bg-yellow-500 text-black font-black uppercase italic rounded-2xl hover:bg-white transition-all disabled:opacity-50">
+              {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Establish Connection'}
             </button>
           </form>
-
-          <div className="mt-10 text-center text-sm text-gray-500">
-            Already have an account?{' '}
-            <Link
-              to="/login"
-              className="text-yellow-500 font-semibold hover:text-yellow-400 transition-colors"
-            >
-              Sign in
-            </Link>
-          </div>
         </div>
       </div>
     </div>

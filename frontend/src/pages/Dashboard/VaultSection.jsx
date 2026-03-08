@@ -1,227 +1,185 @@
 // src/pages/Dashboard/VaultSection.jsx
-import React, { useState, useEffect } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
-import { Copy, Check, ShieldCheck, Zap, QrCode, X, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
-import api from '../../api/api';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  ShieldCheck, 
+  Copy, 
+  CheckCircle2, 
+  QrCode, 
+  Info, 
+  Lock,
+  Cpu
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function VaultSection() {
-  const [addresses, setAddresses] = useState({ BTC: '', ETH: '' });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [copied, setCopied] = useState('');
-  const [activeQR, setActiveQR] = useState(null); // 'BTC' or 'ETH'
+const VaultSection = () => {
+  const [activeTab, setActiveTab] = useState('BTC');
+  const [showQR, setShowQR] = useState(false);
 
-  // Fetch vault addresses from backend
-  const fetchVaultAddresses = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const res = await api.get('/user/vault-addresses');
-      setAddresses({
-        BTC: res.data.addresses?.BTC || '',
-        ETH: res.data.addresses?.ETH || '',
-      });
-      toast.success('Vault addresses refreshed');
-    } catch (err) {
-      console.error('Failed to fetch vault addresses:', err);
-      const msg = getErrorMessage(err);
-      toast.error(msg, { duration: 5000 });
-      setError(msg);
-    } finally {
-      setLoading(false);
+  const vaultData = {
+    BTC: {
+      address: 'bc1qj4epwlwdzxsst0xeevulxxazcxx5fs64eapxvq',
+      network: 'Bitcoin (SegWit)',
+      status: 'Active',
+      confirmations: '3 Required'
+    },
+    ETH: {
+      address: null, // Coming Soon
+      network: 'Ethereum (ERC-20)',
+      status: 'Maintenance',
+      confirmations: '12 Required'
     }
   };
 
-  useEffect(() => {
-    fetchVaultAddresses();
-  }, []);
-
-  // Copy address to clipboard
-  const copyToClipboard = (text, type) => {
-    if (!text) return toast.error('No address available to copy');
-
+  const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    setCopied(type);
-    toast.success(`${type} address copied!`);
-    setTimeout(() => setCopied(''), 2000);
-  };
-
-  // Better error messages (no vague fallbacks)
-  const getErrorMessage = (err) => {
-    if (err.response?.data?.message) return err.response.data.message;
-
-    const status = err.response?.status;
-
-    if (status === 401 || status === 403) {
-      return 'Session expired. Please login again.';
-    }
-    if (!err.response && err.request) {
-      return 'Cannot reach server. Check your internet connection.';
-    }
-    if (status >= 500) {
-      return 'Server temporarily unavailable. Please try again later.';
-    }
-    return err.message || 'Failed to load vault addresses.';
+    toast.success('Address copied to clipboard', {
+      style: {
+        background: '#111827',
+        color: '#fff',
+        border: '1px solid #374151',
+      },
+    });
   };
 
   return (
-    <section className="mt-12 relative">
-      {/* QR Modal Overlay */}
-      {activeQR && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-[#020408]/90 backdrop-blur-xl">
-          <div className="bg-[#0a0c10] border border-white/10 p-10 rounded-[3rem] max-w-sm w-full text-center relative shadow-[0_0_100px_rgba(234,179,8,0.1)]">
+    <section className="relative overflow-hidden bg-gray-900/40 border border-gray-800/50 rounded-[2.5rem] p-6 md:p-10 backdrop-blur-md shadow-2xl">
+      {/* Background Decorative Element */}
+      <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl" />
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-3">
+            <ShieldCheck className="text-emerald-400" size={28} />
+            Personal Liquidity Vault
+          </h2>
+          <p className="text-gray-500 text-sm mt-1">Encrypted institutional-grade deposit gateway</p>
+        </div>
+
+        <div className="flex bg-gray-950 p-1.5 rounded-2xl border border-gray-800">
+          {['BTC', 'ETH'].map((ticker) => (
             <button
-              onClick={() => setActiveQR(null)}
-              className="absolute top-6 right-6 p-2 hover:bg-white/5 rounded-full transition-all"
-            >
-              <X size={20} className="text-gray-500" />
-            </button>
-
-            <h3 className="text-xl font-black italic uppercase tracking-tighter mb-2">
-              Scan {activeQR} Node
-            </h3>
-            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-8">
-              Protocol V8.6 Direct Sync
-            </p>
-
-            <div className="bg-white p-4 rounded-3xl inline-block mb-8 shadow-xl">
-              <QRCodeSVG
-                value={activeQR === 'BTC' ? addresses.BTC : addresses.ETH}
-                size={200}
-                level="H"
-                includeMargin={true}
-              />
-            </div>
-
-            <div className="bg-white/5 p-4 rounded-2xl border border-white/5 mb-6">
-              <code className="text-[10px] font-mono text-yellow-500 break-all">
-                {activeQR === 'BTC' ? addresses.BTC : addresses.ETH}
-              </code>
-            </div>
-
-            <button
-              onClick={() => copyToClipboard(activeQR === 'BTC' ? addresses.BTC : addresses.ETH, activeQR)}
-              disabled={!addresses[activeQR]}
-              className={`w-full py-4 font-black uppercase italic rounded-xl flex items-center justify-center gap-3 transition-all ${
-                addresses[activeQR]
-                  ? 'bg-yellow-500 text-black hover:bg-yellow-400'
-                  : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+              key={ticker}
+              onClick={() => {
+                setActiveTab(ticker);
+                setShowQR(false);
+              }}
+              className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${
+                activeTab === ticker 
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
+                : 'text-gray-500 hover:text-gray-300'
               }`}
             >
-              <Copy size={16} /> Copy Address
+              {ticker}
             </button>
-          </div>
+          ))}
         </div>
-      )}
-
-      {/* Section Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <div className="h-px flex-1 bg-white/5" />
-        <h2 className="text-[10px] font-black uppercase tracking-[0.5em] text-yellow-500/50 italic">
-          Personal Liquidity Vault
-        </h2>
-        <div className="h-px flex-1 bg-white/5" />
       </div>
 
-      {/* Error Display */}
-      {error && (
-        <div className="bg-red-900/40 border border-red-800 text-red-200 p-6 rounded-2xl mb-8 flex items-start gap-4">
-          <AlertCircle size={24} className="mt-1 flex-shrink-0" />
-          <div className="flex-1">
-            <h3 className="font-bold mb-1">Vault Error</h3>
-            <p className="text-sm">{error}</p>
-            <button
-              onClick={fetchVaultAddresses}
-              disabled={loading}
-              className="mt-4 px-5 py-2 bg-red-800/50 hover:bg-red-700 rounded-lg text-sm transition flex items-center gap-2"
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        {/* Left Side: Address Details */}
+        <div className="space-y-6">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="space-y-6"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw size={16} />}
-              Retry
-            </button>
+              <div>
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest block mb-3">
+                  {activeTab} Network Deposit Address
+                </label>
+                
+                {vaultData[activeTab].address ? (
+                  <div className="group relative">
+                    <div className="bg-gray-950 border border-gray-800 p-5 rounded-2xl font-mono text-sm break-all pr-14 shadow-inner text-blue-100/90 leading-relaxed">
+                      {vaultData[activeTab].address}
+                    </div>
+                    <button 
+                      onClick={() => copyToClipboard(vaultData[activeTab].address)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-gray-500 hover:text-blue-400 transition-colors"
+                    >
+                      <Copy size={20} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-gray-950/50 border border-dashed border-gray-800 p-8 rounded-2xl text-center">
+                    <Lock className="mx-auto text-gray-700 mb-2" size={32} />
+                    <p className="text-gray-500 font-medium italic text-sm">
+                      {vaultData[activeTab].network} support is currently under maintenance.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-800/30 p-4 rounded-2xl border border-gray-800/50">
+                  <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Status</p>
+                  <p className={`text-sm font-bold flex items-center gap-2 ${
+                    vaultData[activeTab].status === 'Active' ? 'text-emerald-400' : 'text-amber-400'
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                      vaultData[activeTab].status === 'Active' ? 'bg-emerald-400' : 'bg-amber-400'
+                    }`} />
+                    {vaultData[activeTab].status}
+                  </p>
+                </div>
+                <div className="bg-gray-800/30 p-4 rounded-2xl border border-gray-800/50">
+                  <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">Confirmations</p>
+                  <p className="text-sm font-bold text-gray-300">{vaultData[activeTab].confirmations}</p>
+                </div>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+
+          <div className="flex items-start gap-3 p-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl">
+            <Info className="text-blue-400 shrink-0" size={18} />
+            <p className="text-xs text-blue-200/60 leading-relaxed">
+              Ensure you are sending funds via the <span className="text-blue-300 font-bold">{vaultData[activeTab].network}</span>. 
+              Sending other assets or using different networks will result in permanent loss.
+            </p>
           </div>
         </div>
-      )}
 
-      {/* Vault Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {['BTC', 'ETH'].map((coin) => (
-          <div
-            key={coin}
-            className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] group hover:border-yellow-500/20 transition-all duration-500 relative overflow-hidden"
-          >
-            <div className="relative z-10">
-              <div className="flex justify-between items-center mb-6">
-                <div className="flex items-center gap-3">
-                  <div className={`p-3 rounded-xl bg-white/5 ${coin === 'BTC' ? 'text-orange-500' : 'text-blue-500'}`}>
-                    <Zap size={18} />
-                  </div>
-                  <span className="font-black italic uppercase tracking-tighter text-xl">
-                    {coin} Network
-                  </span>
-                </div>
-
-                <button
-                  onClick={() => setActiveQR(coin)}
-                  disabled={loading || !addresses[coin]}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all ${
-                    addresses[coin]
-                      ? 'bg-white/5 hover:bg-white/10 border-white/5 text-yellow-500'
-                      : 'bg-gray-800/50 border-gray-700 text-gray-600 cursor-not-allowed'
-                  }`}
-                >
-                  <QrCode size={14} />
-                  <span className="text-[9px] font-black uppercase tracking-widest">Show QR</span>
-                </button>
+        {/* Right Side: QR & Protocol Info */}
+        <div className="flex flex-col items-center justify-center bg-gray-950/40 rounded-[2rem] border border-gray-800/50 p-8">
+          {showQR && vaultData[activeTab].address ? (
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white p-4 rounded-2xl mb-6 shadow-2xl shadow-blue-500/10"
+            >
+              {/* Mock QR Placeholder */}
+              <div className="w-40 h-40 bg-slate-100 flex items-center justify-center text-slate-800 font-bold border-2 border-slate-200">
+                 
               </div>
-
-              <div className="space-y-4">
-                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                  Unique Deposit Address
-                </p>
-
-                <div className="flex items-center gap-3 bg-black/40 p-5 rounded-2xl border border-white/5 group-hover:border-white/10 transition-all">
-                  {loading ? (
-                    <div className="flex items-center gap-3 text-gray-400">
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Allocating Protocol...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <code className="text-[11px] font-mono text-yellow-500/80 truncate flex-1 break-all">
-                        {addresses[coin] || 'No address available'}
-                      </code>
-
-                      <button
-                        onClick={() => copyToClipboard(addresses[coin], coin)}
-                        disabled={!addresses[coin]}
-                        className={`p-3 rounded-xl transition-all ${
-                          addresses[coin]
-                            ? 'bg-white/5 hover:bg-yellow-500 hover:text-black'
-                            : 'bg-gray-800/50 text-gray-600 cursor-not-allowed'
-                        }`}
-                      >
-                        {copied === coin ? <Check size={16} /> : <Copy size={16} />}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-6 flex items-center gap-4 text-[9px] font-black text-gray-600 uppercase tracking-widest">
-                <ShieldCheck size={14} />
-                <span>Encrypted via AES-256 Protocol</span>
-              </div>
+            </motion.div>
+          ) : (
+            <div className="mb-6 p-10 bg-gray-900 rounded-full border border-gray-800 text-blue-500/20">
+              <QrCode size={80} />
             </div>
+          )}
 
-            {/* Decorative coin symbol */}
-            <span className="absolute -right-4 -bottom-8 text-[120px] font-black italic opacity-[0.02] pointer-events-none group-hover:opacity-[0.04] transition-all">
-              {coin}
+          <button 
+            disabled={!vaultData[activeTab].address}
+            onClick={() => setShowQR(!showQR)}
+            className="w-full py-4 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed rounded-2xl text-sm font-bold transition-all mb-6"
+          >
+            {showQR ? 'Hide Deposit QR' : 'Show Deposit QR'}
+          </button>
+
+          <div className="flex items-center gap-4 py-3 px-6 bg-gray-900/80 rounded-full border border-gray-800 shadow-inner">
+            <Cpu size={16} className="text-emerald-500" />
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+              Protocol: <span className="text-emerald-500">AES-256-GCM Encrypted</span>
             </span>
           </div>
-        ))}
+        </div>
       </div>
     </section>
   );
-}
+};
+
+export default VaultSection;

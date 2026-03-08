@@ -1,4 +1,3 @@
-// src/pages/Dashboard/Invest.jsx
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -28,7 +27,6 @@ export default function Invest() {
   const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Fetch user profile / balances
   const fetchProfile = async () => {
     setFetching(true);
     setError(null);
@@ -39,7 +37,7 @@ export default function Invest() {
     } catch (err) {
       console.error('Profile fetch failed:', err);
       const msg = getErrorMessage(err);
-      toast.error(msg);
+      toast.error(msg, { duration: 5000 });
       setError(msg);
     } finally {
       setFetching(false);
@@ -50,7 +48,6 @@ export default function Invest() {
     fetchProfile();
   }, []);
 
-  // Compound yield (re-invest ROI)
   const handleCompound = async () => {
     const currentRoi = user?.balances?.ROI || 0;
     if (currentRoi < 10) {
@@ -74,15 +71,12 @@ export default function Invest() {
     }
   };
 
-  // Clear, specific error messages
   const getErrorMessage = (err) => {
     if (err.response?.data?.message) return err.response.data.message;
-
     const status = err.response?.status;
-
     if (status === 401 || status === 403) return 'Session expired. Please login again.';
-    if (!err.response && err.request) return 'Cannot reach server. Check your internet connection.';
-    if (status >= 500) return 'Server temporarily unavailable. Please try again later.';
+    if (!err.response && err.request) return 'Cannot reach server. Check your internet.';
+    if (status >= 500) return 'Server temporarily unavailable.';
     return err.message || 'Operation failed. Please try again.';
   };
 
@@ -126,7 +120,6 @@ export default function Invest() {
             <h2 className="text-4xl lg:text-5xl font-black italic uppercase tracking-tighter">Capital Expansion</h2>
           </div>
 
-          {/* NEW NODE BUTTON */}
           <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white hover:text-black transition-all group"
@@ -136,7 +129,7 @@ export default function Invest() {
           </button>
         </header>
 
-        {/* BALANCE NODES */}
+        {/* BALANCE CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
           <div className="p-10 rounded-[3rem] bg-white/[0.02] border border-white/5 relative overflow-hidden">
             <span className="text-[10px] font-black uppercase opacity-40 block mb-4 tracking-widest">
@@ -158,7 +151,7 @@ export default function Invest() {
           </div>
         </div>
 
-        {/* COMPOUNDING CORE */}
+        {/* COMPOUNDING SECTION */}
         <section className="bg-[#0a0c10] border border-white/10 p-12 rounded-[4rem] relative overflow-hidden shadow-2xl">
           <div className="relative z-10 text-center md:text-left">
             <div className="flex items-center gap-4 text-emerald-500 mb-8 justify-center md:justify-start">
@@ -197,7 +190,7 @@ export default function Invest() {
           </div>
         </section>
 
-        {/* Investment Modal */}
+        {/* MODAL */}
         <InvestmentModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
