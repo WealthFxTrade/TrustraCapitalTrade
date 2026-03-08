@@ -1,154 +1,185 @@
+// src/pages/Admin/SchemaLogs.jsx
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
-  TrendingUp, LayoutDashboard, History, ShieldCheck,
-  LogOut, Clock, CheckCircle2, AlertCircle, RefreshCw, Zap
+  Database,
+  Terminal,
+  Search,
+  Filter,
+  ShieldAlert,
+  Cpu,
+  RefreshCcw,
+  Download
 } from 'lucide-react';
-import api from '../api/api'; // ✅ FIXED: Using the standard api.js instance
+import api from '../../api/api';
+import toast from 'react-hot-toast';
 
-export default function SchemaLogs({ logout }) {
+export default function SchemaLogs() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filter, setFilter] = useState('all'); // all, security, financial, system
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await api.get(`/admin/logs?type=${filter}`);
+      setLogs(res.data.logs || []);
+      toast.success('Logs refreshed');
+    } catch (err) {
+      console.error('Schema logs fetch failed:', err);
+      const msg = getErrorMessage(err);
+      toast.error(msg);
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        // ✅ FIXED: Matches your backend dashboard-stats route
-        const res = await api.get('/user/dashboard-stats');
-        
-        // Target active investments. If your backend uses 'transactions' with a type filter:
-        const activeOnly = res.data.transactions?.filter(tx => 
-          tx.type === 'investment' || tx.description.toLowerCase().includes('plan')
-        ) || [];
-        
-        setLogs(activeOnly);
-      } catch (err) {
-        console.error("Failed to fetch Trustra logs");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchLogs();
-  }, []);
+  }, [filter]);
+
+  const getErrorMessage = (err) => {
+    if (err.response?.data?.message) return err.response.data.message;
+
+    const status = err.response?.status;
+
+    if (status === 403) return 'Admin access required.';
+    if (!err.response && err.request) return 'Cannot connect to server. Check your internet.';
+    if (status >= 500) return 'Server temporarily unavailable.';
+    return err.message || 'Failed to load schema logs.';
+  };
+
+  const getLogTypeColor = (type) => {
+    switch (type?.toLowerCase()) {
+      case 'security': return 'text-red-500 bg-red-500/10 border-red-500/20';
+      case 'financial': return 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
+      case 'system': return 'text-blue-500 bg-blue-500/10 border-blue-500/20';
+      default: return 'text-slate-500 bg-slate-500/10 border-slate-500/20';
+    }
+  };
 
   return (
-    <div className="flex min-h-screen bg-[#05070a] text-white font-sans selection:bg-indigo-500/30">
-      
-      {/* SIDEBAR - Matches your Dashboard.jsx look */}
-      <aside className="w-72 bg-[#0a0c10] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen p-6 space-y-8">
-        <div className="flex items-center gap-3 px-2 mb-4">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-900/40">
-            <Zap size={22} className="text-white fill-current" />
+    <div className="space-y-8 animate-in fade-in duration-500 p-6 lg:p-10 bg-[#020617] min-h-screen text-white">
+      {/* TERMINAL HEADER */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-white/5 pb-8">
+        <div>
+          <div className="flex items-center gap-2 mb-2 text-indigo-500">
+            <Cpu size={14} className="animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-[0.4em]">Infrastructure Logs</span>
           </div>
-          <span className="text-xl font-black italic tracking-tighter uppercase">TrustraCapital</span>
+          <h1 className="text-4xl font-black italic uppercase tracking-tighter">
+            Audit <span className="text-slate-800">/</span> Ledger
+          </h1>
         </div>
 
-        <nav className="space-y-1">
-          <p className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-4 px-3">Main Menu</p>
-          <Link to="/dashboard" className="flex items-center gap-4 px-4 py-4 rounded-2xl text-gray-500 hover:bg-white/5 hover:text-white transition-all group">
-            <LayoutDashboard size={18} />
-            <span className="text-[11px] font-black uppercase tracking-widest">DASHBOARD</span>
-          </Link>
-          <Link to="/plans" className="flex items-center gap-4 px-4 py-4 rounded-2xl text-gray-500 hover:bg-white/5 hover:text-white transition-all group">
-            <Zap size={18} />
-            <span className="text-[11px] font-black uppercase tracking-widest">ALL SCHEMA</span>
-          </Link>
-          <Link to="/investments" className="flex items-center gap-4 px-4 py-4 rounded-2xl bg-indigo-600 text-white shadow-xl shadow-indigo-900/40 transition-all">
-            <History size={18} />
-            <span className="text-[11px] font-black uppercase tracking-widest">SCHEMA LOGS</span>
-          </Link>
-        </nav>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-20 border-b border-white/5 bg-[#05070a]/80 backdrop-blur-xl flex items-center justify-end px-8 sticky top-0 z-40">
-          <button onClick={logout} className="px-5 py-2.5 rounded-xl bg-white/5 hover:bg-red-500/10 hover:text-red-500 text-[10px] font-black uppercase tracking-widest transition-all border border-white/5">
-            Logout <LogOut size={14} className="inline ml-2" />
+        <div className="flex gap-3">
+          <button
+            onClick={fetchLogs}
+            disabled={loading}
+            className="p-3 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-white transition-all disabled:opacity-50"
+          >
+            <RefreshCcw size={18} className={loading ? 'animate-spin' : ''} />
           </button>
-        </header>
+          <button className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-indigo-600/20">
+            <Download size={14} /> Export Dump
+          </button>
+        </div>
+      </header>
 
-        <main className="p-8 lg:p-12 max-w-7xl w-full mx-auto space-y-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-                <span className="text-indigo-500 font-black text-[10px] uppercase tracking-[0.3em]">Network Secure</span>
-              </div>
-              <h1 className="text-4xl font-black tracking-tighter uppercase italic">Schema <span className="text-slate-800">/</span> Logs</h1>
-              <p className="text-gray-500 text-[10px] font-bold uppercase tracking-[0.2em] mt-2">Real-time status of your 2026 Rio Series Portfolio</p>
-            </div>
-            <button onClick={() => window.location.reload()} className="h-12 w-12 flex items-center justify-center bg-white/5 rounded-2xl text-gray-400 hover:text-white transition-all border border-white/10 active:scale-95">
-              <RefreshCw size={20} />
-            </button>
+      {/* FILTER TERMINAL */}
+      <div className="flex gap-2 p-1 bg-slate-900/50 rounded-2xl border border-slate-800 w-fit">
+        {['all', 'security', 'financial', 'system'].map((type) => (
+          <button
+            key={type}
+            onClick={() => setFilter(type)}
+            className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${
+              filter === type ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {type}
+          </button>
+        ))}
+      </div>
+
+      {/* Error Display */}
+      {error && (
+        <div className="bg-red-900/40 border border-red-800 text-red-200 p-6 rounded-2xl flex items-start gap-3">
+          <AlertCircle size={24} className="mt-1 flex-shrink-0" />
+          <div>
+            <h3 className="font-bold mb-1">Error Loading Logs</h3>
+            <p>{error}</p>
           </div>
+        </div>
+      )}
 
-          {/* ACTIVE INVESTMENTS TABLE */}
-          <div className="bg-[#0f1218] border border-white/5 rounded-[2.5rem] overflow-hidden shadow-2xl backdrop-blur-md">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-separate border-spacing-0">
-                <thead className="bg-white/5 text-[9px] text-gray-500 uppercase tracking-[0.3em]">
-                  <tr>
-                    <th className="px-10 py-6 font-black">Schema Node</th>
-                    <th className="px-10 py-6 font-black text-center">Capital (€)</th>
-                    <th className="px-10 py-6 font-black text-center">Yield (ROI)</th>
-                    <th className="px-10 py-6 font-black text-right">Status</th>
+      {/* LOG TERMINAL VIEW */}
+      <div className="glass-card bg-black/40 border-slate-800 font-mono overflow-hidden">
+        <div className="p-4 bg-slate-900/50 border-b border-slate-800 flex items-center gap-2">
+          <div className="flex gap-1.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" />
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500/50" />
+          </div>
+          <span className="text-[10px] text-slate-500 font-bold ml-2">
+            root@trustra-capital:~# tail -f /var/log/syslog
+          </span>
+        </div>
+
+        <div className="p-0 overflow-x-auto">
+          {loading ? (
+            <div className="p-20 text-center text-indigo-500 animate-pulse font-bold">
+              Connecting to Data Stream...
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="p-20 text-center text-slate-600 font-bold uppercase text-[10px]">
+              No Logs Found in Active Buffer
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-900/80 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                <tr>
+                  <th className="px-6 py-4">Timestamp</th>
+                  <th className="px-6 py-4">Event Type</th>
+                  <th className="px-6 py-4">Initiator</th>
+                  <th className="px-6 py-4">Action Details</th>
+                  <th className="px-6 py-4">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {logs.map((log, i) => (
+                  <tr key={i} className="hover:bg-white/[0.02] transition-colors text-[11px]">
+                    <td className="px-6 py-4 text-slate-400 whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-2 py-1 rounded-md border font-black uppercase text-[8px] tracking-widest ${getLogTypeColor(log.type)}`}>
+                        {log.type || 'General'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-slate-300">
+                      {log.userEmail || 'System'}
+                    </td>
+                    <td className="px-6 py-4 text-indigo-400 max-w-xs truncate">
+                      {log.message}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full ${log.status === 'error' ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                        <span className="uppercase font-bold tracking-widest text-[9px]">
+                          {log.status || 'OK'}
+                        </span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {loading ? (
-                    <tr>
-                      <td colSpan="4" className="px-10 py-32 text-center">
-                        <div className="flex flex-col items-center gap-4">
-                           <RefreshCw className="animate-spin text-indigo-500" size={32} />
-                           <span className="text-[10px] font-black uppercase tracking-widest text-gray-600">Syncing Trustra Nodes...</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : logs.length === 0 ? (
-                    <tr>
-                      <td colSpan="4" className="px-10 py-32 text-center">
-                        <div className="flex flex-col items-center gap-4 opacity-30">
-                          <AlertCircle size={48} className="text-gray-600" />
-                          <p className="text-[10px] font-black uppercase tracking-[0.4em]">No Active Capital Schemas Detected</p>
-                          <Link to="/plans" className="mt-6 px-10 py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 hover:text-white transition-all">Open New Node</Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    logs.map((log, idx) => (
-                      <tr key={idx} className="hover:bg-indigo-600/[0.03] transition-colors group">
-                        <td className="px-10 py-8">
-                           <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-                                 <Zap size={18} />
-                              </div>
-                              <span className="font-black text-white text-base uppercase italic tracking-tighter">
-                                {log.description}
-                              </span>
-                           </div>
-                        </td>
-                        <td className="px-10 py-8 font-mono font-bold text-gray-400 text-center text-lg">
-                          €{Number(log.amount).toLocaleString()}
-                        </td>
-                        <td className="px-10 py-8 text-emerald-400 font-mono font-black text-center text-xl">
-                          +{log.type === 'investment' ? 'Active' : 'Live'}
-                        </td>
-                        <td className="px-10 py-8 text-right">
-                          <div className="inline-flex items-center gap-2 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest">
-                            <CheckCircle2 size={12} /> Operational
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </main>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );
 }
-

@@ -1,90 +1,63 @@
-// src/api/api.js
 import axios from 'axios';
-import { API_URL } from '../constants/api';
+import { BASE_API_URL } from '../constants/api'; // e.g. 'http://localhost:10000/api'
 
-// Create Axios instance with sensible defaults
+// ────────────────────────────────────────────────────────────────
+// TRUSTRA API CLIENT – Zurich Mainnet v25.3.0
+// ────────────────────────────────────────────────────────────────
+// Strategy: httpOnly secure cookies for auth (no localStorage token)
+//           withCredentials: true → browser sends cookies automatically
+//           No manual Authorization header needed anymore
+// ────────────────────────────────────────────────────────────────
+
 const api = axios.create({
-  baseURL: API_URL,                     // from src/constants/api.js
+  baseURL: BASE_API_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,                       // 15 seconds - prevents indefinite hangs
-  // withCredentials: true,             // Uncomment if using cookies/sessions instead of Bearer tokens
+  timeout: 20000, // 20 seconds – adjust via env if needed
+  withCredentials: true, // CRITICAL: Allows browser to send/receive httpOnly cookies
 });
 
 // ── REQUEST INTERCEPTOR ──
-// Automatically adds Bearer token from localStorage to every request
+// No longer attach Bearer token — backend sets/trusts httpOnly cookie
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('trustra_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    // Optional: add custom headers or debug logging
+    // config.headers['X-Custom-Header'] = 'Trustra-Client';
     return config;
   },
-  (error) => {
-    // Rare: request setup failed (e.g. invalid config)
-    console.error('Request interceptor error:', error);
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // ── RESPONSE INTERCEPTOR ──
-// Centralized error handling/logging - extremely useful for debugging
+// Handles global errors, auto-logout on 401/403, detailed console logging
 api.interceptors.response.use(
-  // Success: pass through response
   (response) => response,
 
-  // Error handling
   (error) => {
-    // Detailed error logging (helps debug signup/login failures)
-    console.error('API Response Error:', {
+    const status = error.response?.status;
+
+    // Detailed debug log for developers
+    console.error('API Request Failed:', {
       url: error.config?.url,
       method: error.config?.method?.toUpperCase(),
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
+      status: status || 'No response',
+      message: error.response?.data?.message || error.message,
+      responseData: error.response?.data,
+      isNetworkError: !error.response && !!error.request,
     });
 
-    // Handle common status codes globally
-    if (error.response) {
-      const { status } = error.response;
-
-      // 401/403 → token invalid/expired
-      if (status === 401 || status === 403) {
-        localStorage.removeItem('trustra_token');
-        // Optional: force redirect to login (uncomment if needed)
-        // window.location.href = '/login';
-        // Or show toast: toast.error('Session expired. Please log in again.');
-      }
-
-      // 500+ → server error
-      if (status >= 500) {
-        // You can throw custom error or return fallback here
-        // e.g. throw new Error('Server error - please try again later');
-      }
-    } else if (error.request) {
-      // No response received → network issue, timeout, CORS, etc.
-      console.warn('Network/Connection error - no response from server');
-      // This is likely where "Protocol Error: Check your connection." messages come from
-    } else {
-      // Something broke before request (setup error)
-      console.error('Request setup failed:', error.message);
+    // Auto-logout on auth failure
+    if (status === 401 || status === 403) {
+      console.warn('Auth token invalid/expired → logging out');
+      // No localStorage token to clear anymore (cookies are httpOnly)
+      // Redirect to login (uncomment if needed)
+      // window.location.href = '/login';
     }
 
-    // Optional: Simple retry logic for network errors (uncomment if needed)
-    /*
-    const config = error.config;
-    if (!config || !config.__retryCount) config.__retryCount = 0;
-    if (config.__retryCount >= 3) { // max 3 retries
-      return Promise.reject(error);
-    }
-    config.__retryCount += 1;
-    const backoff = new Promise((resolve) => setTimeout(resolve, 1000 * config.__retryCount));
-    return backoff.then(() => api(config));
-    */
+    // Optional: show toast globally for certain errors (if not handled in component)
+    // if (status >= 500) toast.error('Server error – please try again later');
 
-    // Always reject so calling component can handle (e.g. show toast in Signup/Login)
     return Promise.reject(error);
   }
 );

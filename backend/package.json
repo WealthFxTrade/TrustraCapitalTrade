@@ -3,7 +3,7 @@
   "version": "1.0.5",
   "description": "Backend API for Trustra Capital - Secure Crypto Trading & Investment Platform",
   "private": true,
-  "type": "module", 
+  "type": "module",
   "main": "server.js",
   "engines": {
     "node": ">=18.0.0"
@@ -22,6 +22,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "express-async-handler": "^1.2.0",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.1",
     "morgan": "^1.10.0",

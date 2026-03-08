@@ -1,15 +1,17 @@
+// src/pages/Dashboard/Deposit.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import toast from 'react-hot-toast';
 import {
   LayoutDashboard, Zap, History, Repeat, PlusCircle, LogOut,
-  Copy, Check, Loader2, ShieldCheck, AlertTriangle, ChevronLeft, Globe
+  Copy, Check, Loader2, ShieldCheck, AlertTriangle, ChevronLeft, Globe,
+  RefreshCw, AlertCircle
 } from 'lucide-react';
 import api from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 
-// ── REUSABLE SIDEBAR COMPONENT ──
+// ── REUSABLE SIDEBAR LINK ──
 function SidebarLink({ to, icon: Icon, label, active = false }) {
   return (
     <Link
@@ -30,18 +32,19 @@ export default function Deposit() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+
   const [depositAddress, setDepositAddress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
 
-  // 🛰️ LOAD DEPOSIT ADDRESS FROM BACKEND
+  // Load deposit address
   const loadDepositAddress = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setError(null);
+
     try {
-      // Requesting the unique BTC vault address for this user node
       const res = await api.get('/user/deposit-address?asset=BTC');
       if (res.data?.address) {
         setDepositAddress(res.data.address);
@@ -49,7 +52,8 @@ export default function Deposit() {
         throw new Error('No address returned from gateway');
       }
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Node Handshake Failed';
+      console.error('Deposit address load failed:', err);
+      const msg = getErrorMessage(err);
       setError(msg);
       toast.error(msg);
     } finally {
@@ -57,13 +61,14 @@ export default function Deposit() {
     }
   }, [user]);
 
-  useEffect(() => { 
-    loadDepositAddress(); 
+  useEffect(() => {
+    loadDepositAddress();
   }, [loadDepositAddress]);
 
-  // 📋 CLIPBOARD LOGIC
+  // Copy address
   const copyToClipboard = useCallback(async () => {
-    if (!depositAddress) return;
+    if (!depositAddress) return toast.error('No address available to copy');
+
     try {
       await navigator.clipboard.writeText(depositAddress);
       setCopied(true);
@@ -74,10 +79,22 @@ export default function Deposit() {
     }
   }, [depositAddress]);
 
+  // Clear error messages
+  const getErrorMessage = (err) => {
+    if (err.response?.data?.message) return err.response.data.message;
+
+    const status = err.response?.status;
+
+    if (status === 401 || status === 403) return 'Session expired. Please login again.';
+    if (!err.response && err.request) return 'Cannot reach server. Check your internet connection.';
+    if (status === 404) return 'Deposit address not available. Contact support.';
+    if (status >= 500) return 'Server temporarily unavailable. Please try again later.';
+    return err.message || 'Failed to load deposit address.';
+  };
+
   return (
     <div className="flex min-h-screen bg-[#020408] text-white font-sans selection:bg-yellow-500/30 overflow-x-hidden">
-      
-      {/* ── SIDEBAR: TECHNICAL RAIL ── */}
+      {/* SIDEBAR */}
       <aside className="w-72 bg-[#05070a] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen p-8">
         <div className="flex items-center gap-3 mb-12">
           <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center">
@@ -95,35 +112,33 @@ export default function Deposit() {
           <SidebarLink to="/exchange" icon={Repeat} label="Exchange" />
         </nav>
 
-        <button 
-          onClick={logout} 
+        <button
+          onClick={logout}
           className="mt-auto flex items-center gap-4 px-6 py-4 text-gray-600 hover:text-red-500 transition-all text-[10px] font-black uppercase tracking-widest"
         >
           <LogOut size={18} /> Disconnect Node
         </button>
       </aside>
 
-      {/* ── MAIN CONTENT AREA ── */}
+      {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col min-w-0">
-
-        {/* TOP HEADER: GLOBAL STATUS */}
+        {/* TOP HEADER */}
         <header className="h-20 border-b border-white/5 bg-[#020408]/80 backdrop-blur-xl flex items-center justify-between px-6 md:px-10 sticky top-0 z-40">
           <div className="flex items-center gap-3">
-             <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-             <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">BTC Gateway: Operational</span>
+            <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">BTC Gateway: Operational</span>
           </div>
           <div className="hidden md:flex items-center gap-4">
-             <Globe size={14} className="text-gray-600" />
-             <span className="text-[9px] font-black text-yellow-500/60 uppercase tracking-widest">Tier-1 Liquidity Protocol</span>
+            <Globe size={14} className="text-gray-600" />
+            <span className="text-[9px] font-black text-yellow-500/60 uppercase tracking-widest">Tier-1 Liquidity Protocol</span>
           </div>
         </header>
 
         <main className="p-6 md:p-12 max-w-6xl mx-auto w-full space-y-12">
-          
           {/* TITLE BLOCK */}
           <div className="space-y-4">
-            <button 
-              onClick={() => navigate(-1)} 
+            <button
+              onClick={() => navigate(-1)}
               className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-yellow-500 transition-colors"
             >
               <ChevronLeft size={14} /> Previous Module
@@ -133,23 +148,29 @@ export default function Deposit() {
             </h1>
           </div>
 
-          {error ? (
-            /* ── ERROR STATE ── */
-            <div className="bg-red-500/5 border border-red-500/20 rounded-[2.5rem] p-12 text-center space-y-6">
-              <AlertTriangle size={48} className="mx-auto text-red-500" />
-              <h3 className="text-xl font-black uppercase italic text-white">Node Initialization Failed</h3>
-              <p className="text-gray-500 text-sm max-w-md mx-auto">{error}</p>
-              <button 
-                onClick={loadDepositAddress} 
-                className="bg-white text-black px-10 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-yellow-500 transition-all"
+          {/* ERROR STATE */}
+          {error && (
+            <div className="bg-red-900/40 border border-red-800 text-red-200 p-12 rounded-[2.5rem] text-center space-y-6">
+              <AlertCircle size={64} className="mx-auto text-red-500" />
+              <h3 className="text-2xl font-black uppercase italic text-white">Node Initialization Failed</h3>
+              <p className="text-gray-300 text-lg max-w-md mx-auto">{error}</p>
+              <button
+                onClick={loadDepositAddress}
+                disabled={loading}
+                className={`flex items-center gap-3 mx-auto px-10 py-4 rounded-2xl font-black uppercase text-sm transition-all ${
+                  loading
+                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                    : 'bg-white text-black hover:bg-yellow-500'
+                }`}
               >
+                {loading ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
                 Attempt Reconnect
               </button>
             </div>
-          ) : (
-            /* ── DEPOSIT TERMINAL ── */
-            <div className="grid lg:grid-cols-5 gap-8">
+          )}
 
+          {!error && (
+            <div className="grid lg:grid-cols-5 gap-8">
               {/* VAULT CARD (LEFT) */}
               <div className="lg:col-span-3 bg-[#0a0c10] border border-white/5 rounded-[3.5rem] p-8 md:p-12 relative overflow-hidden group shadow-2xl">
                 <div className="absolute top-0 right-0 p-12 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
@@ -157,29 +178,35 @@ export default function Deposit() {
                 </div>
 
                 <div className="relative z-10 flex flex-col items-center gap-10">
-                  {/* QR NODE */}
+                  {/* QR Code */}
                   <div className="p-6 bg-white rounded-[2.5rem] shadow-[0_0_50px_rgba(255,255,255,0.1)] transition-transform group-hover:scale-[1.02]">
                     {loading ? (
                       <div className="w-48 h-48 flex items-center justify-center">
                         <Loader2 className="animate-spin text-yellow-500" size={40} />
                       </div>
+                    ) : depositAddress ? (
+                      <QRCodeSVG value={depositAddress} size={192} level="H" includeMargin={false} />
                     ) : (
-                      <QRCodeSVG value={depositAddress || ''} size={192} level="H" includeMargin={false} />
+                      <div className="w-48 h-48 flex items-center justify-center text-gray-500">
+                        No address available
+                      </div>
                     )}
                   </div>
 
-                  {/* ADDRESS STRING */}
+                  {/* Address Display */}
                   <div className="w-full space-y-6">
                     <div className="text-center">
                       <p className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">Encrypted Receiving String</p>
                     </div>
 
-                    <div 
-                      onClick={copyToClipboard} 
-                      className={`group flex items-center justify-between bg-black/40 border ${copied ? 'border-emerald-500/50' : 'border-white/5'} p-6 rounded-2xl cursor-pointer hover:border-yellow-500/30 transition-all`}
+                    <div
+                      onClick={copyToClipboard}
+                      className={`group flex items-center justify-between bg-black/40 border ${
+                        copied ? 'border-emerald-500/50' : 'border-white/5'
+                      } p-6 rounded-2xl cursor-pointer hover:border-yellow-500/30 transition-all`}
                     >
                       <code className="text-xs md:text-sm font-mono text-gray-300 break-all select-none">
-                        {loading ? 'Decrypting node address...' : depositAddress}
+                        {loading ? 'Decrypting node address...' : depositAddress || 'No address available'}
                       </code>
                       <div className="shrink-0 p-3 bg-white/5 rounded-xl group-hover:bg-yellow-500 group-hover:text-black transition-all">
                         {copied ? <Check size={18} /> : <Copy size={18} />}

@@ -31,41 +31,46 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import VaultSection from './VaultSection'; // Your deposit/withdrawal component
 
-// ── Live Bitcoin Price Component ──
+// ── Live Bitcoin Price in EUR ──
 const LiveBitcoinPrice = () => {
   const [price, setPrice] = useState(null);
   const [change24h, setChange24h] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchPrice = async () => {
       try {
+        setError(null);
         const res = await fetch(
-          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true'
+          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur&include_24hr_change=true'
         );
+        if (!res.ok) throw new Error('Price fetch failed');
         const data = await res.json();
         const btc = data.bitcoin;
-        setPrice(btc.usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' }));
-        setChange24h(btc.usd_24h_change.toFixed(2));
+        setPrice(btc.eur.toLocaleString('en-US', { style: 'currency', currency: 'EUR' }));
+        setChange24h(btc.eur_24h_change.toFixed(2));
       } catch (err) {
-        console.error('BTC fetch failed:', err);
+        console.error('BTC price fetch failed:', err);
+        setError('Price unavailable');
       } finally {
         setLoading(false);
       }
     };
 
     fetchPrice();
-    const interval = setInterval(fetchPrice, 60000); // update every 60 seconds
+    const interval = setInterval(fetchPrice, 60000); // update every 60s
     return () => clearInterval(interval);
   }, []);
 
   if (loading) return <div className="text-gray-400 animate-pulse">Loading BTC...</div>;
+  if (error) return <div className="text-red-400">{error}</div>;
 
   const isPositive = change24h >= 0;
 
   return (
     <div className="bg-gray-800/60 border border-gray-700 rounded-xl px-5 py-3 text-sm backdrop-blur-sm">
-      <span className="text-gray-400 mr-2">BTC/USD:</span>
+      <span className="text-gray-400 mr-2">BTC/EUR:</span>
       <span className="font-bold">{price || '—'}</span>
       <span className={`ml-2 font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
         {isPositive ? '+' : ''}{change24h || '—'}%
@@ -88,12 +93,13 @@ const StatCard = ({ label, value, icon: Icon, color = 'text-white', prefix = '�
     </div>
     <div className="text-3xl md:text-4xl font-extrabold">
       {prefix}
-      <CountUp end={value || 0} decimals={2} separator="," duration={1.8} />
+      <CountUp end={Number(value) || 0} decimals={2} separator="," duration={1.8} />
       {suffix}
     </div>
   </motion.div>
 );
 
+// ── Main Dashboard ──
 export default function Dashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -106,37 +112,53 @@ export default function Dashboard() {
   });
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [unreadMessages, setUnreadMessages] = useState(false);
 
+  // ── Fetch all dashboard data ──
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
 
       const [profileRes, historyRes, supportRes] = await Promise.all([
-        api.get('/user/profile').catch(() => ({ data: { user: {} } })),
-        api.get('/user/portfolio-history').catch(() => ({ data: { history: [] } })),
-        api.get('/support/tickets').catch(() => ({ data: { unread: 0 } })),
+        api.get('/user/profile').catch((err) => {
+          console.error('Profile fetch failed:', err);
+          return { data: { user: {} } };
+        }),
+        api.get('/user/portfolio-history').catch((err) => {
+          console.error('History fetch failed:', err);
+          return { data: { history: [] } };
+        }),
+        api.get('/support/tickets').catch((err) => {
+          console.error('Support tickets fetch failed:', err);
+          return { data: { unread: 0 } };
+        }),
       ]);
 
       const userData = profileRes.data.user || {};
       setPortfolio({
         totalValue: userData.totalBalance || 0,
-        pnl: userData.pnl || 0,
+        pnl: userData.totalProfit || 0,
         pnlPercent: userData.pnlPercent || 0,
         assets: userData.assets || [],
       });
 
-      // Chart data (real or fallback)
+      // Chart data – real or mock fallback
       if (historyRes.data.history?.length > 0) {
-        setChartData(historyRes.data.history.map(item => ({
-          date: item.date || new Date().toLocaleDateString(),
-          value: item.value || 0,
-        })));
+        setChartData(
+          historyRes.data.history.map((item) => ({
+            date: item.date || new Date().toLocaleDateString(),
+            value: item.value || 0,
+          }))
+        );
       } else {
-        // Realistic mock fallback
         const now = Date.now();
         const mock = Array.from({ length: 30 }, (_, i) => ({
-          date: new Date(now - (29 - i) * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: new Date(now - (29 - i) * 86400000).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
           value: 10000 + Math.random() * 8000 + i * 150,
         }));
         setChartData(mock);
@@ -144,21 +166,34 @@ export default function Dashboard() {
 
       setUnreadMessages(supportRes.data.unread > 0);
     } catch (err) {
-      console.error('Dashboard fetch error:', err);
-      toast.error('Unable to load dashboard data');
+      console.error('Dashboard data fetch error:', err);
+      setError('Unable to load dashboard data. Please refresh.');
+      toast.error(getErrorMessage(err), { duration: 5000 });
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Real-time updates via Socket.io
+  // Better error messages
+  const getErrorMessage = (err) => {
+    if (err.response?.data?.message) return err.response.data.message;
+    if (!err.response && err.request) return 'Network issue – cannot reach server.';
+    const status = err.response?.status;
+    if (status === 401 || status === 403) return 'Session expired. Please login again.';
+    if (status >= 500) return 'Server temporarily unavailable.';
+    return err.message || 'Failed to load data.';
+  };
+
+  // ── Real-time updates via Socket.io ──
   useEffect(() => {
     if (!user?._id) return;
 
-    const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
-      auth: { token: localStorage.getItem('trustra_token') },
+    const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:10000';
+    const socket = io(socketUrl, {
+      auth: { userId: user._id },
       reconnection: true,
       reconnectionAttempts: 5,
+      withCredentials: true,
     });
 
     socket.on('connect', () => console.log('Real-time connection established'));
@@ -169,22 +204,29 @@ export default function Dashboard() {
         pnl: update.pnl ?? prev.pnl,
         pnlPercent: update.pnlPercent ?? prev.pnlPercent,
       }));
-      toast('Portfolio updated', {
-        icon: '📊',
-        duration: 3000,
-      });
+      toast('Portfolio updated', { icon: '📊', duration: 3000 });
     });
-
-    socket.on('connect_error', (err) => console.warn('Socket error:', err.message));
+    socket.on('connect_error', (err) => console.warn('Socket connection error:', err.message));
 
     return () => socket.disconnect();
   }, [user?._id]);
 
+  // ── Initial fetch + periodic refresh ──
   useEffect(() => {
     fetchDashboardData();
-    const interval = setInterval(fetchDashboardData, 300000); // refresh every 5 minutes
+    const interval = setInterval(fetchDashboardData, 300000); // 5 minutes
     return () => clearInterval(interval);
   }, [fetchDashboardData]);
+
+  // ── Logout handler ──
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Logged out successfully');
+    } catch (err) {
+      toast.error('Logout failed');
+    }
+  };
 
   if (loading) {
     return (
@@ -195,19 +237,32 @@ export default function Dashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center flex-col gap-6 text-center px-4">
+        <div className="text-red-400 text-2xl">Error</div>
+        <p className="text-gray-300 text-lg">{error}</p>
+        <button
+          onClick={fetchDashboardData}
+          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-xl text-white font-medium transition"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-white p-4 md:p-8 lg:p-12">
-      {/* Risk Warning */}
+      {/* High Risk Warning */}
       <div className="bg-gradient-to-r from-red-950/70 to-red-900/40 border border-red-800/50 text-red-200 p-5 rounded-2xl mb-10 text-center text-base shadow-lg">
         <strong>High Risk Warning:</strong> Cryptocurrency investments can result in total loss of capital. Only invest funds you can afford to lose. This is not financial advice.
       </div>
 
-      {/* Header with BTC Price */}
+      {/* Header */}
       <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
         <div>
-          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight">
-            Dashboard
-          </h1>
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight">Dashboard</h1>
           <p className="text-gray-400 mt-2">
             Welcome back, {user?.username || 'Investor'} • {new Date().toLocaleDateString()}
           </p>
@@ -301,7 +356,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      {/* Vault / Deposit & Withdrawal Section */}
+      {/* Vault Section */}
       <VaultSection />
 
       {/* Quick Actions */}
@@ -343,13 +398,13 @@ export default function Dashboard() {
         </motion.button>
       </div>
 
-      {/* Footer with Logout & Legal */}
+      {/* Footer */}
       <footer className="mt-16 pt-10 border-t border-gray-800 text-center text-gray-500 text-sm">
         <p className="mb-6">
           Cryptocurrency trading involves substantial risk and is not suitable for everyone. Always do your own research.
         </p>
         <button
-          onClick={logout}
+          onClick={handleLogout}
           className="flex items-center gap-3 mx-auto px-6 py-3 bg-red-900/40 hover:bg-red-900/60 border border-red-800 rounded-xl text-red-300 transition-all"
         >
           <LogOut size={20} />

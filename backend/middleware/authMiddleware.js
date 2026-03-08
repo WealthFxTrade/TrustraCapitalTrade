@@ -19,60 +19,60 @@ export const protect = async (req, res, next) => {
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Not authorized, access token missing'
+        message: 'Access denied: Synchronization token missing'
       });
     }
 
-    // 2. Verify Token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // 2. Verify Token - Use fallback for development if env is missing
+    const secret = process.env.JWT_SECRET || 'trustra_secret_2026';
+    const decoded = jwt.verify(token, secret);
 
-    // 3. Security Check: Sync with the ID key used in generateToken ('userId')
+    // 3. Sync with ID keys (handles 'userId' or 'id')
     const userId = decoded.userId || decoded.id;
-
+    
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid security credentials'
+        message: 'Security breach detected: Invalid node identity'
       });
     }
 
-    // 4. Fetch User and check account state
+    // 4. Fetch User - select everything except password
     const user = await User.findById(userId).select('-password');
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Identity verification failed: User no longer exists'
+        message: 'Authentication failed: Identity not found in Registry'
       });
     }
 
-    // 5. Check if user is restricted (Matches User.js model fields)
-    if (user.isBanned || user.isActive === false) {
+    // 5. Status Check (Matches your User.js model)
+    if (user.isBanned) {
       return res.status(403).json({
         success: false,
-        message: 'Account restricted: Please contact support'
+        message: 'Account suspended: Institutional restriction in place'
       });
     }
 
-    // Attach user to request object
+    // Attach verified user to the request
     req.user = user;
     next();
   } catch (error) {
-    console.error('🛡️ [Auth Middleware Error]:', error.message);
+    console.error('🛡️ [Zurich Auth Error]:', error.message);
 
     const message = error.name === 'TokenExpiredError'
-      ? 'Your session has expired. Please log in again.'
-      : 'Authentication failed. Invalid token.';
+      ? 'Session expired: Please re-authenticate'
+      : 'Invalid Access Cipher: Verification failed';
 
     return res.status(401).json({ success: false, message });
   }
 };
 
 /**
- * @desc Admin only middleware
+ * @desc Admin clearance only
  */
 export const admin = (req, res, next) => {
-  // Check for both 'role' or 'isAdmin' for cross-version compatibility
   if (req.user && (req.user.role === 'admin' || req.user.isAdmin)) {
     return next();
   }
@@ -82,7 +82,4 @@ export const admin = (req, res, next) => {
   });
 };
 
-/**
- * @desc Alias for 'protect' to support various route imports
- */
 export const auth = protect;

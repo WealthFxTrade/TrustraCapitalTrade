@@ -1,11 +1,13 @@
+// src/pages/Admin/AdminDashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Users, Wallet, ArrowUpRight, 
-  BarChart3, ShieldCheck, Clock, RefreshCw, Zap
+  Users, Wallet, ArrowUpRight,
+  BarChart3, ShieldCheck, Clock, RefreshCw, Zap,
+  Loader2, AlertCircle
 } from 'lucide-react';
 import api from '../../api/api';
-import SystemHealth from './SystemHealth'; 
+import SystemHealth from './SystemHealth';
 import toast from 'react-hot-toast';
 
 export default function AdminDashboard() {
@@ -16,15 +18,28 @@ export default function AdminDashboard() {
     activeNodes: 0
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Fetch admin stats
   const fetchDashboardData = async () => {
     setLoading(true);
+    setError(null);
+
     try {
       const res = await api.get('/admin/stats');
-      // Ensure we handle nested data if your backend sends { data: { ... } }
-      setStats(res.data.data || res.data);
+      const data = res.data.data || res.data || {};
+      
+      setStats({
+        totalUsers: Number(data.totalUsers) || 0,
+        totalDeposits: Number(data.totalDeposits) || 0,
+        pendingWithdrawals: Number(data.pendingWithdrawals) || 0,
+        activeNodes: Number(data.activeNodes) || 0
+      });
     } catch (err) {
-      toast.error("Failed to sync system metrics.");
+      console.error('Admin stats fetch failed:', err);
+      const msg = getErrorMessage(err);
+      toast.error(msg, { duration: 5000 });
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -34,9 +49,21 @@ export default function AdminDashboard() {
     fetchDashboardData();
   }, []);
 
+  // Clear, meaningful error messages
+  const getErrorMessage = (err) => {
+    if (err.response?.data?.message) return err.response.data.message;
+
+    const status = err.response?.status;
+
+    if (status === 403) return 'Admin access required. Check your permissions.';
+    if (!err.response && err.request) return 'Cannot connect to server. Please check your internet.';
+    if (status >= 500) return 'Server temporarily unavailable. Please try again later.';
+    return err.message || 'Failed to load system metrics.';
+  };
+
   return (
     <div className="min-h-screen bg-[#020408] text-white p-6 lg:p-12 pt-28">
-      {/* ── HEADER ── */}
+      {/* HEADER */}
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
         <div>
           <div className="flex items-center gap-3 mb-4 text-yellow-500">
@@ -51,44 +78,71 @@ export default function AdminDashboard() {
         <button
           onClick={fetchDashboardData}
           disabled={loading}
-          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/30 hover:text-yellow-500 transition-all group"
+          className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all group ${
+            loading ? 'text-yellow-500/50 cursor-not-allowed' : 'text-white/30 hover:text-yellow-500'
+          }`}
         >
-          <RefreshCw size={14} className={`${loading ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
+          {loading ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
+          )}
           {loading ? "Syncing Nodes..." : "Refresh Network"}
         </button>
       </div>
 
+      {/* ERROR STATE */}
+      {error && (
+        <div className="max-w-7xl mx-auto bg-rose-900/30 border border-rose-800 text-rose-200 p-8 rounded-[3rem] mb-12 flex items-start gap-4">
+          <AlertCircle size={24} className="mt-1 flex-shrink-0" />
+          <div className="flex-1">
+            <h3 className="text-xl font-black uppercase italic mb-2">System Metrics Error</h3>
+            <p className="text-base">{error}</p>
+            <button
+              onClick={fetchDashboardData}
+              disabled={loading}
+              className={`mt-6 px-8 py-4 rounded-2xl font-black uppercase text-sm transition-all ${
+                loading
+                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  : 'bg-white text-black hover:bg-yellow-500'
+              }`}
+            >
+              {loading ? 'Retrying...' : 'Retry Sync'}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto space-y-10">
-        
-        {/* ── CORE METRICS ── */}
+        {/* CORE METRICS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
             label="Verified Investors"
-            value={stats.totalUsers || 0}
+            value={stats.totalUsers}
             icon={Users}
             color="text-blue-400"
           />
           <StatCard
             label="System Liquidity"
-            value={`€${(stats.totalDeposits || 0).toLocaleString()}`}
+            value={`€${stats.totalDeposits.toLocaleString()}`}
             icon={Wallet}
             color="text-emerald-400"
           />
           <StatCard
             label="Pending Extraction"
-            value={stats.pendingWithdrawals || 0}
+            value={stats.pendingWithdrawals}
             icon={ArrowUpRight}
             color="text-red-400"
           />
           <StatCard
             label="Active Rio Nodes"
-            value={stats.activeNodes || 0}
+            value={stats.activeNodes}
             icon={BarChart3}
             color="text-yellow-500"
           />
         </div>
 
-        {/* ── INFRASTRUCTURE CONTROL ── */}
+        {/* SYSTEM HEALTH */}
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -97,7 +151,7 @@ export default function AdminDashboard() {
           <SystemHealth />
         </motion.div>
 
-        {/* ── ACTIVITY & INTEGRITY ── */}
+        {/* ACTIVITY & INTEGRITY */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 bg-white/[0.02] border border-white/5 rounded-[3rem] p-10">
             <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-6">
@@ -138,6 +192,7 @@ export default function AdminDashboard() {
   );
 }
 
+// Reusable Stat Card
 function StatCard({ label, value, icon: Icon, color }) {
   return (
     <div className="bg-white/[0.03] border border-white/10 p-8 rounded-[2.5rem] hover:bg-white/[0.05] hover:border-white/20 transition-all group relative overflow-hidden">
@@ -151,6 +206,7 @@ function StatCard({ label, value, icon: Icon, color }) {
   );
 }
 
+// Reusable Activity Row
 function ActivityRow({ user, action, time, status }) {
   const isPending = status === 'PENDING';
   return (

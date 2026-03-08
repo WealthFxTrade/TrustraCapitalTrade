@@ -3,7 +3,7 @@ import User from '../models/User.js';
 
 /**
  * RIO v8.6 PORTFOLIO RATES (Zurich 2026 Standards)
- * Match these exactly to the "plan" strings in your User Model.
+ * Daily multipliers for yield calculation.
  */
 const RIO_DAILY_RATES = {
   'Rio Starter': 0.0025,  // 0.25% daily
@@ -15,7 +15,8 @@ const RIO_DAILY_RATES = {
 
 /**
  * 🚀 runYieldDistribution
- * Calculates and injects daily ROI into the Map-based balances.
+ * The core logic for calculating and injecting daily ROI.
+ * Can be triggered by CRON or manually via an Admin Dashboard.
  */
 export const runYieldDistribution = async (io) => {
   console.log('--- [RIO ENGINE] INITIATING DISTRIBUTION SEQUENCE ---');
@@ -24,7 +25,7 @@ export const runYieldDistribution = async (io) => {
   startOfToday.setHours(0, 0, 0, 0);
 
   try {
-    // Find active users who haven't received ROI yet today
+    // 1. Target identification: Active users with a plan who haven't been paid today
     const activeUsers = await User.find({
       isActive: true,
       isBanned: false,
@@ -43,25 +44,32 @@ export const runYieldDistribution = async (io) => {
     let updatedCount = 0;
 
     for (let user of activeUsers) {
-      // Logic: Exact match first, then case-insensitive fallback, then minimum rate
-      const rate = RIO_DAILY_RATES[user.activePlan] || 0.001; 
-      
+      // 2. Rate Selection Logic
+      // We use a fallback to ensure even custom plans get a baseline 0.1%
+      const rate = RIO_DAILY_RATES[user.activePlan] || 0.001;
+
+      // 3. Calculation Logic
+      // Yield is calculated based on the primary 'EUR' balance
       const principal = user.balances.get('EUR') || 0;
       const accruedAmount = principal * rate;
 
       if (accruedAmount <= 0) {
-        console.log(`[RIO ENGINE] Skipping ${user.username}: Zero Principal.`);
+        console.log(`[RIO ENGINE] Skipping ${user.username}: Insufficient Principal.`);
         continue;
       }
 
-      // 1. Update Map-based ROI balance
+      // 4. Ledger and Balance Mutation
+      // Update the Map-based ROI balance
       const currentRoi = user.balances.get('ROI') || 0;
       user.balances.set('ROI', currentRoi + accruedAmount);
 
-      // 2. Update Global Accumulators
+      // Increment Global Profit Accumulator
       user.totalProfit = (user.totalProfit || 0) + accruedAmount;
+      
+      // Update Total Balance (Principal + New Profit)
+      user.totalBalance = principal + user.balances.get('ROI');
 
-      // 3. Document in the Immutable Ledger
+      // 5. Immutable Ledger Entry
       user.ledger.push({
         amount: accruedAmount,
         currency: 'EUR',
@@ -71,21 +79,24 @@ export const runYieldDistribution = async (io) => {
         createdAt: new Date()
       });
 
-      // 4. Update the "Last Paid" timestamp to prevent double-dipping
+      // 6. Persistence Handshake
       user.lastRoiAt = new Date();
 
-      // IMPORTANT: Tell Mongoose the Map and Array have changed
+      // IMPORTANT: Mongoose doesn't track changes inside Maps or Arrays automatically.
+      // We must explicitly flag them as modified.
       user.markModified('balances');
       user.markModified('ledger');
 
       await user.save();
       updatedCount++;
 
-      // 5. EMIT REAL-TIME UPDATE (If Socket.io is provided)
+      // 7. Real-Time Synchronization (Socket.io)
+      // This pushes the new balance to the user's dashboard instantly without a refresh.
       if (io) {
         io.to(user._id.toString()).emit('balanceUpdate', {
           balances: Object.fromEntries(user.balances),
           totalProfit: user.totalProfit,
+          totalBalance: user.totalBalance,
           message: `Daily yield of €${accruedAmount.toFixed(2)} credited.`
         });
       }
@@ -96,16 +107,16 @@ export const runYieldDistribution = async (io) => {
 
   } catch (error) {
     console.error('--- [CRITICAL] ENGINE STALL ---', error);
-    throw error; // Re-throw so the controller can catch it
+    throw error;
   }
 };
 
 /**
  * ⏰ initRioEngine
- * Primary entry point used by server.js
+ * Scheduler initialization.
  */
 export const initRioEngine = (io) => {
-  // Cron: 0 0 * * * (Every Midnight UTC)
+  // Midnight UTC Distribution
   cron.schedule('0 0 * * *', async () => {
     try {
       console.log('--- [CRON] AUTOMATED MIDNIGHT DISTRIBUTION STARTED ---');

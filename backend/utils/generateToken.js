@@ -1,22 +1,25 @@
 import jwt from 'jsonwebtoken';
 
 /**
- * Generates a Secure JWT and sets it as an HTTP-Only Cookie
- * @param {Object} res - Express Response Object
- * @param {String} userId - The MongoDB User ID
+ * ── GENERATE ACCESS CIPHER ──
+ * Creates a JWT token string. Does NOT set cookies.
+ * Cookie setting should be done in the controller for clarity & control.
+ * @param {string} userId - MongoDB User ID
+ * @returns {string} JWT token
  */
-const generateToken = (res, userId) => {
-  const token = jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: '30d',
-  });
+const generateToken = (userId) => {
+  const secret = process.env.JWT_SECRET;
 
-  // Set JWT as an HTTP-Only cookie
-  res.cookie('jwt', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV !== 'development', // Use secure in production
-    sameSite: 'strict', // Prevent CSRF attacks
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-  });
+  if (!secret) {
+    console.error('[JWT ERROR] JWT_SECRET is not set in environment variables');
+    throw new Error('Server configuration error – contact support');
+  }
+
+  const token = jwt.sign(
+    { id: userId }, // payload
+    secret,
+    { expiresIn: '30d' } // adjust duration as needed: '7d', '1h', etc.
+  );
 
   return token;
 };

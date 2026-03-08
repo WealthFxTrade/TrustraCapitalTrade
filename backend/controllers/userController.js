@@ -23,54 +23,64 @@ export const getUserProfile = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Update profile details
- * @route   PUT /api/user/profile/update
+ * @desc    Request Withdrawal (Lock funds & queue for Admin)
+ * @route   POST /api/user/withdraw
  */
-export const updateProfile = asyncHandler(async (req, res) => {
+export const requestWithdrawal = asyncHandler(async (req, res) => {
+  const { amount, currency, address, description } = req.body;
   const user = await User.findById(req.user._id);
 
   if (!user) {
     res.status(404);
-    throw new Error('User not found');
+    throw new Error('Identity node not found');
   }
 
-  const { username, password } = req.body;
+  const currentBalance = user.balances.get(currency) || 0;
+  const withdrawAmount = Number(amount);
 
-  if (username && username !== user.username) {
-    const existing = await User.findOne({ username });
-    if (existing) {
-      res.status(400);
-      throw new Error('Username already synchronized to another node');
-    }
-    user.username = username;
+  // 1. Validation
+  if (withdrawAmount <= 0) {
+    res.status(400);
+    throw new Error('Invalid withdrawal amount');
   }
 
-  if (password) user.password = password;
+  if (currentBalance < withdrawAmount) {
+    res.status(400);
+    throw new Error(`Insufficient ${currency} liquidity for this operation`);
+  }
 
+  // 2. Atomic Deduction (Move from available to pending status)
+  user.balances.set(currency, currentBalance - withdrawAmount);
+
+  // 3. Document in Ledger (Pending State)
+  user.ledger.push({
+    amount: withdrawAmount,
+    currency,
+    type: 'withdrawal',
+    status: 'pending',
+    address: address || 'Internal Transfer',
+    description: description || `Withdrawal request to ${address}`,
+    createdAt: new Date()
+  });
+
+  // 4. Persistence Handshake
+  user.markModified('balances');
+  user.markModified('ledger');
   await user.save();
-  res.status(200).json({ success: true, message: 'Profile Updated' });
-});
 
-/**
- * @desc    Get Personal Ledger (Transaction History)
- * @route   GET /api/user/ledger
- */
-export const getLedger = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select('ledger');
-
-  if (!user) {
-    res.status(404);
-    throw new Error('Ledger data not accessible');
+  // 5. Emit Real-time update (To refresh user's visible balance immediately)
+  const io = req.app.get('io');
+  if (io) {
+    io.to(user._id.toString()).emit('balanceUpdate', {
+      balances: Object.fromEntries(user.balances),
+      message: 'Withdrawal request registered and funds locked.'
+    });
   }
 
-  // Sort by newest first
-  const sortedLedger = (user.ledger || []).sort((a, b) => 
-    new Date(b.createdAt || b.timestamp) - new Date(a.createdAt || a.timestamp)
-  );
-
-  res.status(200).json({
+  res.status(201).json({
     success: true,
-    data: sortedLedger
+    message: 'Withdrawal request queued for Zurich Treasury approval',
+    balances: Object.fromEntries(user.balances)
   });
 });
 
@@ -97,9 +107,9 @@ export const compoundYield = asyncHandler(async (req, res) => {
   // Atomic Transfer within Mongoose Map
   user.balances.set('ROI', 0);
   user.balances.set('EUR', currentEur + currentRoi);
-  
-  // Update profit tracker
-  user.totalProfit = (user.totalProfit || 0) + currentRoi;
+
+  // Update total balance metadata
+  user.totalBalance = user.balances.get('EUR') + (user.balances.get('ROI') || 0);
 
   // Record in Ledger
   user.ledger.push({
@@ -115,12 +125,11 @@ export const compoundYield = asyncHandler(async (req, res) => {
   user.markModified('ledger');
   await user.save();
 
-  // Socket Update for real-time dashboard refresh
   const io = req.app.get('io');
   if (io) {
     io.to(user._id.toString()).emit('balanceUpdate', {
       balances: Object.fromEntries(user.balances),
-      totalProfit: user.totalProfit
+      totalBalance: user.totalBalance
     });
   }
 
@@ -128,4 +137,47 @@ export const compoundYield = asyncHandler(async (req, res) => {
     success: true,
     balances: Object.fromEntries(user.balances)
   });
+});
+
+/**
+ * @desc    Get Personal Ledger (Transaction History)
+ */
+export const getLedger = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id).select('ledger');
+  if (!user) {
+    res.status(404);
+    throw new Error('Ledger data not accessible');
+  }
+
+  const sortedLedger = (user.ledger || []).sort((a, b) =>
+    new Date(b.createdAt) - new Date(a.createdAt)
+  );
+
+  res.status(200).json({ success: true, data: sortedLedger });
+});
+
+/**
+ * @desc    Update profile details
+ */
+export const updateProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
+  const { username, password } = req.body;
+  if (username && username !== user.username) {
+    const existing = await User.findOne({ username });
+    if (existing) {
+      res.status(400);
+      throw new Error('Username already synchronized to another node');
+    }
+    user.username = username;
+  }
+
+  if (password) user.password = password;
+
+  await user.save();
+  res.status(200).json({ success: true, message: 'Profile Updated' });
 });

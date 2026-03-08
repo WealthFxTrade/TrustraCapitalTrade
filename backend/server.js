@@ -1,11 +1,6 @@
 // backend/server.js
 import { fileURLToPath } from 'url';
-import path from 'path';                                                                
-
-// Polyfill __dirname and __filename in ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
+import path from 'path';
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -23,6 +18,10 @@ import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import { initRioEngine } from './utils/rioEngine.js';
 
+// Polyfill __dirname and __filename in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 dotenv.config();
 
 const app = express();
@@ -33,10 +32,9 @@ connectDB();
 
 // ── MIDDLEWARE ──
 app.use(helmet({
-  contentSecurityPolicy: false, // Set to false if serving frontend from same domain
+  contentSecurityPolicy: false, // Required for serving frontend/backend together
 }));
 
-// Dynamic CORS Configuration
 const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:3000',
@@ -45,11 +43,10 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl) or allowed origins
     if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
-      callback(new Error('CORS Policy Violation: Origin not authorized'));
+      callback(new Error('CORS Policy Violation'));
     }
   },
   credentials: true,
@@ -72,53 +69,45 @@ const io = new Server(httpServer, {
     methods: ['GET', 'POST'],
     credentials: true,
   },
-  pingTimeout: 60000,
-  pingInterval: 25000,
 });
 
-// Make io accessible globally via req.app.get('io')
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  // Support both auth-based and query-based handshakes
   const userId = socket.handshake.auth?.userId || socket.handshake.query?.userId;
-  
   if (userId) {
     socket.join(userId.toString());
-    console.log(`📡 Node Synced: User ${userId} connected (${socket.id})`);
+    console.log(`📡 Node Synced: ${userId}`);
   }
-
-  socket.on('disconnect', () => {
-    console.log(`🔌 Node Offline: ${socket.id}`);
-  });
+  socket.on('disconnect', () => console.log(`🔌 Node Offline`));
 });
 
-// ── ROUTES ──
+// ── ROUTES (Note the /api prefix) ──
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 
-// ── RIO ENGINE INITIALIZATION ──
-// Pass io to the engine for automated midnight distributions
+// ── RIO ENGINE ──
 initRioEngine(io);
 
 // ── PRODUCTION: SERVE FRONTEND DIST ──
 if (process.env.NODE_ENV === 'production') {
-  const frontendPath = path.join(__dirname, '..', 'frontend', 'dist');
+  // Use absolute path for Termux environments
+  const frontendPath = path.resolve(__dirname, '../frontend/dist');
   console.log(`📦 Serving Static Assets: ${frontendPath}`);
 
   app.use(express.static(frontendPath));
 
   app.get('*', (req, res) => {
-    // Prevent API routes from falling through to index.html
+    // If it's a failed API call, don't serve HTML
     if (req.originalUrl.startsWith('/api')) {
-      return res.status(404).json({ message: 'Resource Not Found' });
+      return res.status(404).json({ message: 'API Protocol Endpoint Not Found' });
     }
-    res.sendFile(path.resolve(frontendPath, 'index.html'));
+    res.sendFile(path.join(frontendPath, 'index.html'));
   });
 } else {
   app.get('/', (req, res) => {
-    res.json({ status: 'Online', mode: 'Development', node: process.version });
+    res.json({ status: 'Online', mode: 'Development' });
   });
 }
 
@@ -126,9 +115,7 @@ if (process.env.NODE_ENV === 'production') {
 app.use(notFound);
 app.use(errorHandler);
 
-// ── START SERVER ──
 const PORT = process.env.PORT || 10000;
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 TRUSTRA CORE LIVE | PORT: ${PORT}`);
-  console.log(`🌍 ENVIRONMENT: ${process.env.NODE_ENV || 'development'}`);
 });
