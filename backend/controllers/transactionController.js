@@ -1,209 +1,146 @@
-import mongoose from 'mongoose';
-import User from '../models/User.js';
-import Withdrawal from '../models/Withdrawal.js';
-import { ApiError } from '../middleware/errorMiddleware.js';
+/**
+ * controllers/transactionController.js
+ * Transaction & Ledger Controller for Trustra Capital
+ */
+
+import mongoose from "mongoose";
+
+import asyncHandler from "../utils/asyncHandler.js";
+import ApiError from "../utils/ApiError.js";
+
+import User from "../models/User.js";
+import Transaction from "../models/Transaction.js";
+import Withdrawal from "../models/Withdrawal.js";
 
 /**
- * @desc    Initialize Outbound Fund Extraction (Withdrawal)
- * @route   POST /api/transactions/withdraw
+ * GET /api/transactions/history
+ * Get authenticated user's transaction history
  */
-export const initiateWithdrawal = async (req, res, next) => {
-  const session = await mongoose.startSession();
+export const getTransactionHistory = asyncHandler(async (req, res, next) => {
 
   try {
-    session.startTransaction();
 
-    const { amount, destination, currency = 'EUR' } = req.body;
-    const userId = req.user._id;
-
-    // Validation Protocols
-    if (currency !== 'EUR') {
-      throw new ApiError(400, 'Only EUR withdrawals supported in current node version');
-    }
-
-    if (!amount || amount < 80) {
-      throw new ApiError(400, 'Minimum withdrawal threshold is €80.00');
-    }
-
-    if (!destination || typeof destination !== 'string' || destination.trim().length < 15) {
-      throw new ApiError(400, 'Valid destination node (IBAN or Wallet) required');
-    }
-
-    const user = await User.findById(userId).session(session);
-    if (!user) throw new ApiError(404, 'Authorized user node not found');
-
-    // Security Gate: KYC Status
-    if (user.kycStatus !== 'verified') {
-      throw new ApiError(403, 'Account Audit (KYC) required for extraction protocols');
-    }
-
-    const available = user.balances.get('EUR') || 0;
-    if (available < amount) {
-      throw new ApiError(400, `Insufficient liquidity (Available: €${available.toFixed(2)})`);
-    }
-
-    // ── 1. DEDUCT LIQUIDITY ──
-    user.balances.set('EUR', available - amount);
-
-    // ── 2. LOG INTERNAL LEDGER ──
-    user.ledger.push({
-      amount: -amount,
-      currency: 'EUR',
-      type: 'withdrawal',
-      status: 'pending',
-      description: `Extraction to ${destination.slice(0, 10)}...`,
-      createdAt: new Date(),
-    });
-
-    user.markModified('balances');
-    user.markModified('ledger');
-    await user.save({ session });
-
-    // ── 3. CREATE EXTERNAL WITHDRAWAL RECORD ──
-    const [withdrawal] = await Withdrawal.create([{
-      user: userId,
-      amount,
-      asset: 'EUR',
-      address: destination.trim(),
-      status: 'pending',
-      netAmount: amount, // Potential for fee deduction logic here
-    }], { session });
-
-    await session.commitTransaction();
-
-    res.status(201).json({
-      success: true,
-      message: 'Extraction protocol initiated – pending compliance review',
-      withdrawalId: withdrawal._id,
-      newBalance: user.balances.get('EUR'),
-    });
-  } catch (error) {
-    await session.abortTransaction();
-    next(error instanceof ApiError ? error : new ApiError(500, 'Withdrawal sequence failed'));
-  } finally {
-    session.endSession();
-  }
-};
-
-/**
- * @desc    Internal Atomic Swap: ROI (Yield) -> EUR (Balance)
- * @route   POST /api/transactions/exchange
- */
-export const exchangeProfitToBalance = async (req, res, next) => {
-  const session = await mongoose.startSession();
-  try {
-    session.startTransaction();
-
-    const { amount } = req.body;
-    const userId = req.user._id;
-
-    if (!amount || amount <= 0) {
-      throw new ApiError(400, 'Invalid exchange volume requested');
-    }
-
-    const user = await User.findById(userId).session(session);
-    if (!user) throw new ApiError(404, 'User identity not found');
-
-    const currentRoi = user.balances.get('ROI') || 0;
-    const currentEur = user.balances.get('EUR') || 0;
-
-    if (currentRoi < amount) {
-      throw new ApiError(400, `Insufficient ROI liquidity (€${currentRoi.toFixed(2)})`);
-    }
-
-    // ── PROTOCOL FEE LOGIC (1.5%) ──
-    const fee = amount * 0.015;
-    const netAmount = amount - fee;
-
-    // Update Internal Maps
-    user.balances.set('ROI', currentRoi - amount);
-    user.balances.set('EUR', currentEur + netAmount);
-
-    // Record Ledger Entry
-    user.ledger.push({
-      amount: netAmount,
-      currency: 'EUR',
-      type: 'exchange',
-      status: 'completed',
-      description: `Internal Swap: Yield to Capital (System Fee: €${fee.toFixed(2)})`,
-      createdAt: new Date(),
-    });
-
-    user.markModified('balances');
-    user.markModified('ledger');
-    await user.save({ session });
-
-    await session.commitTransaction();
+    const transactions = await Transaction.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(50);
 
     res.status(200).json({
       success: true,
-      message: 'Internal liquidity rebalanced successfully',
-      newBalances: {
-        EUR: user.balances.get('EUR'),
-        ROI: user.balances.get('ROI')
-      }
+      count: transactions.length,
+      data: transactions
     });
+
   } catch (error) {
-    await session.abortTransaction();
-    next(error instanceof ApiError ? error : new ApiError(500, 'Exchange protocol failure'));
-  } finally {
-    session.endSession();
+
+    next(new ApiError(500, "Failed to retrieve ledger data"));
+
   }
-};
+
+});
+
 
 /**
- * @desc    Sync and Retrieve Deposit Infrastructure
- * @route   GET /api/transactions/deposit-address
+ * POST /api/transactions/withdraw
+ * Initiate withdrawal
  */
-export const getDepositAddress = async (req, res, next) => {
+export const initiateWithdrawal = asyncHandler(async (req, res, next) => {
+
+  const session = await mongoose.startSession();
+
   try {
-    const user = await User.findById(req.user._id);
-    if (!user) throw new ApiError(404, 'User not found');
 
-    // Retrieve from Map in User.js
-    let btcAddr = user.depositAddresses.get('BTC');
+    await session.startTransaction();
 
-    // Generate if not exists
-    if (!btcAddr) {
-      // Deterministic Address Generation logic (Simulated for this node)
-      btcAddr = `bc1q${Math.random().toString(36).substring(2, 10)}${Math.random().toString(36).substring(2, 10)}`;
-      
-      user.depositAddresses.set('BTC', btcAddr);
-      user.btcAddress = btcAddr; // Sync to indexed field
-      await user.save();
+    const { amount, destination, currency = "EUR" } = req.body;
+
+    const userId = req.user._id;
+
+    const user = await User.findById(userId).session(session);
+
+    if (!user) {
+      throw new ApiError(404, "Authorized user not found");
     }
 
-    res.json({
-      success: true,
-      asset: 'BTC',
-      address: btcAddr
+    if (amount < 80) {
+      throw new ApiError(400, "Minimum withdrawal is €80.00");
+    }
+
+    if (user.kycStatus !== "verified") {
+      throw new ApiError(403, "KYC verification required");
+    }
+
+    const available = user.balances.get(currency) || 0;
+
+    if (available < amount) {
+      throw new ApiError(400, "Insufficient liquidity");
+    }
+
+    // Deduct balance
+    user.balances.set(currency, available - amount);
+
+    // Ledger entry
+    user.ledger.push({
+      amount: -amount,
+      currency,
+      type: "withdrawal",
+      status: "pending",
+      description: `Extraction to ${destination.slice(0, 10)}...`
     });
-  } catch (err) {
-    next(new ApiError(500, 'Failed to provision deposit address'));
-  }
-};
 
-/**
- * @desc    Fetch Complete Synchronization Ledger
- * @route   GET /api/transactions/ledger
- */
-export const getMyTransactions = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user._id).select('ledger');
-    if (!user) throw new ApiError(404, 'User identity not recognized');
+    user.markModified("balances");
 
-    res.json({
+    await user.save({ session });
+
+    // Create transaction
+    await Transaction.create([
+      {
+        user: userId,
+        type: "withdrawal",
+        amount,
+        signedAmount: -amount,
+        currency,
+        walletAddress: destination,
+        status: "pending"
+      }
+    ], { session });
+
+    // Create withdrawal record
+    const [withdrawalRecord] = await Withdrawal.create([
+      {
+        user: userId,
+        amount,
+        asset: currency,
+        address: destination,
+        status: "pending"
+      }
+    ], { session });
+
+    await session.commitTransaction();
+
+    // Socket update
+    const io = req.app.get("io");
+
+    if (io) {
+      io.to(userId.toString()).emit("balanceUpdate", {
+        balances: Object.fromEntries(user.balances),
+        message: "Extraction protocol initiated."
+      });
+    }
+
+    res.status(201).json({
       success: true,
-      ledger: [...user.ledger].sort((a, b) => b.createdAt - a.createdAt),
+      withdrawalId: withdrawalRecord._id
     });
-  } catch (err) {
-    next(err);
-  }
-};
 
-export default { 
-  initiateWithdrawal, 
-  exchangeProfitToBalance, 
-  getDepositAddress, 
-  getMyTransactions 
-};
+  } catch (error) {
+
+    await session.abortTransaction();
+    next(error);
+
+  } finally {
+
+    session.endSession();
+
+  }
+
+});

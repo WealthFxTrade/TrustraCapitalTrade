@@ -2,189 +2,254 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Users, Wallet, ArrowUpRight,
-  BarChart3, ShieldCheck, Clock, RefreshCw, Zap,
-  Loader2, AlertCircle
+  Users,
+  Wallet,
+  ArrowUpRight,
+  BarChart3,
+  ShieldCheck,
+  Clock,
+  RefreshCw,
+  Zap,
+  Loader2,
+  AlertCircle,
+  TrendingUp,
+  ShieldAlert,
+  Search,
+  Edit3,
+  Check,
+  X,
 } from 'lucide-react';
 import api from '../../api/api';
 import SystemHealth from './SystemHealth';
 import toast from 'react-hot-toast';
 
 export default function AdminDashboard() {
+  // Dashboard statistics state
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalDeposits: 0,
     pendingWithdrawals: 0,
-    activeNodes: 0
+    activeNodes: 0,
   });
+
+  // UI loading and error states
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch admin stats
+  // List of users fetched from backend
+  const [users, setUsers] = useState([]);
+
+  // Search/filter term for user table
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Fetch all required dashboard data (stats + users)
   const fetchDashboardData = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const res = await api.get('/admin/stats');
-      const data = res.data.data || res.data || {};
-      
+      const [statsResponse, usersResponse] = await Promise.all([
+        api.get('/admin/stats'),
+        api.get('/admin/users'),
+      ]);
+
+      // Handle stats response (flexible to different response shapes)
+      const statsData = statsResponse.data.data || statsResponse.data || {};
+
       setStats({
-        totalUsers: Number(data.totalUsers) || 0,
-        totalDeposits: Number(data.totalDeposits) || 0,
-        pendingWithdrawals: Number(data.pendingWithdrawals) || 0,
-        activeNodes: Number(data.activeNodes) || 0
+        totalUsers: Number(statsData.totalUsers) || 0,
+        totalDeposits: Number(statsData.totalDeposits) || 0,
+        pendingWithdrawals: Number(statsData.pendingWithdrawals) || 0,
+        activeNodes: Number(statsData.activeNodes) || 0,
       });
+
+      // Handle users response
+      if (usersResponse.data.success) {
+        setUsers(usersResponse.data.users || []);
+      }
     } catch (err) {
-      console.error('Admin stats fetch failed:', err);
-      const msg = getErrorMessage(err);
-      toast.error(msg, { duration: 5000 });
-      setError(msg);
+      const errorMessage = getErrorMessage(err);
+      toast.error(errorMessage);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
+  // Load data when component mounts
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
-  // Clear, meaningful error messages
+  // Helper to extract meaningful error messages
   const getErrorMessage = (err) => {
-    if (err.response?.data?.message) return err.response.data.message;
-
-    const status = err.response?.status;
-
-    if (status === 403) return 'Admin access required. Check your permissions.';
-    if (!err.response && err.request) return 'Cannot connect to server. Please check your internet.';
-    if (status >= 500) return 'Server temporarily unavailable. Please try again later.';
+    if (err.response?.data?.message) {
+      return err.response.data.message;
+    }
+    if (err.response?.status === 403) {
+      return 'Admin access required.';
+    }
     return err.message || 'Failed to load system metrics.';
   };
 
+  // Filter users based on search term (username or email)
+  const filteredUsers = users.filter((user) =>
+    user.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <div className="min-h-screen bg-[#020408] text-white p-6 lg:p-12 pt-28">
-      {/* HEADER */}
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
-        <div>
-          <div className="flex items-center gap-3 mb-4 text-yellow-500">
-            <ShieldCheck size={20} className="animate-pulse" />
-            <span className="text-[10px] font-black uppercase tracking-[0.5em]">Command Center v8.6</span>
+    <div className="min-h-screen bg-[#020408] text-white p-6 lg:p-12 pt-28 font-sans">
+      <div className="max-w-7xl mx-auto">
+        {/* HEADER SECTION */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
+          <div>
+            <div className="flex items-center gap-3 mb-4 text-yellow-500">
+              <ShieldCheck size={20} className="animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-[0.5em]">
+                Command Center v8.6
+              </span>
+            </div>
+            <h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none">
+              System <span className="text-yellow-500">Oversight</span>
+            </h1>
           </div>
-          <h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none">
-            System <span className="text-yellow-500">Oversight</span>
-          </h1>
+
+          <button
+            onClick={fetchDashboardData}
+            disabled={loading}
+            className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all group ${
+              loading
+                ? 'text-yellow-500/50 cursor-not-allowed'
+                : 'text-white/30 hover:text-yellow-500'
+            }`}
+          >
+            {loading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RefreshCw
+                size={14}
+                className="group-hover:rotate-180 transition-transform duration-500"
+              />
+            )}
+            {loading ? 'Synchronizing...' : 'Refresh Protocol'}
+          </button>
         </div>
 
-        <button
-          onClick={fetchDashboardData}
-          disabled={loading}
-          className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all group ${
-            loading ? 'text-yellow-500/50 cursor-not-allowed' : 'text-white/30 hover:text-yellow-500'
-          }`}
-        >
-          {loading ? (
-            <Loader2 size={14} className="animate-spin" />
-          ) : (
-            <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" />
-          )}
-          {loading ? "Syncing Nodes..." : "Refresh Network"}
-        </button>
-      </div>
-
-      {/* ERROR STATE */}
-      {error && (
-        <div className="max-w-7xl mx-auto bg-rose-900/30 border border-rose-800 text-rose-200 p-8 rounded-[3rem] mb-12 flex items-start gap-4">
-          <AlertCircle size={24} className="mt-1 flex-shrink-0" />
-          <div className="flex-1">
-            <h3 className="text-xl font-black uppercase italic mb-2">System Metrics Error</h3>
-            <p className="text-base">{error}</p>
-            <button
-              onClick={fetchDashboardData}
-              disabled={loading}
-              className={`mt-6 px-8 py-4 rounded-2xl font-black uppercase text-sm transition-all ${
-                loading
-                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                  : 'bg-white text-black hover:bg-yellow-500'
-              }`}
-            >
-              {loading ? 'Retrying...' : 'Retry Sync'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-7xl mx-auto space-y-10">
-        {/* CORE METRICS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* METRICS GRID */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <StatCard
-            label="Verified Investors"
+            title="Global Users"
             value={stats.totalUsers}
-            icon={Users}
-            color="text-blue-400"
+            icon={<Users />}
+            color="yellow"
           />
           <StatCard
-            label="System Liquidity"
+            title="Total Deposits"
             value={`€${stats.totalDeposits.toLocaleString()}`}
-            icon={Wallet}
-            color="text-emerald-400"
+            icon={<Wallet />}
+            color="yellow"
           />
           <StatCard
-            label="Pending Extraction"
+            title="Pending Payouts"
             value={stats.pendingWithdrawals}
-            icon={ArrowUpRight}
-            color="text-red-400"
+            icon={<Clock />}
+            color="red"
           />
           <StatCard
-            label="Active Rio Nodes"
+            title="Active Nodes"
             value={stats.activeNodes}
-            icon={BarChart3}
-            color="text-yellow-500"
+            icon={<Zap />}
+            color="green"
           />
         </div>
 
-        {/* SYSTEM HEALTH */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2 }}
-        >
-          <SystemHealth />
-        </motion.div>
+        {/* SYSTEM HEALTH & USER TABLE */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+          {/* User Registry Table */}
+          <div className="lg:col-span-2">
+            <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 backdrop-blur-md">
+              {/* Header with title + search */}
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xs font-black uppercase tracking-widest text-white/40">
+                  Node Registry
+                </h3>
 
-        {/* ACTIVITY & INTEGRITY */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-white/[0.02] border border-white/5 rounded-[3rem] p-10">
-            <div className="flex items-center justify-between mb-8 border-b border-white/5 pb-6">
-              <h3 className="text-xl font-black italic uppercase tracking-tighter">Activity Ledger</h3>
-              <div className="flex items-center gap-2 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                Live Stream
+                {/* Fixed & improved search input */}
+                <div className="relative flex items-center w-64">
+                  <Search
+                    size={14}
+                    className="absolute left-3 text-white/40 pointer-events-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Search users, email..."
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    className="
+                      w-full bg-black/40 border border-white/10 rounded-full
+                      pl-10 pr-4 py-2 text-sm text-white placeholder:text-white/40
+                      outline-none focus:border-yellow-500/50 transition-all
+                    "
+                  />
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <ActivityRow user="Admin_Root" action="ROI Protocol Triggered" time="Just Now" status="COMPLETED" />
-              <ActivityRow user="User_492" action="Deposit: €25,000" time="14m ago" status="SUCCESS" />
-              <ActivityRow user="User_108" action="Withdrawal: €4,200" time="1h ago" status="PENDING" />
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-[9px] font-black text-white/20 uppercase tracking-[0.2em] border-b border-white/5">
+                      <th className="pb-4">Identity</th>
+                      <th className="pb-4">Liquidity (EUR)</th>
+                      <th className="pb-4">KYC</th>
+                      <th className="pb-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-xs">
+                    {filteredUsers.slice(0, 8).map((user) => (
+                      <tr
+                        key={user._id}
+                        className="group hover:bg-white/[0.02] transition-all"
+                      >
+                        <td className="py-4">
+                          <p className="font-bold text-white uppercase italic">
+                            {user.username}
+                          </p>
+                          <p className="text-[10px] text-white/30 font-mono">
+                            {user.email}
+                          </p>
+                        </td>
+                        <td className="py-4 font-mono font-bold text-yellow-500">
+                          €{(user.balances?.EUR || 0).toFixed(2)}
+                        </td>
+                        <td className="py-4">
+                          <span
+                            className={`text-[8px] font-black px-2 py-0.5 rounded border ${
+                              user.kycStatus === 'approved'
+                                ? 'border-green-500/30 text-green-500'
+                                : 'border-white/10 text-white/20'
+                            }`}
+                          >
+                            {user.kycStatus?.toUpperCase() || 'NONE'}
+                          </span>
+                        </td>
+                        <td className="py-4 text-right">
+                          <button className="text-white/20 hover:text-yellow-500 transition-colors">
+                            <Edit3 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-yellow-500/10 to-transparent border border-white/5 rounded-[3rem] p-10 flex flex-col justify-between">
-            <div>
-              <Zap className="text-yellow-500 mb-6" size={32} fill="currentColor" />
-              <h3 className="text-xl font-black italic uppercase mb-4 tracking-tighter">Network Integrity</h3>
-              <p className="text-[10px] font-bold opacity-40 uppercase tracking-widest leading-relaxed">
-                All nodes are synchronized with the Zurich liquidity pool. AES-256 encryption active.
-              </p>
-            </div>
-            <div className="mt-10 space-y-4">
-              <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
-                <span className="opacity-40">System Latency</span>
-                <span className="text-emerald-500">12ms</span>
-              </div>
-              <div className="h-[2px] bg-white/5 w-full rounded-full overflow-hidden">
-                <div className="h-full bg-yellow-500 w-[98%]" />
-              </div>
-            </div>
+          {/* System Health Component */}
+          <div className="lg:col-span-1">
+            <SystemHealth stats={stats} />
           </div>
         </div>
       </div>
@@ -192,40 +257,32 @@ export default function AdminDashboard() {
   );
 }
 
-// Reusable Stat Card
-function StatCard({ label, value, icon: Icon, color }) {
-  return (
-    <div className="bg-white/[0.03] border border-white/10 p-8 rounded-[2.5rem] hover:bg-white/[0.05] hover:border-white/20 transition-all group relative overflow-hidden">
-      <div className={`absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity ${color}`}>
-        <Icon size={120} />
-      </div>
-      <Icon className={`${color} mb-4 relative z-10`} size={24} />
-      <p className="text-[9px] font-black uppercase opacity-30 tracking-[0.2em] mb-1 relative z-10">{label}</p>
-      <h2 className="text-3xl font-black italic relative z-10">{value}</h2>
-    </div>
-  );
-}
+// Reusable Stat Card Component
+function StatCard({ title, value, icon, color }) {
+  const colorStyles = {
+    yellow: 'text-yellow-500 border-yellow-500/20 bg-yellow-500/5',
+    red: 'text-red-500 border-red-500/20 bg-red-500/5',
+    green: 'text-green-500 border-green-500/20 bg-green-500/5',
+  };
 
-// Reusable Activity Row
-function ActivityRow({ user, action, time, status }) {
-  const isPending = status === 'PENDING';
   return (
-    <div className="flex items-center justify-between py-5 border-b border-white/5 last:border-0 hover:bg-white/[0.01] px-2 rounded-xl transition-colors">
-      <div className="flex items-center gap-4">
-        <div className="h-10 w-10 bg-white/5 rounded-full flex items-center justify-center text-[10px] font-black border border-white/10 uppercase italic">
-          {user.charAt(0)}
-        </div>
-        <div>
-          <p className="text-xs font-black uppercase italic tracking-tight">{user}</p>
-          <p className="text-[9px] opacity-40 font-bold uppercase tracking-widest">{action}</p>
-        </div>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`p-8 rounded-[2rem] border backdrop-blur-sm relative overflow-hidden group ${colorStyles[color]}`}
+    >
+      <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:scale-110 transition-transform duration-700">
+        {React.cloneElement(icon, { size: 64 })}
       </div>
-      <div className="text-right">
-        <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${isPending ? 'text-yellow-500' : 'text-emerald-500'}`}>
-          {status}
-        </p>
-        <p className="text-[8px] opacity-20 uppercase font-bold">{time}</p>
+      <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 opacity-60">
+        {title}
+      </p>
+      <h3 className="text-4xl font-black italic tracking-tighter text-white">
+        {value}
+      </h3>
+      <div className="mt-4 flex items-center gap-2 text-[9px] font-bold tracking-widest uppercase opacity-40">
+        <TrendingUp size={12} /> Live Sync Active
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -1,21 +1,17 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext'; // Ensure this path is correct!
+import { BrowserRouter } from 'react-router-dom'; // ⚡ The ONE AND ONLY Router
+import { AuthProvider } from './context/AuthContext';
 import App from './App';
 import './index.css';
 
-const rootElement = document.getElementById('root');
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);
 
-if (rootElement) {
-  const root = ReactDOM.createRoot(rootElement);
-  root.render(
-    <React.StrictMode>
-      <BrowserRouter>
-        <AuthProvider> 
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
-    </React.StrictMode>
-  );
-}

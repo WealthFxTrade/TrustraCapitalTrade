@@ -1,24 +1,50 @@
+/**
+ * routes/withdrawalRoutes.js
+ * Withdrawal-specific API routes for Trustra Capital
+ * Handles user-initiated withdrawal requests, history retrieval,
+ * and cancellation of pending withdrawals.
+ *
+ * All routes are protected (require authentication).
+ * No admin-level withdrawal routes are defined here.
+ */
+
 import express from 'express';
-const router = express.Router();
 import { protect } from '../middleware/authMiddleware.js';
 
-// Import the controller functions
-// Ensure these functions exist in your withdrawalController.js
+// Import controller functions from withdrawalController.js
 import {
-    requestWithdrawal,
-    getMyWithdrawals,
-    cancelWithdrawal
+  requestWithdrawal,     // Initiate a new withdrawal request
+  getMyWithdrawals,      // Get authenticated user's withdrawal history
+  cancelWithdrawal,      // Cancel a pending withdrawal request
 } from '../controllers/withdrawalController.js';
 
-// ── WITHDRAWAL PROTOCOLS ──
+const router = express.Router();
 
-// POST /api/withdrawal/request - Initiate a payout
-router.post('/request', protect, requestWithdrawal);
+// ── WITHDRAWAL PROTOCOL ROUTES ───────────────────────────────────────────────────────
 
-// GET /api/withdrawal/history - Fetch user's payout history
-router.get('/history', protect, getMyWithdrawals);
+// POST /api/withdrawal/request
+// Initiate a withdrawal request (user submits amount, destination, etc.)
+router.post(
+  '/request',
+  protect,                    // Requires authenticated user
+  requestWithdrawal
+);
 
-// DELETE /api/withdrawal/cancel/:id - Cancel a pending request
-router.delete('/cancel/:id', protect, cancelWithdrawal);
+// GET /api/withdrawal/history
+// Retrieve the authenticated user's full withdrawal history
+router.get(
+  '/history',
+  protect,
+  getMyWithdrawals
+);
+
+// DELETE /api/withdrawal/cancel/:id
+// Cancel a pending withdrawal request by its ID
+// Only allowed if the withdrawal is still in 'pending' status
+router.delete(
+  '/cancel/:id',
+  protect,
+  cancelWithdrawal
+);
 
 export default router;

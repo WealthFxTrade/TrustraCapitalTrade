@@ -1,65 +1,92 @@
+// src/api/api.js
+// Centralized Axios instance for all API calls in the Trustra Capital frontend
+// Configured for cookie-based authentication (httpOnly trustra_token)
+
 import axios from 'axios';
-import { BASE_API_URL } from '../constants/api'; // e.g. 'http://localhost:10000/api'
 
-// ────────────────────────────────────────────────────────────────
-// TRUSTRA API CLIENT – Zurich Mainnet v25.3.0
-// ────────────────────────────────────────────────────────────────
-// Strategy: httpOnly secure cookies for auth (no localStorage token)
-//           withCredentials: true → browser sends cookies automatically
-//           No manual Authorization header needed anymore
-// ────────────────────────────────────────────────────────────────
-
+// ── Create the main Axios instance ──────────────────────────────────────────────────
 const api = axios.create({
-  baseURL: BASE_API_URL,
+  // Use relative /api path → Vite proxy handles forwarding to backend
+  baseURL: '/api',
+
+  // Critical: Allows browser to send/receive httpOnly cookies automatically
+  withCredentials: true,
+
+  // Standard JSON content type
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 20000, // 20 seconds – adjust via env if needed
-  withCredentials: true, // CRITICAL: Allows browser to send/receive httpOnly cookies
+
+  // Timeout to prevent hanging requests
+  timeout: 8000,
 });
 
-// ── REQUEST INTERCEPTOR ──
-// No longer attach Bearer token — backend sets/trusts httpOnly cookie
+// ── Request Interceptor ─────────────────────────────────────────────────────────────
+// Used for logging and future extensions (no token needed – cookies handle auth)
 api.interceptors.request.use(
   (config) => {
-    // Optional: add custom headers or debug logging
-    // config.headers['X-Custom-Header'] = 'Trustra-Client';
+    // Log outgoing requests in development
+    if (import.meta.env.DEV) {
+      console.log(
+        `[API →] \( {config.method.toUpperCase()} \){config.url}${
+          config.params ? `?${new URLSearchParams(config.params).toString()}` : ''
+        }`
+      );
+    }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// ── RESPONSE INTERCEPTOR ──
-// Handles global errors, auto-logout on 401/403, detailed console logging
+// ── Response Interceptor ─────────────────────────────────────────────────────────────
+// Logs responses, debug cookies, and centralizes error handling
 api.interceptors.response.use(
-  (response) => response,
+  // Success
+  (response) => {
+    if (import.meta.env.DEV) {
+      console.log(
+        `[API ←] \( {response.config.method.toUpperCase()} \){response.config.url} → ${response.status}`
+      );
 
+      // Debug: show Set-Cookie headers
+      if (response.headers['set-cookie']) {
+        console.log('[API COOKIE] Backend sent Set-Cookie:', response.headers['set-cookie']);
+      }
+    }
+    return response;
+  },
+
+  // Error
   (error) => {
-    const status = error.response?.status;
-
-    // Detailed debug log for developers
-    console.error('API Request Failed:', {
-      url: error.config?.url,
-      method: error.config?.method?.toUpperCase(),
-      status: status || 'No response',
-      message: error.response?.data?.message || error.message,
-      responseData: error.response?.data,
-      isNetworkError: !error.response && !!error.request,
-    });
-
-    // Auto-logout on auth failure
-    if (status === 401 || status === 403) {
-      console.warn('Auth token invalid/expired → logging out');
-      // No localStorage token to clear anymore (cookies are httpOnly)
-      // Redirect to login (uncomment if needed)
-      // window.location.href = '/login';
+    // No response (network error, timeout, CORS, etc.)
+    if (!error.response) {
+      console.error(
+        '[API ERROR] Network failure – server unreachable, timeout, or CORS issue',
+        error.message
+      );
+      return Promise.reject(error);
     }
 
-    // Optional: show toast globally for certain errors (if not handled in component)
-    // if (status >= 500) toast.error('Server error – please try again later');
+    // Server responded with error status
+    const { status, data } = error.response;
+    const message = data?.message || 'Protocol Error';
+
+    if (import.meta.env.DEV) {
+      console.error(
+        `[API ERROR] \( {status} – \){error.config.method.toUpperCase()} ${error.config.url}`,
+        message
+      );
+    }
+
+    // Special handling for 401
+    if (status === 401) {
+      console.warn('[API] 401 Unauthorized – Session Invalid or Expired');
+      // Do NOT clear state here – let AuthContext handle it
+    }
 
     return Promise.reject(error);
   }
 );
 
+// Export the configured instance
 export default api;

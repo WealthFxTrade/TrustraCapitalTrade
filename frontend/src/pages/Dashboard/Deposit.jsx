@@ -3,13 +3,26 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import toast from 'react-hot-toast';
 import {
-  LayoutDashboard, Zap, History, Repeat, PlusCircle, LogOut,
-  Copy, Check, Loader2, ShieldCheck, AlertTriangle, ChevronLeft, Globe,
-  RefreshCw, AlertCircle
+  LayoutDashboard,
+  Zap,
+  History,
+  Repeat,
+  PlusCircle,
+  LogOut,
+  Copy,
+  Check,
+  Loader2,
+  ShieldCheck,
+  AlertTriangle,
+  ChevronLeft,
+  Globe,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
 import api from '../../api/api';
 import { useAuth } from '../../context/AuthContext';
 
+/** ── SIDEBAR LINK COMPONENT ── */
 function SidebarLink({ to, icon: Icon, label, active = false }) {
   return (
     <Link
@@ -26,6 +39,16 @@ function SidebarLink({ to, icon: Icon, label, active = false }) {
   );
 }
 
+/** ── REQUIREMENT ITEM HELPER ── */
+function RequirementItem({ label, value }) {
+  return (
+    <li className="flex justify-between items-center border-b border-white/5 pb-3">
+      <span className="text-[9px] font-bold uppercase text-white/20 tracking-widest">{label}</span>
+      <span className="text-[10px] font-black uppercase italic text-white tracking-tighter">{value}</span>
+    </li>
+  );
+}
+
 export default function Deposit() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,17 +59,19 @@ export default function Deposit() {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
 
+  /** ── 🛰️ LOAD DEPOSIT ADDRESS ── */
   const loadDepositAddress = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     setError(null);
 
     try {
+      // Targets router.get('/user/deposit-address') in your backend
       const res = await api.get('/user/deposit-address?asset=BTC');
       if (res.data?.address) {
         setDepositAddress(res.data.address);
       } else {
-        throw new Error('No address returned from gateway');
+        throw new Error('Inbound gateway not initialized.');
       }
     } catch (err) {
       console.error('Deposit address load failed:', err);
@@ -62,8 +87,9 @@ export default function Deposit() {
     loadDepositAddress();
   }, [loadDepositAddress]);
 
+  /** ── 📋 CLIPBOARD PROTOCOL ── */
   const copyToClipboard = useCallback(async () => {
-    if (!depositAddress) return toast.error('No address available to copy');
+    if (!depositAddress) return toast.error('Address node offline.');
 
     try {
       await navigator.clipboard.writeText(depositAddress);
@@ -78,165 +104,146 @@ export default function Deposit() {
   const getErrorMessage = (err) => {
     if (err.response?.data?.message) return err.response.data.message;
     const status = err.response?.status;
-    if (status === 401 || status === 403) return 'Session expired. Please login again.';
-    if (!err.response && err.request) return 'Cannot reach server. Check your internet connection.';
-    if (status === 404) return 'Deposit address not available. Contact support.';
-    if (status >= 500) return 'Server temporarily unavailable. Please try again later.';
-    return err.message || 'Failed to load deposit address.';
+    if (status === 401 || status === 403) return 'Session Expired';
+    if (!err.response && err.request) return 'Network Latency Error';
+    return 'Gateway Offline';
   };
 
   return (
-    <div className="flex min-h-screen bg-[#020408] text-white font-sans selection:bg-yellow-500/30 overflow-x-hidden">
-      {/* SIDEBAR */}
-      <aside className="w-72 bg-[#05070a] border-r border-white/5 hidden lg:flex flex-col sticky top-0 h-screen p-8">
-        <div className="flex items-center gap-3 mb-12">
-          <div className="w-10 h-10 bg-yellow-500 rounded-xl flex items-center justify-center">
-            <Zap size={22} className="text-black fill-current" />
+    <div className="flex min-h-screen bg-[#020408] text-white font-sans selection:bg-yellow-500/20">
+      
+      {/* ── SIDEBAR ── */}
+      <aside className="w-80 border-r border-white/5 bg-black/40 backdrop-blur-xl p-8 hidden lg:flex flex-col sticky top-0 h-screen">
+        <div className="flex items-center gap-3 mb-16 px-4">
+          <div className="bg-yellow-500 p-1.5 rounded-lg text-black">
+            <Zap size={20} fill="currentColor" />
           </div>
-          <span className="text-xl font-black italic tracking-tighter uppercase">Trustra</span>
+          <span className="text-xl font-black italic tracking-tighter uppercase">
+            Trustra <span className="text-white/40 font-light">Node</span>
+          </span>
         </div>
 
         <nav className="flex-1 space-y-2">
-          <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.4em] mb-6 px-4">Core Terminal</p>
-          <SidebarLink to="/dashboard" icon={LayoutDashboard} label="Dashboard" active={location.pathname === '/dashboard'} />
-          <SidebarLink to="/plans" icon={Zap} label="Node Access" />
-          <SidebarLink to="/investments" icon={History} label="Ledger" />
-          <SidebarLink to="/deposit" icon={PlusCircle} label="Deposit" active={location.pathname === '/deposit'} />
-          <SidebarLink to="/exchange" icon={Repeat} label="Exchange" />
+          <SidebarLink to="/dashboard" icon={LayoutDashboard} label="Terminal" active={location.pathname === '/dashboard'} />
+          <SidebarLink to="/dashboard/deposit" icon={PlusCircle} label="Inbound" active={location.pathname === '/dashboard/deposit'} />
+          <SidebarLink to="/dashboard/withdrawal" icon={Repeat} label="Outbound" />
+          <SidebarLink to="/dashboard/ledger" icon={History} label="Ledger" />
         </nav>
 
-        <button
+        <button 
           onClick={logout}
-          className="mt-auto flex items-center gap-4 px-6 py-4 text-gray-600 hover:text-red-500 transition-all text-[10px] font-black uppercase tracking-widest"
+          className="mt-auto flex items-center gap-4 px-5 py-4 text-gray-500 hover:text-red-500 transition-colors group"
         >
-          <LogOut size={18} /> Disconnect Node
+          <LogOut size={18} />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Terminate</span>
         </button>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-20 border-b border-white/5 bg-[#020408]/80 backdrop-blur-xl flex items-center justify-between px-6 md:px-10 sticky top-0 z-40">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">BTC Gateway: Operational</span>
-          </div>
-          <div className="hidden md:flex items-center gap-4">
-            <Globe size={14} className="text-gray-600" />
-            <span className="text-[9px] font-black text-yellow-500/60 uppercase tracking-widest">Tier-1 Liquidity Protocol</span>
-          </div>
-        </header>
-
-        <main className="p-6 md:p-12 max-w-6xl mx-auto w-full space-y-12">
-          <div className="space-y-4">
-            <button
-              onClick={() => navigate(-1)}
-              className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-yellow-500 transition-colors"
+      {/* ── MAIN CONTENT ── */}
+      <main className="flex-1 p-6 lg:p-16 pt-28">
+        <div className="max-w-4xl mx-auto">
+          
+          {/* HEADER SECTION */}
+          <div className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
+            <div>
+              <div className="flex items-center gap-2 mb-4 text-yellow-500">
+                <Globe size={16} />
+                <span className="text-[10px] font-black uppercase tracking-[0.4em]">Zurich Gateway v2.1</span>
+              </div>
+              <h1 className="text-6xl font-black italic uppercase tracking-tighter leading-none">
+                Deposit <span className="text-yellow-500">Assets</span>
+              </h1>
+            </div>
+            
+            <button 
+              onClick={loadDepositAddress}
+              disabled={loading}
+              className="text-white/20 hover:text-yellow-500 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"
             >
-              <ChevronLeft size={14} /> Previous Module
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              {loading ? 'Scanning...' : 'Re-Scan Node'}
             </button>
-            <h1 className="text-4xl md:text-6xl font-black uppercase italic tracking-tighter">
-              Liquidity <span className="text-yellow-500">Provisioning</span>
-            </h1>
           </div>
 
-          {error && (
-            <div className="bg-red-900/40 border border-red-800 text-red-200 p-12 rounded-[2.5rem] text-center space-y-6">
-              <AlertCircle size={64} className="mx-auto text-red-500" />
-              <h3 className="text-2xl font-black uppercase italic text-white">Node Initialization Failed</h3>
-              <p className="text-gray-300 text-lg max-w-md mx-auto">{error}</p>
-              <button
-                onClick={loadDepositAddress}
-                disabled={loading}
-                className={`flex items-center gap-3 mx-auto px-10 py-4 rounded-2xl font-black uppercase text-sm transition-all ${
-                  loading
-                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    : 'bg-white text-black hover:bg-yellow-500'
-                }`}
-              >
-                {loading ? <Loader2 className="animate-spin" size={20} /> : <RefreshCw size={20} />}
-                Attempt Reconnect
-              </button>
-            </div>
-          )}
-
-          {!error && (
-            <div className="grid lg:grid-cols-5 gap-8">
-              <div className="lg:col-span-3 bg-[#0a0c10] border border-white/5 rounded-[3.5rem] p-8 md:p-12 relative overflow-hidden group shadow-2xl">
-                <div className="absolute top-0 right-0 p-12 opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
-                  <ShieldCheck size={200} />
-                </div>
-
-                <div className="relative z-10 flex flex-col items-center gap-10">
-                  <div className="p-6 bg-white rounded-[2.5rem] shadow-[0_0_50px_rgba(255,255,255,0.1)] transition-transform group-hover:scale-[1.02]">
-                    {loading ? (
-                      <div className="w-48 h-48 flex items-center justify-center">
-                        <Loader2 className="animate-spin text-yellow-500" size={40} />
-                      </div>
-                    ) : depositAddress ? (
-                      <QRCodeSVG value={depositAddress} size={192} level="H" includeMargin={false} />
-                    ) : (
-                      <div className="w-48 h-48 flex items-center justify-center text-gray-500">
-                        No address available
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="w-full space-y-6">
-                    <div className="text-center">
-                      <p className="text-[10px] font-black text-yellow-500 uppercase tracking-[0.3em]">Encrypted Receiving String</p>
-                    </div>
-
-                    <div
-                      onClick={copyToClipboard}
-                      className={`group flex items-center justify-between bg-black/40 border ${
-                        copied ? 'border-emerald-500/50' : 'border-white/5'
-                      } p-6 rounded-2xl cursor-pointer hover:border-yellow-500/30 transition-all`}
-                    >
-                      <code className="text-xs md:text-sm font-mono text-gray-300 break-all select-none">
-                        {loading ? 'Decrypting node address...' : depositAddress || 'No address available'}
-                      </code>
-                      <div className="shrink-0 p-3 bg-white/5 rounded-xl group-hover:bg-yellow-500 group-hover:text-black transition-all">
-                        {copied ? <Check size={18} /> : <Copy size={18} />}
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 items-start">
+            
+            {/* LEFT COLUMN: GUIDELINES */}
+            <div className="lg:col-span-2 space-y-8">
+              <div className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem] backdrop-blur-md">
+                <h3 className="text-xs font-black uppercase tracking-widest text-white/40 mb-6">Protocol Requirements</h3>
+                <ul className="space-y-4">
+                  <RequirementItem label="Min. Deposit" value="0.0001 BTC" />
+                  <RequirementItem label="Confirmations" value="2 Blocks" />
+                  <RequirementItem label="Network" value="Bitcoin (Mainnet)" />
+                  <RequirementItem label="Processing" value="Instant" />
+                </ul>
               </div>
 
-              <div className="lg:col-span-2 space-y-6">
-                <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] h-full flex flex-col shadow-xl">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-8 flex items-center gap-3">
-                    <ShieldCheck size={16} className="text-yellow-500" /> Protocol Requirements
-                  </h3>
-
-                  <div className="space-y-8 flex-1">
-                    {[
-                      { title: 'Asset Verification', text: 'Strictly Bitcoin (BTC). Multi-chain cross-pollination will result in asset loss.' },
-                      { title: 'Confirmation Cycle', text: 'Typically 2–6 network validations required (est. 20-90 min).' },
-                      { title: 'Persistent Node', text: 'This address is uniquely tied to your ID and can be reused for future provisioning.' }
-                    ].map((item, i) => (
-                      <div key={i} className="space-y-2 border-l-2 border-yellow-500/20 pl-6">
-                        <h4 className="text-[10px] font-black text-white uppercase italic tracking-widest">
-                          {item.title}
-                        </h4>
-                        <p className="text-[11px] text-gray-500 leading-relaxed font-bold uppercase tracking-tighter">
-                          {item.text}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="mt-12 p-5 bg-white/5 rounded-2xl border border-white/5">
-                    <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest leading-relaxed">
-                      Transactions are monitored by <span className="text-white">Trustra Compliance Node 8.4</span>. Ensure you copy the address exactly to avoid transmission loss.
-                    </p>
-                  </div>
-                </div>
+              <div className="flex items-start gap-4 p-6 bg-red-500/5 border border-red-500/10 rounded-3xl">
+                <AlertCircle className="text-red-500 shrink-0 mt-1" size={18} />
+                <p className="text-[9px] font-black uppercase leading-relaxed text-red-400 tracking-tighter">
+                  Warning: send only <span className="text-white underline">BTC</span> to this node. 
+                  Incompatible assets will cause irreversible synchronization failure.
+                </p>
               </div>
             </div>
-          )}
-        </main>
-      </div>
+
+            {/* RIGHT COLUMN: ADDRESS INTERFACE */}
+            <div className="lg:col-span-3">
+              <div className="bg-[#0A0C10] border border-white/5 rounded-[3rem] p-12 backdrop-blur-md flex flex-col items-center relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-8 opacity-5">
+                  <ShieldCheck size={120} />
+                </div>
+
+                {loading ? (
+                  <div className="py-24 flex flex-col items-center gap-6">
+                    <Loader2 size={40} className="text-yellow-500 animate-spin" />
+                    <span className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20">Syncing Gateway...</span>
+                  </div>
+                ) : error ? (
+                  <div className="py-24 text-center space-y-6">
+                    <AlertTriangle size={48} className="text-red-500 mx-auto" />
+                    <p className="text-sm font-bold text-red-400 uppercase tracking-widest">{error}</p>
+                    <button onClick={loadDepositAddress} className="text-[10px] font-black uppercase underline decoration-red-500/50">Retry Handshake</button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="bg-white p-6 rounded-[2.5rem] shadow-2xl shadow-yellow-500/10 mb-10 group-hover:scale-105 transition-transform duration-700">
+                      <QRCodeSVG 
+                        value={depositAddress} 
+                        size={200} 
+                        bgColor="#ffffff" 
+                        fgColor="#000000" 
+                        level="H"
+                        includeMargin={false}
+                      />
+                    </div>
+
+                    <div className="w-full space-y-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-white/20 ml-2">Unique Node Address</p>
+                      <div 
+                        onClick={copyToClipboard}
+                        className="w-full bg-black border border-white/5 p-6 rounded-2xl flex items-center justify-between cursor-pointer group/copy hover:border-yellow-500/30 transition-all active:scale-95"
+                      >
+                        <span className="font-mono text-xs text-yellow-500 break-all select-all pr-4">{depositAddress}</span>
+                        {copied ? <Check size={20} className="text-green-500" /> : <Copy size={20} className="text-white/10 group-hover/copy:text-white transition-colors" />}
+                      </div>
+                    </div>
+
+                    <div className="mt-12 flex items-center gap-4 py-4 px-8 bg-white/5 rounded-full border border-white/5">
+                      <ShieldCheck className="text-green-500" size={16} />
+                      <span className="text-[9px] font-black uppercase tracking-widest text-white/40">
+                        ZURICH SECURE VAULT // SSL v3
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
+

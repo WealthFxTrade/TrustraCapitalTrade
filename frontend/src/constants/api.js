@@ -5,80 +5,79 @@
  */
 
 // 1. BASE URL CONFIGURATION
-// In Termux development, we use port 10000. In production, we hit the Render cloud.
-export const API_URL = import.meta.env.MODE === 'development'
-    ? 'http://localhost:10000'
-    : 'https://trustracapitaltrade-backend.onrender.com';
+// In development (Termux/local), use backend port 10000
+// In production, use the Render deployment URL
+export const API_URL =
+  import.meta.env.MODE === 'development'
+    ? 'http://127.0.0.1:10000'   // local backend
+    : 'https://trustracapitaltrade-backend.onrender.com';  // production backend
 
 /**
- * 🚨 CRITICAL PROTOCOL ALIGNMENT:
- * Your server.js mounts routes at app.use('/api/...').
- * Therefore, API_PREFIX must be '/api' so that all calls 
- * reach the correct backend controllers.
+ * CRITICAL PROTOCOL ALIGNMENT:
+ * Your server.js mounts routes at app.use('/api', authRoutes)
+ * So all endpoints must start with /api/...
  */
 export const API_PREFIX = '/api';
 
-// The final gateway URL (e.g., http://localhost:10000/api)
-export const BASE_API_URL = `${API_URL}${API_PREFIX}`;
+// The final base URL (e.g. http://127.0.0.1:10000/api)
+export const BASE_API_URL = `\( {API_URL} \){API_PREFIX}`;
 
 // 2. REAL-TIME PROTOCOL (SOCKET.IO)
-// WebSockets usually connect to the root URL without the /api prefix
+// WebSockets connect to the root URL (no /api prefix needed)
 export const SOCKET_URL = API_URL;
 
 /**
  * 3. API ENDPOINTS MAPPING
- * These paths are appended to BASE_API_URL.
- * * Example: AUTH.SIGNUP results in: 
- * [BASE_API_URL] + [/auth/register] 
- * => http://localhost:10000/api/auth/register
+ * These paths are appended to BASE_API_URL
+ * Example: AUTH.LOGIN → /api/auth/login
  */
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
-    REGISTER: '/auth/register',       // Matches backend router.post('/register')
-    SIGNUP: '/auth/register',         // Alias to prevent import errors in Signup.jsx
+    REGISTER: '/auth/register',
+    SIGNUP: '/auth/register',        // alias for compatibility
     LOGOUT: '/auth/logout',
-    PROFILE: '/auth/profile',         // Used by AuthContext to verify JWT
+    PROFILE: '/auth/profile',
     FORGOT_PASSWORD: '/auth/forgot-password',
     RESET_PASSWORD: '/auth/reset-password',
   },
-  
+
   USER: {
-    PROFILE: '/user/profile',         // Fetch account balances & metadata
-    LEDGER: '/user/ledger',           // Fetch transaction history
-    COMPOUND: '/user/compound-yield', // Trigger manual compounding if enabled
-    UPDATE_PROFILE: '/user/update',   // Change name or contact info
+    PROFILE: '/user/profile',
+    LEDGER: '/user/ledger',
+    COMPOUND: '/user/compound-yield',
+    UPDATE_PROFILE: '/user/update',
   },
 
   INVEST: {
-    PLANS: '/invest/plans',           // Fetch active Rio plans
-    SUBSCRIBE: '/invest/subscribe',   // Join a new investment tier
-    MY_ASSETS: '/invest/my-assets',   // View personal portfolio stats
+    PLANS: '/invest/plans',
+    SUBSCRIBE: '/invest/subscribe',
+    MY_ASSETS: '/invest/my-assets',
   },
 
   ADMIN: {
-    USERS: '/admin/users',            // Get list of all registered nodes
-    STATS: '/admin/stats',            // System-wide TVL and profit stats
-    TRANSACTIONS: '/admin/ledger',    // Global financial oversight
-    UPDATE_USER: '/admin/user/update' // Manual balance adjustments
-  }
+    USERS: '/admin/users',
+    STATS: '/admin/stats',
+    TRANSACTIONS: '/admin/ledger',
+    UPDATE_USER: '/admin/user/update',
+  },
 };
 
 /**
  * 4. UTILITY: getApiUrl
- * A safe helper to build full URLs for non-Axios fetch calls if needed.
+ * Helper to build full URLs for non-Axios calls (fetch, etc.)
  */
 export const getApiUrl = (endpoint) => {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
-  return `${BASE_API_URL}/${cleanEndpoint}`;
+  return `\( {BASE_API_URL}/ \){cleanEndpoint}`;
 };
 
-// Default export for standardized importing
+// Default export for easy importing
 export default {
   API_URL,
   API_PREFIX,
   BASE_API_URL,
   SOCKET_URL,
   API_ENDPOINTS,
-  getApiUrl
+  getApiUrl,
 };

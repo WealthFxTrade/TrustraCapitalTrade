@@ -1,49 +1,65 @@
-import express from 'express';
-const router = express.Router();
-
 /**
- * 🔐 Middleware Imports
+ * routes/adminRoutes.js
+ * Admin-only API routes for Trustra Capital Command Center
+ * Provides endpoints for user management, withdrawal processing,
+ * system health monitoring, manual ROI triggers, and global ledger access.
+ *
+ * All routes require:
+ *   - protect (authenticated user)
+ *   - admin  (admin role check)
  */
+
+import express from 'express';
 import { protect, admin } from '../middleware/authMiddleware.js';
 
-/**
- * 🎮 Controller Imports
- * Synchronized with adminController.js exports
- */
+// Import admin controller functions
 import {
-  getUsers,
-  updateUserBalance,
-  getWithdrawals,      // Matches Controller
-  processWithdrawal,   // Replaced 'updateWithdrawalStatus' to fix crash
-  getSystemHealth,
-  triggerManualRoi,
-  getGlobalLedger,
+  getUsers,                  // List all users
+  updateUserBalance,         // Manually adjust user balance
+  getWithdrawals,            // Get all withdrawal requests
+  processWithdrawal,         // Approve/reject withdrawals
+  getSystemHealth,           // System metrics & status
+  triggerManualRoi,          // Force manual ROI distribution
+  getGlobalLedger,           // System-wide transaction ledger
 } from '../controllers/adminController.js';
 
-/**
- * ─────────────────────────────────────────────────────────────────────────────
- * 👑 TRUSTRA ADMIN COMMAND CENTER
- * Prefix: /api/admin
- * ─────────────────────────────────────────────────────────────────────────────
- */
+const router = express.Router();
 
-// ── 👤 IDENTITY & INVESTOR REGISTRY ──
+// ── USER & IDENTITY MANAGEMENT ──────────────────────────────────────────────────────
+
+// GET /api/admin/users
+// Retrieve list of all registered users (paginated/filterable in controller)
 router.get('/users', protect, admin, getUsers);
+
+// PUT /api/admin/users/:id/balance
+// Manually update a user's balance (admin override)
 router.put('/users/:id/balance', protect, admin, updateUserBalance);
 
-// ── 💰 CAPITAL FLOW & WITHDRAWALS ──
+// ── CAPITAL FLOW & WITHDRAWAL PROCESSING ─────────────────────────────────────────────
+
+// GET /api/admin/withdrawals
+// Get all withdrawal requests (pending, completed, rejected)
 router.get('/withdrawals', protect, admin, getWithdrawals);
 
-// Process a withdrawal (Approve/Reject with auto-refund logic)
-// Matched to processWithdrawal in controller
+// PATCH /api/admin/withdrawal/:id
+// Process (approve/reject) a specific withdrawal request
+// May trigger balance refund on rejection
 router.patch('/withdrawal/:id', protect, admin, processWithdrawal);
 
+// ── SYSTEM-WIDE LEDGER & OVERSIGHT ──────────────────────────────────────────────────
+
+// GET /api/admin/ledger
+// View global transaction ledger across all users
 router.get('/ledger', protect, admin, getGlobalLedger);
 
-// ── 🛰️ CORE INFRASTRUCTURE & AUTOMATION ──
+// ── CORE INFRASTRUCTURE & AUTOMATION CONTROLS ───────────────────────────────────────
+
+// GET /api/admin/health
+// Get real-time system health metrics (DB, memory, uptime, etc.)
 router.get('/health', protect, admin, getSystemHealth);
 
-// Manual override for the RIO Engine: Force yield distribution
+// POST /api/admin/trigger-roi
+// Manually trigger ROI/yield distribution (override scheduler)
 router.post('/trigger-roi', protect, admin, triggerManualRoi);
 
 export default router;

@@ -3,8 +3,8 @@
 echo "🚀 [TRUSTRA] Initiating Production Build Sequence..."
 
 # 1. Frontend Build
-echo "📦 Compiling Frontend Assets..."
-cd frontend
+echo "📦 Compiling Frontend Assets..."                                                  
+cd frontend                                                                             
 npm install
 npm run build
 cd ..

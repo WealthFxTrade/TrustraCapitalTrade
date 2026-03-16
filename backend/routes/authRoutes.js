@@ -28,5 +28,5 @@ router.get('/profile', protect, getUserProfile);
 router.post('/forgot-password', forgotPassword);
 router.put('/reset-password', resetPassword);
 
-// 🚨 ENSURE THIS LINE IS AT THE VERY BOTTOM
+// ENSURE THIS LINE IS AT THE VERY BOTTOM
 export default router;

@@ -1,31 +1,38 @@
 // src/pages/Auth/Signup.jsx
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'; // Added useSearchParams
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
 import {
-  ShieldCheck, Mail, Lock, User, Phone,
-  ArrowRight, Loader2, Gift // Added Gift icon for referral feedback
+  ShieldCheck,
+  Mail,
+  Lock,
+  User,
+  Phone,
+  ArrowRight,
+  Loader2,
+  Gift,
 } from 'lucide-react';
 
 const Signup = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams(); // Catch the URL params
+  const [searchParams] = useSearchParams();
   const { signup, isAuthenticated, initialized } = useAuth();
 
   const [formData, setFormData] = useState({
     name: '',
-    username: '', // Added username field to match User model requirements
+    username: '',
     email: '',
     phone: '',
     password: '',
     confirmPassword: '',
-    inviteCode: searchParams.get('invite') || '' // Auto-capture ?invite=CODE
+    inviteCode: searchParams.get('invite') || '',
   });
 
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
+  // Redirect if already authenticated
   useEffect(() => {
     if (initialized && isAuthenticated) {
       navigate('/dashboard', { replace: true });
@@ -33,37 +40,109 @@ const Signup = () => {
   }, [isAuthenticated, initialized, navigate]);
 
   const handleChange = (e) => {
-    setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    setFormData((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+  };
+
+  const validateForm = () => {
+    const values = {
+      name: formData.name.trim(),
+      username: formData.username.trim(),
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      password: formData.password.trim(),
+      confirmPassword: formData.confirmPassword.trim(),
+      inviteCode: formData.inviteCode.trim(),
+    };
+
+    if (!values.name) {
+      toast.error('Full name is required');
+      return false;
+    }
+
+    if (!values.username) {
+      toast.error('Username is required');
+      return false;
+    }
+    if (values.username.length < 3) {
+      toast.error('Username must be at least 3 characters');
+      return false;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(values.username)) {
+      toast.error('Username can only contain letters, numbers and underscore');
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(values.email)) {
+      toast.error('Please enter a valid email address');
+      return false;
+    }
+
+    if (values.phone && !/^\+?\d{9,15}$/.test(values.phone)) {
+      toast.error('Please enter a valid phone number');
+      return false;
+    }
+
+    if (!values.password) {
+      toast.error('Password is required');
+      return false;
+    }
+    if (values.password.length < 8) {
+      toast.error('Password must be at least 8 characters long');
+      return false;
+    }
+
+    if (values.password !== values.confirmPassword) {
+      toast.error('Passwords do not match');
+      return false;
+    }
+
+    if (!agreed) {
+      toast.error('You must accept the terms and risk disclosure');
+      return false;
+    }
+
+    return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      return toast.error('Passwords do not match');
-    }
-    if (!agreed) {
-      return toast.error('You must accept the terms and risk disclosure');
-    }
+
+    if (!validateForm()) return;
 
     setLoading(true);
-    try {
-      // Updated signup call to include username and inviteCode
-      await signup({
-        name: formData.name.trim(),
-        username: formData.username.trim(),
-        email: formData.email.trim(),
-        password: formData.password,
-        phone: formData.phone.trim(),
-        inviteCode: formData.inviteCode.toUpperCase()
-      });
+    const toastId = toast.loading('Synchronizing Node...');
 
-      toast.success('Node Synchronized. Welcome to Trustra Capital Trade.');
-      navigate('/dashboard', { replace: true });
+    try {
+      const payload = {
+        name: formData.name.trim(),
+        username: formData.username.trim().toLowerCase(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim() || undefined,
+        password: formData.password.trim(),
+        referredByCode: formData.inviteCode.trim().toUpperCase() || undefined,
+      };
+
+      const response = await signup(payload);
+
+      if (response?.success) {
+        toast.success('Node Synchronized Successfully', { id: toastId });
+        // No artificial delay needed — navigate immediately
+        navigate('/dashboard', { replace: true });
+      } else {
+        throw new Error('Signup returned unsuccessful result');
+      }
     } catch (err) {
-      const message = err.response?.data?.message || 'Handshake failed. Check credentials.';
-      toast.error(message);
+      const message =
+        err.response?.data?.message ||
+        'Handshake failed. Please check your details.';
+      toast.error(message, { id: toastId });
     } finally {
       setLoading(false);
+      toast.dismiss(toastId);
     }
   };
 
@@ -81,56 +160,180 @@ const Signup = () => {
 
         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-4">
-            
-            {/* NAME & USERNAME GRID */}
+            {/* Name + Username row */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Full Name</label>
-                <input name="name" type="text" required value={formData.name} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    required
+                    disabled={loading}
+                    className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm outline-none focus:border-yellow-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    placeholder="John Doe"
+                  />
+                </div>
               </div>
+
               <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Username</label>
-                <input name="username" type="text" required value={formData.username} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
-              </div>
-            </div>
-
-            {/* EMAIL */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Email Protocol</label>
-              <input name="email" type="email" required value={formData.email} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
-            </div>
-
-            {/* INVITE CODE (REFERRAL) */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Invite Code (Optional)</label>
-              <div className="relative">
-                <input 
-                  name="inviteCode" 
-                  type="text" 
-                  value={formData.inviteCode} 
-                  onChange={handleChange} 
-                  placeholder="EX: TRSTR7"
-                  className={`w-full bg-white/5 border rounded-xl py-3 px-4 text-white text-sm outline-none transition-all ${formData.inviteCode ? 'border-yellow-500/50' : 'border-white/10'}`} 
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl py-3 px-4 text-sm outline-none focus:border-yellow-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                  placeholder="johndoe88"
                 />
-                {formData.inviteCode && <Gift className="absolute right-4 top-1/2 -translate-y-1/2 text-yellow-500 w-4 h-4" />}
               </div>
             </div>
 
-            {/* PASSWORD GRID */}
+            {/* Email */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                Email Protocol
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm outline-none focus:border-yellow-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                  placeholder="node@trustra.com"
+                />
+              </div>
+            </div>
+
+            {/* Phone */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                Phone (International)
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  disabled={loading}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm outline-none focus:border-yellow-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                  placeholder="+1..."
+                />
+              </div>
+            </div>
+
+            {/* Password + Confirm row */}
             <div className="grid grid-cols-2 gap-4">
-              <input name="password" type="password" required placeholder="Password" value={formData.password} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
-              <input name="confirmPassword" type="password" required placeholder="Confirm" value={formData.confirmPassword} onChange={handleChange} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-yellow-500 outline-none transition-all" />
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                  Cipher
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    disabled={loading}
+                    className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm outline-none focus:border-yellow-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                    placeholder="••••••••"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                  Confirm
+                </label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  disabled={loading}
+                  className="w-full bg-black/40 border border-white/5 rounded-xl py-3 px-4 text-sm outline-none focus:border-yellow-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+                  placeholder="••••••••"
+                />
+              </div>
             </div>
 
+            {/* Referral / Invite Code */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
+                Invite Code (Optional)
+              </label>
+              <div className="relative">
+                <Gift className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
+                <input
+                  type="text"
+                  name="inviteCode"
+                  value={formData.inviteCode}
+                  onChange={handleChange}
+                  disabled={loading || searchParams.get('invite')} // disable if pre-filled from URL
+                  className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm outline-none focus:border-yellow-500/50 disabled:opacity-60 disabled:cursor-not-allowed text-yellow-500 font-bold"
+                  placeholder="REFERRAL-CODE"
+                />
+              </div>
+            </div>
+
+            {/* Terms checkbox */}
             <div className="flex items-start gap-3 py-2">
-              <input type="checkbox" checked={agreed} onChange={() => setAgreed(!agreed)} className="mt-1 accent-yellow-500" />
-              <p className="text-[10px] text-gray-500 uppercase font-bold leading-tight">I acknowledge the risk disclosure and institutional terms.</p>
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={() => setAgreed(!agreed)}
+                disabled={loading}
+                className="mt-1 accent-yellow-500"
+              />
+              <p className="text-[10px] text-gray-500 leading-relaxed">
+                I acknowledge the{' '}
+                <span className="text-white">Risk Disclosure</span> and agree to the 2026 automated trading protocols.
+              </p>
             </div>
 
-            <button disabled={loading} className="w-full py-4 bg-yellow-500 text-black font-black uppercase italic rounded-2xl hover:bg-white transition-all disabled:opacity-50">
-              {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Establish Connection'}
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:bg-yellow-800 disabled:cursor-not-allowed text-black font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-tighter shadow-lg shadow-yellow-500/10"
+            >
+              {loading ? (
+                <Loader2 className="animate-spin" size={18} />
+              ) : (
+                <>
+                  Initialize Account
+                  <ArrowRight size={18} />
+                </>
+              )}
             </button>
           </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-xs text-gray-500">
+              Already have a node?{' '}
+              <Link to="/login" className="text-yellow-500 font-bold hover:underline">
+                Sign In
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
