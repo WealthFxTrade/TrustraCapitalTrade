@@ -1,18 +1,15 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo
-} from "react";
+// src/pages/Dashboard/Dashboard.jsx
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../api/api";
 import { API_ENDPOINTS } from "../../constants/api";
 import { useAuth } from "../../context/AuthContext";
 
-// Sub-components
+// Components
 import PortfolioValue from "../../components/dashboard/PortfolioValue";
-import TradingChart from "../../components/dashboard/TradingChart";
-import ActivityLedger from "../../components/dashboard/ActivityLedger";
 import AssetCard from "../../components/dashboard/AssetCard";
+import ActivityLedger from "../../components/dashboard/ActivityLedger";
+import TradingChart from "../../components/dashboard/TradingChart";
+import ProfileSettingsModal from "../../components/dashboard/ProfileSettingsModal";
 
 // Icons
 import {
@@ -22,14 +19,18 @@ import {
   Coins,
   Activity,
   Zap,
-  TrendingUp,
-  X,
   ShieldCheck,
-  ArrowRight
+  ArrowRight,
+  User,
+  Lock,
+  Bell,
+  Shield,
 } from "lucide-react";
 
 const Dashboard = () => {
   const { user } = useAuth();
+
+  // ───── STATES ─────
   const [balances, setBalances] = useState({ BTC: 0, ETH: 0, EUR: 0, ROI: 0 });
   const [prices, setPrices] = useState({ BTC: 0, ETH: 0 });
   const [ledger, setLedger] = useState([]);
@@ -37,46 +38,40 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
+
   const [showCompoundModal, setShowCompoundModal] = useState(false);
   const [isCompounding, setIsCompounding] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  /* ── MARKET PRICE FETCH ── */
+  // ───── FETCH MARKET PRICES ─────
   const fetchMarketPrices = async () => {
     try {
       const res = await fetch(
         "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=eur"
       );
       const data = await res.json();
-      setPrices({
-        BTC: data.bitcoin.eur,
-        ETH: data.ethereum.eur
-      });
+      setPrices({ BTC: data.bitcoin.eur, ETH: data.ethereum.eur });
     } catch (err) {
       console.error("Price fetch error:", err);
     }
   };
 
-  /* ── DASHBOARD DATA FETCH ── */
+  // ───── DASHBOARD DATA ─────
   const fetchDashboardData = useCallback(async () => {
     try {
       const [balanceRes, ledgerRes, chartRes] = await Promise.all([
-        api.get(API_ENDPOINTS.USER.PROFILE), // Sync with your userRoutes.js
+        api.get(API_ENDPOINTS.USER.PROFILE),
         api.get(API_ENDPOINTS.USER.LEDGER),
-        api.get("https://coingecko.com")
+        api.get("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=eur&days=30"),
       ]);
 
-      if (balanceRes.data.success) {
-        setBalances(balanceRes.data.user.balances);
-      }
+      if (balanceRes.data.success) setBalances(balanceRes.data.user.balances || {});
+      if (ledgerRes.data.success) setLedger(ledgerRes.data.data.slice(0, 15));
 
-      if (ledgerRes.data.success) {
-        setLedger(ledgerRes.data.data.slice(0, 15));
-      }
-
-      if (chartRes.data.prices) {
+      if (chartRes?.data?.prices) {
         const formatted = chartRes.data.prices.map((item) => ({
           time: new Date(item[0]).toLocaleDateString(),
-          value: item[1]
+          value: item[1],
         }));
         setChartData(formatted);
       }
@@ -88,7 +83,7 @@ const Dashboard = () => {
     }
   }, []);
 
-  /* ── PORTFOLIO VALUE ENGINE ── */
+  // ───── PORTFOLIO & ROI CALCS ─────
   const portfolioValue = useMemo(() => {
     const btcValue = balances.BTC * prices.BTC;
     const ethValue = balances.ETH * prices.ETH;
@@ -97,20 +92,19 @@ const Dashboard = () => {
     return btcValue + ethValue + eurValue + roiValue;
   }, [balances, prices]);
 
-  /* ── ROI PERCENT CALCULATION ── */
   const roiPercent = useMemo(() => {
-    const invested = balances.INVESTED || balances.EUR || 1; 
+    const invested = balances.INVESTED || balances.EUR || 1;
     return ((balances.ROI / invested) * 100).toFixed(2);
   }, [balances]);
 
-  /* ── REFRESH DASHBOARD ── */
+  // ───── REFRESH DASHBOARD ─────
   const refreshDashboard = async () => {
     setIsRefreshing(true);
     await Promise.all([fetchDashboardData(), fetchMarketPrices()]);
     setIsRefreshing(false);
   };
 
-  /* ── COMPOUND ROI ── */
+  // ───── COMPOUND ROI ─────
   const handleCompound = async () => {
     if (balances.ROI < 10) return alert("Minimum €10 required to compound.");
     setIsCompounding(true);
@@ -142,116 +136,128 @@ const Dashboard = () => {
     );
   }
 
+  // ───── LEFT NAV TABS ─────
+  const navTabs = [
+    { id: "profile", icon: User, label: "Profile & Security", action: () => setIsSettingsOpen(true) },
+    { id: "notifications", icon: Bell, label: "Notifications" },
+    { id: "privacy", icon: Shield, label: "Privacy" },
+    { id: "encryption", icon: Lock, label: "Encryption Keys" },
+  ];
+
   return (
-    <div className="p-6 lg:p-10 space-y-10 bg-[#050505] min-h-screen text-white font-sans">
-      {/* HEADER */}
-      <header className="flex justify-between items-end">
-        <div>
-          <h1 className="text-4xl font-black italic uppercase tracking-tighter">
-            Terminal: {user?.username}
-          </h1>
-          <p className="text-white/40 text-[10px] font-mono tracking-[0.3em] uppercase mt-2">
-            Zurich Mainnet // Secure Tunnel Active
-          </p>
-        </div>
+    <div className="min-h-screen bg-[#050505] text-white font-sans p-6 lg:p-10 flex">
+      {/* ───── LEFT NAV ───── */}
+      <div className="w-60 space-y-4">
+        {navTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={tab.action}
+            className="w-full flex items-center gap-3 px-6 py-4 rounded-2xl transition-all group hover:bg-white/5"
+          >
+            <tab.icon size={18} className="text-gray-500 group-hover:text-yellow-500" />
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-white">
+              {tab.label}
+            </span>
+          </button>
+        ))}
+      </div>
 
-        <button
-          onClick={refreshDashboard}
-          disabled={isRefreshing}
-          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-all"
-        >
-          <RefreshCcw size={14} className={isRefreshing ? "animate-spin" : ""} />
-          {isRefreshing ? "Syncing..." : "Sync Node"}
-        </button>
-      </header>
-
-      {/* PORTFOLIO VALUE */}
-      <PortfolioValue value={portfolioValue} />
-
-      {/* ASSET CARDS */}
-      <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <AssetCard
-          label="Bitcoin"
-          value={balances.BTC}
-          price={prices.BTC}
-          icon={<Coins size={20} className="text-orange-500" />}
-          symbol="BTC"
-        />
-        <AssetCard
-          label="Ethereum"
-          value={balances.ETH}
-          price={prices.ETH}
-          icon={<Activity size={20} className="text-indigo-500" />}
-          symbol="ETH"
-        />
-        <AssetCard
-          label="Euro Balance"
-          value={balances.EUR}
-          price={1}
-          icon={<Wallet size={20} className="text-blue-500" />}
-          symbol="EUR"
-        />
-
-        {/* ROI CARD */}
-        <div
-          className="bg-yellow-500 text-black p-6 rounded-[2rem] cursor-pointer hover:bg-yellow-400 transition-all shadow-xl shadow-yellow-500/10 flex flex-col justify-between group"
-          onClick={() => setShowCompoundModal(true)}
-        >
-          <div className="flex justify-between items-start">
-            <p className="uppercase text-[10px] font-black tracking-widest opacity-60">Accrued ROI</p>
-            <Zap size={20} fill="black" />
-          </div>
+      {/* ───── MAIN DASHBOARD ───── */}
+      <div className="flex-1 ml-8 space-y-10">
+        {/* Header */}
+        <header className="flex justify-between items-end">
           <div>
-            <h2 className="text-3xl font-black italic tracking-tighter">€{balances.ROI.toFixed(2)}</h2>
-            <p className="text-[10px] font-bold uppercase tracking-widest mt-1">+{roiPercent}% Protocol Yield</p>
+            <h1 className="text-4xl font-black italic uppercase tracking-tighter">
+              Terminal: {user?.username}
+            </h1>
+            <p className="text-white/40 text-[10px] font-mono tracking-[0.3em] uppercase mt-2">
+              Zurich Mainnet // Secure Tunnel Active
+            </p>
           </div>
-        </div>
-      </section>
 
-      {/* MARKET + CHART */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white/5 border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-md">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Market Performance</h3>
-            <ShieldCheck size={16} className="text-green-500" />
+          <button
+            onClick={refreshDashboard}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-all"
+          >
+            <RefreshCcw size={14} className={isRefreshing ? "animate-spin" : ""} />
+            {isRefreshing ? "Syncing..." : "Sync Node"}
+          </button>
+        </header>
+
+        {/* Portfolio Value */}
+        <PortfolioValue value={portfolioValue} />
+
+        {/* Asset Cards */}
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <AssetCard label="Bitcoin" value={balances.BTC} price={prices.BTC} icon={<Coins size={20} className="text-orange-500" />} symbol="BTC" />
+          <AssetCard label="Ethereum" value={balances.ETH} price={prices.ETH} icon={<Activity size={20} className="text-indigo-500" />} symbol="ETH" />
+          <AssetCard label="Euro Balance" value={balances.EUR} price={1} icon={<Wallet size={20} className="text-blue-500" />} symbol="EUR" />
+
+          {/* ROI Card */}
+          <div
+            className="bg-yellow-500 text-black p-6 rounded-[2rem] cursor-pointer hover:bg-yellow-400 transition-all shadow-xl shadow-yellow-500/10 flex flex-col justify-between group"
+            onClick={() => setShowCompoundModal(true)}
+          >
+            <div className="flex justify-between items-start">
+              <p className="uppercase text-[10px] font-black tracking-widest opacity-60">Accrued ROI</p>
+              <Zap size={20} fill="black" />
+            </div>
+            <div>
+              <h2 className="text-3xl font-black italic tracking-tighter">€{balances.ROI.toFixed(2)}</h2>
+              <p className="text-[10px] font-bold uppercase tracking-widest mt-1">+{roiPercent}% Protocol Yield</p>
+            </div>
           </div>
-          <TradingChart data={chartData} />
-        </div>
+        </section>
 
-        <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-md">
-          <h3 className="mb-8 text-xs font-black uppercase tracking-widest text-white/40">Live Index</h3>
-          <div className="space-y-8">
-            <div className="flex justify-between items-center border-b border-white/5 pb-4">
-              <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">BTC / EUR</span>
-              <span className="text-lg font-black italic tracking-tighter">€{prices.BTC.toLocaleString()}</span>
+        {/* Ledger & Chart Section */}
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 bg-white/5 border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-md">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Market Performance</h3>
+              <ShieldCheck size={16} className="text-green-500" />
             </div>
-            <div className="flex justify-between items-center border-b border-white/5 pb-4">
-              <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">ETH / EUR</span>
-              <span className="text-lg font-black italic tracking-tighter">€{prices.ETH.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Network Fee</span>
-              <span className="text-xs font-bold text-green-500">0.00%</span>
+            <TradingChart data={chartData} />
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-md">
+            <h3 className="mb-8 text-xs font-black uppercase tracking-widest text-white/40">Live Index</h3>
+            <div className="space-y-8">
+              <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">BTC / EUR</span>
+                <span className="text-lg font-black italic tracking-tighter">€{prices.BTC.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-white/5 pb-4">
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">ETH / EUR</span>
+                <span className="text-lg font-black italic tracking-tighter">€{prices.ETH.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Network Fee</span>
+                <span className="text-xs font-bold text-green-500">0.00%</span>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* LEDGER */}
-      <section className="bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden backdrop-blur-md">
-        <div className="p-8 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
-          <h3 className="text-xs font-black uppercase tracking-widest text-white/40 italic">Activity Ledger</h3>
-          <ArrowRight size={16} className="text-white/20" />
-        </div>
-        <ActivityLedger transactions={ledger} />
-      </section>
+        {/* Activity Ledger */}
+        <section className="bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden backdrop-blur-md">
+          <div className="p-8 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
+            <h3 className="text-xs font-black uppercase tracking-widest text-white/40 italic">Activity Ledger</h3>
+            <ArrowRight size={16} className="text-white/20" />
+          </div>
+          <ActivityLedger transactions={ledger} />
+        </section>
+      </div>
 
-      {/* COMPOUND MODAL */}
+      {/* ───── PROFILE SETTINGS MODAL ───── */}
+      {isSettingsOpen && <ProfileSettingsModal onClose={() => setIsSettingsOpen(false)} />}
+
+      {/* ───── COMPOUND ROI MODAL ───── */}
       {showCompoundModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl">
           <div className="bg-[#0A0A0A] border border-white/10 w-full max-w-md rounded-[3rem] p-12 relative text-center">
             <button onClick={() => setShowCompoundModal(false)} className="absolute top-8 right-8 text-white/20 hover:text-white transition-colors">
-              <X size={24} />
+              <ArrowRight size={24} />
             </button>
             <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-8 text-black shadow-xl shadow-white/10">
               <Zap size={32} fill="black" />
@@ -275,4 +281,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

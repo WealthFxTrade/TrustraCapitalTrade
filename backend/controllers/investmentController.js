@@ -1,32 +1,53 @@
+import { applyTransaction } from '../services/financeService.js';
 import User from '../models/User.js';
+import Investment from '../models/Investment.js';
+import { ApiError } from '../middleware/errorMiddleware.js';
 
-export const createInvestment = async (req, res) => {
+export const createInvestment = async (req, res, next) => {
   try {
-    const { amount, plan } = req.body;
-    const user = await User.findById(req.user.id);
+    const { amount, planKey, planName, durationDays, currency = 'EUR' } = req.body;
+    const userId = req.user._id;
 
-    if (user.balances.EUR < amount) {
-      return res.status(400).json({ success: false, message: 'Insufficient balance' });
-    }
+    const user = await User.findById(userId);
+    const userBalance = user.balances.get(currency) || 0;
 
-    user.balances.EUR -= amount;
-    user.investedAmount += amount;
-    user.plan = plan;
-    user.ledger.push({ amount, type: 'investment', status: 'completed', description: `Invested in ${plan}` });
+    if (userBalance < amount) throw new ApiError(400, 'Insufficient balance');
 
-    await user.save();
-    res.json({ success: true, message: 'Investment successful' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    // Deduct balance via transaction
+    await applyTransaction({
+      userId,
+      type: 'investment',
+      amount,
+      currency,
+      status: 'completed',
+      description: `Investment in ${planName}`
+    });
+
+    // Create investment record
+    const investment = await Investment.create({
+      user: userId,
+      planKey,
+      planName,
+      amount,
+      currency,
+      durationDays
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Investment created successfully',
+      investment
+    });
+  } catch (err) {
+    next(err);
   }
 };
 
-export const getMyInvestments = async (req, res) => {
+export const getMyInvestments = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
-    const investments = user.ledger.filter(item => item.type === 'investment');
-    res.json({ success: true, data: investments });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    const investments = await Investment.find({ user: req.user._id }).sort({ createdAt: -1 });
+    res.status(200).json({ success: true, investments });
+  } catch (err) {
+    next(err);
   }
 };
