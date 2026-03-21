@@ -1,69 +1,60 @@
+// backend/scripts/credit-user.js
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import User from '../models/User.js';
-import Deposit from '../models/Deposit.js';
-import Transaction from '../models/Transaction.js';
 
 dotenv.config();
 
-const runCredit = async () => {
+const emailToUpdate = "Gery.maes1@telenet.be";
+const targetEur = 125550.00;  // exact amount you want
+
+const setUserBalance = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
-    console.log("📡 Connected to Trustra Mainnet...");
+    console.log("Zurich Mainnet → Connected");
 
-    const targetEmail = 'Gery.maes1@telenet.be';
-    const amountEur = 125550;
+    const user = await User.findOne({ email: emailToUpdate });
 
-    // 1. Locate User
-    const user = await User.findOne({ email: targetEmail });
     if (!user) {
-      throw new Error("User " + targetEmail + " not found in database.");
+      console.log(`❌ User ${emailToUpdate} not found`);
+      process.exit(1);
     }
 
-    // 2. Create Deposit Record
-    await Deposit.create({
-      user: user._id,
-      amount: 0,
-      amountEUR: amountEur,
-      currency: 'EUR',
-      address: 'MANUAL_ADMIN_CREDIT',
-      status: 'confirmed',
-      locked: true
-    });
+    console.log(`Found user: \( {user.username || '—'} ( \){user._id})`);
+    const currentEur = user.balances?.get('EUR') || 0;
+    console.log(`Current EUR balance: €${currentEur.toLocaleString('de-DE', { minimumFractionDigits: 2 })}`);
 
-    // 3. Update Balances
-    const currentEur = user.balances.get('EUR') || 0;
-    user.balances.set('EUR', currentEur + amountEur);
-    user.totalBalance += amountEur;
+    // SET the EUR balance to exact target
+    user.balances.set('EUR', targetEur);
 
-    // 4. Update Ledger
+    // Adjust totalBalance proportionally (if used)
+    const diff = targetEur - currentEur;
+    user.totalBalance = (user.totalBalance || 0) + diff;
+
+    // Add ledger entry with VALID enum value
     user.ledger.push({
-      amount: amountEur,
+      amount: diff,
       currency: 'EUR',
-      type: 'deposit',
+      type: 'deposit',                          // ← fixed: valid enum value
       status: 'completed',
-      description: "Institutional Credit: Manual EUR Adjustment"
+      description: `ADMIN_MANUAL_CREDIT – Set EUR balance to €\( {targetEur.toLocaleString('de-DE')} (net adjustment \){diff >= 0 ? '+' : ''}${diff.toFixed(2)})`,
+      createdAt: new Date(),
     });
 
-    user.markModified('balances');
     await user.save();
 
-    // 5. Create Transaction Record
-    await Transaction.create({
-      user: user._id,
-      type: 'deposit',
-      amount: amountEur,
-      currency: 'EUR',
-      status: 'completed',
-      method: 'crypto'
-    });
+    console.log("──────────────────────────────────────────────");
+    console.log("✅ SUCCESS – Balance SET to exact target");
+    console.log(`New EUR balance: €${targetEur.toLocaleString('de-DE', { minimumFractionDigits: 2 })}`);
+    console.log(`Total balance:   €${(user.totalBalance || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}`);
+    console.log("Ledger adjustment entry added.");
+    console.log("──────────────────────────────────────────────");
 
-    console.log("✅ SUCCESS: Credited " + targetEmail + " with €" + amountEur.toLocaleString());
     process.exit(0);
   } catch (err) {
-    console.error("❌ Credit Failed:", err.message);
+    console.error("❌ Operation failed:", err.message);
     process.exit(1);
   }
 };
 
-runCredit();
+setUserBalance();
