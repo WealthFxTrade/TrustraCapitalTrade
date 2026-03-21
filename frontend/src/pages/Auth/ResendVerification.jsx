@@ -1,8 +1,11 @@
-// frontend/src/components/ResendVerification.jsx
+// src/pages/Auth/ResendVerification.jsx
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Mail, Loader2 } from 'lucide-react';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL ||
+  'https://trustracapitaltrade-backend.onrender.com';
 
 export default function ResendVerification() {
   const [email, setEmail] = useState('');
@@ -16,9 +19,8 @@ export default function ResendVerification() {
     setMessage('');
     setLoading(true);
 
-    // Basic client-side validation
     if (!email.trim() || !email.includes('@')) {
-      setError('Please enter a valid email address');
+      setError('Please enter a valid Node email');
       setLoading(false);
       return;
     }
@@ -36,20 +38,22 @@ export default function ResendVerification() {
         throw new Error(data.message || 'Failed to resend verification email');
       }
 
-      setMessage('Verification email resent successfully. Please check your inbox and spam folder.');
+      setMessage(
+        'Verification link sent. Check your inbox and spam folder to activate your Node.'
+      );
     } catch (err) {
-      setError(err.message || 'Something went wrong. Please try again later.');
-      console.error('Resend verification error:', err);
+      setError(err.message || 'Protocol Failure. Please try again later.');
+      console.error('[RESEND VERIFICATION ERROR]', err);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4 py-12">
-      <div className="w-full max-w-md bg-gray-800 rounded-2xl p-8 border border-indigo-600/40 shadow-2xl">
-        <h2 className="text-3xl font-bold text-center mb-8 text-indigo-400">
-          Resend Verification Email
+    <div className="min-h-screen flex items-center justify-center bg-[#020408] px-4 py-12">
+      <div className="w-full max-w-md bg-white/[0.02] border border-white/10 p-8 rounded-[2.5rem] shadow-2xl backdrop-blur-xl">
+        <h2 className="text-3xl font-black text-center mb-8 text-yellow-500 italic uppercase tracking-tighter">
+          Resend Node Verification
         </h2>
 
         {message && (
@@ -66,43 +70,44 @@ export default function ResendVerification() {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-              Email Address
+            <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
+              Node Email
             </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value.trim())}
-              className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
-              placeholder="you@example.com"
-              required
-              autoFocus
-              disabled={loading}
-            />
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="node@trustra.com"
+                required
+                disabled={loading}
+                className="w-full pl-12 pr-4 py-4 bg-black/40 border border-white/10 rounded-2xl text-white outline-none focus:border-yellow-500 transition disabled:opacity-60"
+              />
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="w-full py-4 bg-yellow-500 hover:bg-yellow-400 text-black font-black rounded-2xl transition flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-50"
           >
             {loading ? (
               <>
-                <svg className="animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
+                <Loader2 className="animate-spin" size={18} />
                 Sending...
               </>
             ) : (
-              'Resend Verification Email'
+              'Resend Verification'
             )}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-gray-400">
-          Back to <Link to="/login" className="text-indigo-400 hover:underline font-medium">Login</Link>
+        <p className="mt-6 text-center text-gray-500 text-sm">
+          Back to{' '}
+          <Link to="/login" className="text-yellow-500 font-bold hover:underline">
+            Node Sign-In
+          </Link>
         </p>
       </div>
     </div>

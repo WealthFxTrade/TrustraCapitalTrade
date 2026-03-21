@@ -3,16 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-hot-toast';
-import {
-  ShieldCheck,
-  Mail,
-  Lock,
-  User,
-  Phone,
-  ArrowRight,
-  Loader2,
-  Gift,
-} from 'lucide-react';
+import { ShieldCheck, Mail, Lock, User, Phone, ArrowRight, Loader2, Gift } from 'lucide-react';
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -32,7 +23,6 @@ const Signup = () => {
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (initialized && isAuthenticated) {
       navigate('/dashboard', { replace: true });
@@ -57,64 +47,31 @@ const Signup = () => {
       inviteCode: formData.inviteCode.trim(),
     };
 
-    if (!values.name) {
-      toast.error('Full name is required');
-      return false;
-    }
-
-    if (!values.username) {
-      toast.error('Username is required');
-      return false;
-    }
-    if (values.username.length < 3) {
-      toast.error('Username must be at least 3 characters');
-      return false;
-    }
-    if (!/^[a-zA-Z0-9_]+$/.test(values.username)) {
-      toast.error('Username can only contain letters, numbers and underscore');
-      return false;
-    }
+    if (!values.name) return toast.error('Full name is required'), false;
+    if (!values.username) return toast.error('Username is required'), false;
+    if (values.username.length < 3) return toast.error('Username must be at least 3 characters'), false;
+    if (!/^[a-zA-Z0-9_]+$/.test(values.username)) return toast.error('Username can only contain letters, numbers and underscore'), false;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(values.email)) {
-      toast.error('Please enter a valid email address');
-      return false;
-    }
+    if (!emailRegex.test(values.email)) return toast.error('Please enter a valid Node email'), false;
 
-    if (values.phone && !/^\+?\d{9,15}$/.test(values.phone)) {
-      toast.error('Please enter a valid phone number');
-      return false;
-    }
+    if (values.phone && !/^\+?\d{9,15}$/.test(values.phone)) return toast.error('Please enter a valid phone number'), false;
 
-    if (!values.password) {
-      toast.error('Password is required');
-      return false;
-    }
-    if (values.password.length < 8) {
-      toast.error('Password must be at least 8 characters long');
-      return false;
-    }
+    if (!values.password) return toast.error('Node Cipher is required'), false;
+    if (values.password.length < 8) return toast.error('Cipher must be at least 8 characters'), false;
+    if (values.password !== values.confirmPassword) return toast.error('Ciphers do not match'), false;
 
-    if (values.password !== values.confirmPassword) {
-      toast.error('Passwords do not match');
-      return false;
-    }
-
-    if (!agreed) {
-      toast.error('You must accept the terms and risk disclosure');
-      return false;
-    }
+    if (!agreed) return toast.error('You must accept the terms and risk disclosure'), false;
 
     return true;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!validateForm()) return;
 
     setLoading(true);
-    const toastId = toast.loading('Synchronizing Node...');
+    const toastId = toast.loading('Initializing Node...');
 
     try {
       const payload = {
@@ -129,16 +86,13 @@ const Signup = () => {
       const response = await signup(payload);
 
       if (response?.success) {
-        toast.success('Node Synchronized Successfully', { id: toastId });
-        // No artificial delay needed — navigate immediately
+        toast.success('Node Initialized Successfully', { id: toastId });
         navigate('/dashboard', { replace: true });
       } else {
         throw new Error('Signup returned unsuccessful result');
       }
     } catch (err) {
-      const message =
-        err.response?.data?.message ||
-        'Handshake failed. Please check your details.';
+      const message = err.response?.data?.message || 'Handshake failed. Please check your Node details.';
       toast.error(message, { id: toastId });
     } finally {
       setLoading(false);
@@ -160,12 +114,10 @@ const Signup = () => {
 
         <div className="bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Name + Username row */}
+            {/* Name + Username */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
-                  Full Name
-                </label>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Full Name</label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
                   <input
@@ -182,9 +134,7 @@ const Signup = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
-                  Username
-                </label>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Username</label>
                 <input
                   type="text"
                   name="username"
@@ -200,9 +150,7 @@ const Signup = () => {
 
             {/* Email */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
-                Email Protocol
-              </label>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Node Email</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
                 <input
@@ -220,9 +168,7 @@ const Signup = () => {
 
             {/* Phone */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
-                Phone (International)
-              </label>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Phone (International)</label>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
                 <input
@@ -237,12 +183,10 @@ const Signup = () => {
               </div>
             </div>
 
-            {/* Password + Confirm row */}
+            {/* Password + Confirm */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
-                  Cipher
-                </label>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Node Cipher</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
                   <input
@@ -259,9 +203,7 @@ const Signup = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
-                  Confirm
-                </label>
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Confirm Cipher</label>
                 <input
                   type="password"
                   name="confirmPassword"
@@ -275,11 +217,9 @@ const Signup = () => {
               </div>
             </div>
 
-            {/* Referral / Invite Code */}
+            {/* Invite Code */}
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">
-                Invite Code (Optional)
-              </label>
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">Invite Code (Optional)</label>
               <div className="relative">
                 <Gift className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={14} />
                 <input
@@ -287,14 +227,14 @@ const Signup = () => {
                   name="inviteCode"
                   value={formData.inviteCode}
                   onChange={handleChange}
-                  disabled={loading || searchParams.get('invite')} // disable if pre-filled from URL
+                  disabled={loading || searchParams.get('invite')}
                   className="w-full bg-black/40 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-sm outline-none focus:border-yellow-500/50 disabled:opacity-60 disabled:cursor-not-allowed text-yellow-500 font-bold"
                   placeholder="REFERRAL-CODE"
                 />
               </div>
             </div>
 
-            {/* Terms checkbox */}
+            {/* Terms */}
             <div className="flex items-start gap-3 py-2">
               <input
                 type="checkbox"
@@ -304,8 +244,7 @@ const Signup = () => {
                 className="mt-1 accent-yellow-500"
               />
               <p className="text-[10px] text-gray-500 leading-relaxed">
-                I acknowledge the{' '}
-                <span className="text-white">Risk Disclosure</span> and agree to the 2026 automated trading protocols.
+                I acknowledge the <span className="text-white">Risk Disclosure</span> and agree to the 2026 automated trading protocol.
               </p>
             </div>
 
@@ -315,22 +254,15 @@ const Signup = () => {
               disabled={loading}
               className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:bg-yellow-800 disabled:cursor-not-allowed text-black font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-tighter shadow-lg shadow-yellow-500/10"
             >
-              {loading ? (
-                <Loader2 className="animate-spin" size={18} />
-              ) : (
-                <>
-                  Initialize Account
-                  <ArrowRight size={18} />
-                </>
-              )}
+              {loading ? <Loader2 className="animate-spin" size={18} /> : <>Initialize Node <ArrowRight size={18} /></>}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-xs text-gray-500">
-              Already have a node?{' '}
+              Already have a Node?{' '}
               <Link to="/login" className="text-yellow-500 font-bold hover:underline">
-                Sign In
+                Access Node
               </Link>
             </p>
           </div>

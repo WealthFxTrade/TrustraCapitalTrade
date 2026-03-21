@@ -27,7 +27,9 @@ const LiveBitcoinPrice = () => {
         );
         const data = await res.json();
         const btc = data.bitcoin;
-        setPriceEur(btc.eur.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }));
+        setPriceEur(
+          btc.eur.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })
+        );
         setChange24h(btc.eur_24h_change.toFixed(2));
       } catch (err) {
         console.error('BTC EUR fetch failed:', err);
@@ -49,10 +51,17 @@ const LiveBitcoinPrice = () => {
 
   return (
     <div className="inline-flex flex-col items-center bg-black/40 border border-white/10 rounded-2xl px-6 py-4 backdrop-blur-sm">
-      <span className="text-sm text-gray-400 uppercase tracking-wider mb-1">Bitcoin Price (EUR)</span>
+      <span className="text-sm text-gray-400 uppercase tracking-wider mb-1">
+        Bitcoin Price (EUR)
+      </span>
       <span className="text-3xl md:text-4xl font-black text-white">{priceEur || '—'}</span>
-      <span className={`text-sm font-semibold mt-1 ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-        24h: {isPositive ? '+' : ''}{change24h || '—'}%
+      <span
+        className={`text-sm font-semibold mt-1 ${
+          isPositive ? 'text-green-400' : 'text-red-400'
+        }`}
+      >
+        24h: {isPositive ? '+' : ''}
+        {change24h || '—'}%
       </span>
     </div>
   );
@@ -62,12 +71,12 @@ const REVIEWS = [
   {
     name: "Marcus Thorne",
     country: "United Kingdom",
-    text: "The London node execution is flawless. My Rio Elite protocol has maintained steady yields.",
+    text: "The London plan execution is flawless. My Rio Elite plan has maintained steady profits.",
   },
   {
     name: "Sven Lindholm",
     country: "Sweden",
-    text: "Institutional grade precision. The automated protocols saved my capital during the flash crash.",
+    text: "Institutional grade precision. The automated plans saved my capital during the flash crash.",
   },
   {
     name: "Elena Rossi",
@@ -77,21 +86,21 @@ const REVIEWS = [
   {
     name: "Jameson Vance",
     country: "USA",
-    text: "Operating from the New York hub, the latency is practically zero. Trustra is the 2026 benchmark.",
+    text: "Operating from the New York hub, the latency is practically zero. TrustraCapitalTrade is the 2026 benchmark.",
   },
   {
     name: "Hiroshi Tanaka",
     country: "Japan",
-    text: "The quantum protocols are legitimate. I've switched my entire portfolio to the Rio nodes.",
+    text: "The quantum plans are legitimate. I've switched my entire portfolio to the Rio plans.",
   },
 ];
 
 const PLANS = [
-  { id: 'starter', name: 'Rio Starter', yield: '6–9%', min: '€100', color: 'from-blue-500/20' },
-  { id: 'basic', name: 'Rio Basic', yield: '9–12%', min: '€1,000', color: 'from-emerald-500/20' },
-  { id: 'standard', name: 'Rio Standard', yield: '12–16%', min: '€5,000', color: 'from-purple-500/20' },
-  { id: 'advanced', name: 'Rio Advanced', yield: '16–20%', min: '€15,000', color: 'from-orange-500/20' },
-  { id: 'elite', name: 'Rio Elite', yield: '20–25%', min: '€50,000', color: 'from-yellow-500/20' },
+  { id: 'starter', name: 'Rio Starter', profit: '6–9%', min: '€100', color: 'from-blue-500/20' },
+  { id: 'basic', name: 'Rio Basic', profit: '9–12%', min: '€1,000', color: 'from-emerald-500/20' },
+  { id: 'standard', name: 'Rio Standard', profit: '12–16%', min: '€5,000', color: 'from-purple-500/20' },
+  { id: 'advanced', name: 'Rio Advanced', profit: '16–20%', min: '€15,000', color: 'from-orange-500/20' },
+  { id: 'elite', name: 'Rio Elite', profit: '20–25%', min: '€50,000', color: 'from-yellow-500/20' },
 ];
 
 const PlansGrid = () => {
@@ -102,10 +111,10 @@ const PlansGrid = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter mb-4">
-            Select Your <span className="text-yellow-500">Rio Node Protocol</span>
+            Select Your <span className="text-yellow-500">Rio Plan</span>
           </h2>
           <p className="text-gray-400 max-w-xl mx-auto">
-            Choose a liquidity tier to begin automated yield execution with Rio percentage returns.
+            Choose a liquidity tier to begin automated profit execution with Rio percentage returns.
           </p>
         </div>
 
@@ -120,7 +129,7 @@ const PlansGrid = () => {
                   {plan.name}
                 </h3>
                 <div className="text-4xl md:text-5xl font-black italic mb-6 text-yellow-500">
-                  {plan.yield}
+                  {plan.profit}
                 </div>
                 <div className="space-y-4 mb-8 text-sm md:text-base">
                   <div className="flex justify-between text-gray-300">
@@ -128,8 +137,8 @@ const PlansGrid = () => {
                     <span className="font-bold text-white">{plan.min}</span>
                   </div>
                   <div className="flex justify-between text-gray-300">
-                    <span>Rio Annual Return</span>
-                    <span className="font-bold text-yellow-400">{plan.yield}</span>
+                    <span>Rio Annual Profit</span>
+                    <span className="font-bold text-yellow-400">{plan.profit}</span>
                   </div>
                 </div>
 
@@ -201,14 +210,12 @@ export default function Landing() {
         {mobileMenuOpen && (
           <div className="md:hidden absolute top-full left-0 w-full bg-[#0a0c10]/95 border-b border-white/10 p-6 flex flex-col gap-5 animate-in slide-in-from-top duration-300">
             <LiveBitcoinPrice />
-
             <button
               onClick={() => { navigate('/login'); setMobileMenuOpen(false); }}
               className="w-full py-4 text-[13px] font-black uppercase tracking-widest text-white border border-white/10 rounded-2xl hover:bg-white/10 transition-all"
             >
               Login
             </button>
-
             <button
               onClick={() => { navigate('/signup'); setMobileMenuOpen(false); }}
               className="w-full py-4 bg-yellow-500 text-black text-[13px] font-black uppercase tracking-widest rounded-2xl shadow-lg shadow-yellow-500/20 hover:bg-yellow-400 transition-all"
@@ -239,7 +246,6 @@ export default function Landing() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-6">
             <LiveBitcoinPrice />
-
             <button
               onClick={() => navigate('/signup')}
               className="w-full sm:w-auto bg-yellow-500 text-black px-10 md:px-12 py-5 rounded-2xl font-black uppercase text-xs md:text-sm tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-yellow-400 transition-all shadow-xl"
@@ -310,7 +316,7 @@ export default function Landing() {
 
           <div className="space-y-6">
             <h3 className="text-lg md:text-xl font-black italic uppercase text-yellow-500">
-              Protocol Support
+              TrustraCapitalTrade Support
             </h3>
             <div className="space-y-4">
               <a

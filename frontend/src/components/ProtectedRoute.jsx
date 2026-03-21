@@ -1,19 +1,17 @@
-/**
- * src/components/ProtectedRoute.jsx - Production v8.4.2
- * Enforces session integrity and Role-Based Access Control.
- */
+// src/components/ProtectedRoute.jsx
+import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ adminOnly = false }) => {
-  const { user, token, loading, initialized } = useAuth();
+const ProtectedRoute = () => {
+  const { user, token, loading, initialized, logout } = useAuth();
   const location = useLocation();
 
-  // 1. Initializing State: Wait for AuthContext to verify JWT with Backend
+  // 1. Loading / initializing state
   if (loading || !initialized) {
     return (
-      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[#020617]">
         <div className="text-center">
           <Loader2 className="h-10 w-10 animate-spin text-yellow-500 mx-auto mb-4" />
           <p className="text-yellow-500 font-black uppercase tracking-[0.3em] text-[10px]">
@@ -24,17 +22,13 @@ const ProtectedRoute = ({ adminOnly = false }) => {
     );
   }
 
-  // 2. Authentication Check: Redirect to login if credentials are missing
+  // 2. Auth check
   if (!user || !token) {
+    logout?.(); // ensure local state & storage cleared
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // 3. Authorization Check: RBAC for Admin-only vaults
-  if (adminOnly && user.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  // 4. Verification Passed: Render the requested layout/page
+  // 3. Verified – render nested routes
   return <Outlet />;
 };
 

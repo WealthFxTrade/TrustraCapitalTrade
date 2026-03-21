@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -40,21 +41,30 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const hasInitialized = useRef(false);
 
-  // ── Session Restoration (Run once on mount) ───────────────────────────────────
+  // ── Session Restoration (JWT check) ───────────────────────────────
   const initAuth = useCallback(async () => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
     dispatch({ type: 'AUTH_START' });
 
+    const token = localStorage.getItem('token');
+    if (!token) {
+      dispatch({ type: 'AUTH_CLEAR' });
+      return;
+    }
+
     try {
-      const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
+      const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (data?.success && data?.user) {
         dispatch({ type: 'AUTH_SUCCESS', payload: data });
       } else {
         dispatch({ type: 'AUTH_CLEAR' });
       }
     } catch (error) {
+      console.error('[AUTH INIT ERROR]', error);
       dispatch({ type: 'AUTH_CLEAR' });
     }
   }, []);
@@ -63,12 +73,13 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
-  // ── Login Action ─────────────────────────────────────────────────────────────
+  // ── Login ─────────────────────────────────────────────────────────
   const login = async (credentials) => {
     dispatch({ type: 'AUTH_START' });
     try {
       const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
-      if (data?.success) {
+      if (data?.success && data?.token) {
+        localStorage.setItem('token', data.token); // Save JWT
         dispatch({ type: 'AUTH_SUCCESS', payload: data });
         return { success: true };
       }
@@ -80,25 +91,35 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ── Logout Action ────────────────────────────────────────────────────────────
+  // ── Logout ────────────────────────────────────────────────────────
   const logout = useCallback(async () => {
     try {
       await api.post(API_ENDPOINTS.AUTH.LOGOUT);
     } catch (err) {
       console.warn('Logout request failed, clearing local state anyway.');
     } finally {
+      localStorage.removeItem('token');
       dispatch({ type: 'AUTH_CLEAR' });
       navigate('/login', { replace: true });
     }
   }, [navigate]);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, logout, refreshAuth: initAuth }}>
+    <AuthContext.Provider
+      value={{
+        ...state,
+        token: localStorage.getItem('token') || null, // expose token
+        login,
+        logout,
+        refreshAuth: initAuth,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
+// ── useAuth Hook ───────────────────────────────────────────────────
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) throw new Error('useAuth must be used within an AuthProvider');
