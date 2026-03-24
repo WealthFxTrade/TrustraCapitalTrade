@@ -1,5 +1,3 @@
-// src/context/AuthContext.jsx - FULL CLEAN VERSION
-
 import React, {
   createContext,
   useContext,
@@ -9,7 +7,6 @@ import React, {
   useRef,
 } from 'react';
 import { useNavigate } from 'react-router-dom';
-
 import api from '../api/api';
 import { API_ENDPOINTS } from '../constants/api';
 
@@ -27,7 +24,6 @@ function authReducer(state, action) {
   switch (action.type) {
     case 'AUTH_START':
       return { ...state, loading: true, error: null };
-
     case 'AUTH_SUCCESS':
       return {
         ...state,
@@ -37,7 +33,6 @@ function authReducer(state, action) {
         loading: false,
         error: null,
       };
-
     case 'AUTH_CLEAR':
       return {
         ...state,
@@ -47,7 +42,6 @@ function authReducer(state, action) {
         loading: false,
         error: null,
       };
-
     case 'AUTH_ERROR':
       return {
         ...state,
@@ -55,7 +49,6 @@ function authReducer(state, action) {
         initialized: true,
         error: action.payload?.message || 'Authentication failed',
       };
-
     default:
       return state;
   }
@@ -66,23 +59,19 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const hasInitialized = useRef(false);
 
-  const setAuthToken = (token) => {
+  const setAuthToken = useCallback((token) => {
     if (token) {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       localStorage.setItem('token', token);
-      console.log('[AUTH] Token saved successfully');
     } else {
       delete api.defaults.headers.common['Authorization'];
       localStorage.removeItem('token');
-      console.log('[AUTH] Token cleared');
     }
-  };
+  }, []);
 
   const initAuth = useCallback(async () => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
-
-    dispatch({ type: 'AUTH_START' });
 
     const token = localStorage.getItem('token');
     if (!token) {
@@ -91,26 +80,20 @@ export function AuthProvider({ children }) {
     }
 
     setAuthToken(token);
+    dispatch({ type: 'AUTH_START' });
 
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
-
       if (data?.success && data?.user) {
-        dispatch({
-          type: 'AUTH_SUCCESS',
-          payload: { user: data.user },
-        });
+        dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
       } else {
-        setAuthToken(null);
-        dispatch({ type: 'AUTH_CLEAR' });
+        throw new Error('Invalid session');
       }
     } catch (error) {
-      console.error('[AUTH INIT ERROR]', error);
       setAuthToken(null);
       dispatch({ type: 'AUTH_CLEAR' });
-      navigate('/login', { replace: true });
     }
-  }, [navigate]);
+  }, [setAuthToken]);
 
   useEffect(() => {
     initAuth();
@@ -118,52 +101,49 @@ export function AuthProvider({ children }) {
 
   const login = async (credentials) => {
     dispatch({ type: 'AUTH_START' });
-
     try {
       const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
-
       if (data?.success && data?.token) {
         setAuthToken(data.token);
-        dispatch({
-          type: 'AUTH_SUCCESS',
-          payload: { user: data.user || { email: credentials.email } },
-        });
+        dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
         return { success: true };
       }
-
-      return {
-        success: false,
-        message: data?.message || 'Authentication failed',
-      };
+      return { success: false, message: data?.message || 'Login failed' };
     } catch (error) {
       const msg = error.response?.data?.message || 'Invalid email or password';
-      dispatch({
-        type: 'AUTH_ERROR',
-        payload: { message: msg },
-      });
+      dispatch({ type: 'AUTH_ERROR', payload: { message: msg } });
       return { success: false, message: msg };
     }
   };
 
-  const logout = useCallback(async () => {
+  const signup = async (userData) => {
+    dispatch({ type: 'AUTH_START' });
+    try {
+      const { data } = await api.post(API_ENDPOINTS.AUTH.REGISTER, userData);
+      if (data?.success) {
+        dispatch({ type: 'AUTH_CLEAR' });
+        return { success: true, message: data.message };
+      }
+      return { success: false, message: data?.message || 'Signup failed' };
+    } catch (error) {
+      const msg = error.response?.data?.message || 'Signup failed';
+      dispatch({ type: 'AUTH_ERROR', payload: { message: msg } });
+      return { success: false, message: msg };
+    }
+  };
+
+  const logout = useCallback(() => {
     setAuthToken(null);
     dispatch({ type: 'AUTH_CLEAR' });
     navigate('/login', { replace: true });
-  }, [navigate]);
+  }, [navigate, setAuthToken]);
 
-  const value = {
-    ...state,
-    login,
-    logout,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ ...state, login, signup, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);
+

@@ -1,58 +1,80 @@
-// backend/scripts/seedGery.js - FINAL RESET WITH YOUR EXACT PASSWORD
-
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import User from '../models/User.js';
-import bcrypt from 'bcryptjs';
 
-dotenv.config();
+// Fix for ES Modules __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Explicitly point to the .env file in the parent directory
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const finalSeed = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("🛰️  Connected to MongoDB...");
+    console.log("🛰️  Connecting to Trustra Registry...");
+    
+    const uri = process.env.MONGO_URI;
+    if (!uri) {
+      throw new Error("MONGO_URI is missing. Check if .env exists in ~/TrustraCapitalTrade/");
+    }
 
-    // Delete any existing Gery account
-    await User.deleteOne({ email: "Gery.maes1@telenet.be" });
-    console.log("🗑️  Old account deleted");
+    await mongoose.connect(uri);
+    console.log("📡  Connected to MongoDB Cluster.");
 
-    // Use EXACTLY the password you want
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash("trustra2026", salt);
+    const email = "Gery.maes1@telenet.be";
+    const username = "gery_maes";
+    
+    // Purge old data to prevent Duplicate Key errors
+    await User.deleteMany({ 
+        $or: [{ email: email }, { username: username }] 
+    });
+    console.log("🗑️  Previous node records purged.");
 
+    /**
+     * PASS PLAIN TEXT PASSWORD
+     * User.js pre('save') hook will handle the hashing.
+     */
     const gery = new User({
       name: "Gery Maes",
-      username: "gery_maes",
-      email: "Gery.maes1@telenet.be",
-      password: hashedPassword,
-      phone: "+32495123456",
+      username: username,
+      email: email,
+      password: "trustra2026", 
+      phone: "+32474576142",
+      role: "user",
       isActive: true,
+      isNodeActive: true,
+      kycStatus: "verified",
       activePlan: "Rio Elite",
-      balances: new Map([
-        ['EUR', 125550],
-        ['ROI', 8750],
-        ['INVESTED', 125550],
-        ['LOCKED', 0]
-      ]),
+      balances: {
+        EUR: 125550,
+        ROI: 8750,
+        BTC: 0.45,
+        ETH: 12.5,
+        USDT: 5000,
+        INVESTED: 125550,
+      },
       totalBalance: 125550,
       totalProfit: 8750,
     });
 
     await gery.save();
 
-    console.log("✅ GERY ACCOUNT CREATED WITH YOUR PASSWORD");
+    console.log("\n✅ GERY NODE INITIALIZED SUCCESSFULLY");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("Email     : Gery.maes1@telenet.be");
+    console.log(`Email     : ${email}`);
     console.log("Password  : trustra2026");
-    console.log("Balance   : €125,550");
+    console.log("Balance   : €125,550.00");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("You can now log in with these exact credentials.");
+    console.log("IMPORTANT: Clear LocalStorage in your browser before logging in.");
 
     process.exit(0);
   } catch (error) {
-    console.error("❌ Seed Failed:", error.message);
+    console.error("❌ Seed Protocol Failed:", error.message);
     process.exit(1);
   }
 };
 
 finalSeed();
+

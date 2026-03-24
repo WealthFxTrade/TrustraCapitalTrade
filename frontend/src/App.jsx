@@ -1,27 +1,30 @@
-// src/App.jsx
+/**
+ * TRUSTRA CAPITAL TRADE - MAIN APPLICATION ROUTER
+ * Final Corrected Version: Includes all User & Admin nested routes.
+ */
+
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
-// Auth & Route Guards
+// ── AUTH & ROUTE GUARDS ──────────────────────────────────────
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/routing/AdminRoute';
 
-// Auth Pages
+// ── PUBLIC PAGES ─────────────────────────────────────────────
 import Login from './pages/Auth/Login';
-import Register from './pages/Auth/Signup';
-
-// Landing Page
+import Signup from './pages/Auth/Signup';
 import LandingPage from './components/landing/Landing';
 
-// User Dashboard & Layout
+// ── USER DASHBOARD & LAYOUT ──────────────────────────────────
 import UserLayout from './components/layout/ProtectedLayout';
 import UserDashboard from './pages/Dashboard/Dashboard';
 import Deposit from './pages/Dashboard/Deposit';
 import Withdrawal from './pages/Dashboard/WithdrawalForm';
 import UserProfile from './pages/Dashboard/Profile';
+import Ledger from './pages/Dashboard/Ledger'; // ✅ Matches your Ledger.jsx file
 
-// Admin Dashboard & Layout
+// ── ADMIN DASHBOARD & LAYOUT ─────────────────────────────────
 import AdminLayout from './pages/Admin/AdminLayout';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import AdminUsers from './pages/Admin/AdminUsers';
@@ -34,7 +37,7 @@ import AdminSupport from './pages/Admin/AdminSupport';
 function App() {
   return (
     <>
-      {/* Global Toast Notifications */}
+      {/* Global Terminal-style Toast Notifications */}
       <Toaster
         position="top-right"
         toastOptions={{
@@ -49,25 +52,27 @@ function App() {
       />
 
       <Routes>
-        {/* Public Routes */}
+        {/* ── PUBLIC ROUTES ── */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
+        <Route path="/register" element={<Signup />} />
 
-        {/* User Routes – Protected */}
+        {/* ── USER SECURE NODE ROUTES (PROTECTED) ── */}
         <Route path="/dashboard" element={<ProtectedRoute />}>
-          {/* Nested layout inside ProtectedRoute */}
+          {/* UserLayout provides the Sidebar/Terminal UI */}
           <Route element={<UserLayout />}>
             <Route index element={<UserDashboard />} />
             <Route path="deposit" element={<Deposit />} />
             <Route path="withdrawal" element={<Withdrawal />} />
             <Route path="profile" element={<UserProfile />} />
+            <Route path="ledger" element={<Ledger />} /> {/* ✅ Matches Sidebar Link */}
           </Route>
         </Route>
 
-        {/* Admin Routes – Admin-only */}
+        {/* ── ADMIN CONTROL CENTER ROUTES (ADMIN ONLY) ── */}
         <Route path="/admin" element={<AdminRoute />}>
           <Route element={<AdminLayout />}>
+            {/* Default admin landing */}
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
@@ -79,7 +84,8 @@ function App() {
           </Route>
         </Route>
 
-        {/* Catch-all Route */}
+        {/* ── CATCH-ALL REDIRECT ── */}
+        {/* If a route is missing, redirect to home instead of showing a blank page */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
@@ -87,3 +93,4 @@ function App() {
 }
 
 export default App;
+

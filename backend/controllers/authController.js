@@ -5,7 +5,6 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 
-// Mailer transporter
 const sendEmail = async (options) => {
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -16,8 +15,9 @@ const sendEmail = async (options) => {
     }
   });
 
+  // FIXED: Corrected template literal syntax for the "from" field
   await transporter.sendMail({
-    from: `\( {process.env.FROM_NAME || 'Trustra'} < \){process.env.FROM_EMAIL}>`,
+    from: `${process.env.FROM_NAME || 'Trustra'} <${process.env.FROM_EMAIL}>`,
     to: options.email,
     subject: options.subject,
     html: options.html
@@ -38,21 +38,13 @@ export const authUser = asyncHandler(async (req, res) => {
 
   const cleanEmail = email.toLowerCase().trim();
 
-  // Get user with password field included
+  // We must select('+password') because it is hidden by default in the model
   const user = await User.findOne({ email: cleanEmail }).select('+password');
 
-  if (!user) {
-    res.status(401);
-    throw new Error('Invalid email or password');
-  }
-
-  // Direct bcrypt comparison (more reliable)
-  const isMatch = await bcrypt.compare(password, user.password);
-
-  if (isMatch) {
+  // If user doesn't exist or password doesn't match
+  if (user && (await user.matchPassword(password))) {
     const token = generateToken(user._id);
 
-    // Set httpOnly cookie
     const isProd = process.env.NODE_ENV === 'production';
     res.cookie('trustra_token', token, {
       httpOnly: true,
@@ -85,11 +77,12 @@ export const authUser = asyncHandler(async (req, res) => {
  * @route   POST /api/auth/register
  */
 export const registerUser = asyncHandler(async (req, res) => {
-  const { username, email, password } = req.body;
+  // FIXED: Added 'name' and 'phone' which are REQUIRED by the User Model
+  const { name, username, email, password, phone } = req.body;
 
-  if (!email || !password || !username) {
+  if (!email || !password || !username || !name || !phone) {
     res.status(400);
-    throw new Error('Please provide all required fields');
+    throw new Error('Please provide all required fields (name, username, email, password, phone)');
   }
 
   const cleanEmail = email.toLowerCase().trim();
@@ -100,10 +93,13 @@ export const registerUser = asyncHandler(async (req, res) => {
     throw new Error('User node already exists in registry');
   }
 
+  // Password hashing is handled by the pre('save') hook in User.js
   const user = await User.create({
-    username: username.trim(),
+    name: name.trim(),
+    username: username.trim().toLowerCase(),
     email: cleanEmail,
-    password
+    password,
+    phone: phone.trim()
   });
 
   if (user) {
@@ -165,7 +161,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
   await user.save();
 
-  const resetUrl = `\( {process.env.FRONTEND_URL}/reset-password/ \){resetToken}`;
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
 
   try {
     await sendEmail({
@@ -210,3 +206,4 @@ export const resetPassword = asyncHandler(async (req, res) => {
 
   res.status(200).json({ success: true, message: 'Node credentials updated successfully' });
 });
+
