@@ -1,141 +1,163 @@
 // src/pages/Auth/Login.jsx
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Zap, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
+import {
+  Zap, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, AlertCircle, ShieldCheck,
+} from 'lucide-react';
 
 export default function Login() {
-  const [formData, setFormData] = useState({ email: '', password: '' });
-  const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
   const navigate = useNavigate();
+  const { login } = useAuth();
 
-  const validateForm = () => {
-    const email = formData.email.trim();
-    const password = formData.password.trim();
-    if (!email || !password) {
-      toast.error('Both email and password are required.');
-      return false;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      toast.error('Please enter a valid email address.');
-      return false;
-    }
-    return true;
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+    setErrors(prev => ({ ...prev, [name]: '' }));
+  };
+
+  const validate = () => {
+    const errs = {};
+    if (!formData.email.trim()) errs.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) errs.email = 'Invalid email format';
+
+    if (!formData.password) errs.password = 'Password is required';
+    else if (formData.password.length < 6) errs.password = 'Password too short';
+
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validate()) return toast.error('Please fix the errors');
 
     setLoading(true);
-    const toastId = toast.loading('Authenticating Node...');
+    const toastId = toast.loading('Authenticating...');
 
     try {
-      const result = await login({
+      const res = await login({
         email: formData.email.trim(),
-        password: formData.password.trim(),
+        password: formData.password,
       });
 
-      if (result.success) {
-        toast.success('Node access granted', { id: toastId });
-        setTimeout(() => navigate('/dashboard', { replace: true }), 500);
+      if (res.success) {
+        toast.success('Access granted', { id: toastId });
+        setTimeout(() => navigate('/dashboard', { replace: true }), 400);
       } else {
-        toast.error(result.message || 'Handshake failed', { id: toastId, duration: 6000 });
+        toast.error(res.message || 'Login failed', { id: toastId });
       }
     } catch (err) {
-      toast.error('Unexpected login error', { id: toastId });
-      console.error('[LOGIN ERROR]', err);
+      toast.error(err.response?.data?.message || 'Connection error', { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020408] flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center space-y-3">
-          <div className="inline-flex p-3 bg-yellow-500/10 rounded-2xl border border-yellow-500/20 mb-2">
-            <Zap className="text-yellow-500 fill-current" size={32} />
-          </div>
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter">Node Sign-In</h1>
-          <p className="text-sm text-gray-400">Access your Trustra Capital Node</p>
+    <div className="min-h-screen bg-[#020408] flex items-center justify-center px-4">
+      <div className="w-full max-w-md space-y-10">
+        <div className="text-center space-y-4">
+          <Zap className="mx-auto text-yellow-500" size={64} />
+          <h1 className="text-5xl font-black text-white tracking-tight">
+            Trustra <span className="text-yellow-500">Node</span>
+          </h1>
+          <p className="text-gray-400">Secure access to your capital terminal</p>
         </div>
 
-        <div className="bg-[#0a0c10]/80 backdrop-blur-2xl border border-white/5 rounded-[2.5rem] p-8 md:p-10 shadow-3xl">
+        <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-10 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Email */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide ml-1 block">
-                Node Email
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Email address
               </label>
-              <div className="relative group">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-yellow-500 transition-colors" size={16} />
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                 <input
                   type="email"
                   name="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="identity@trustra.com"
-                  required
-                  disabled={loading}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-yellow-500/50 transition-all font-medium placeholder:text-gray-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  onChange={handleChange}
+                  className={`w-full pl-12 pr-4 py-3 bg-black/40 border ${errors.email ? 'border-red-500' : 'border-gray-700'} rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500 transition-colors`}
+                  placeholder="you@trustra.capital"
                 />
               </div>
+              {errors.email && <p className="mt-1 text-sm text-red-400">{errors.email}</p>}
             </div>
 
             {/* Password */}
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide ml-1 block">
-                Node Cipher
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Password
               </label>
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-yellow-500 transition-colors" size={16} />
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   name="password"
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="••••••••"
-                  required
-                  disabled={loading}
-                  className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-yellow-500/50 transition-all font-medium placeholder:text-gray-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                  onChange={handleChange}
+                  className={`w-full pl-12 pr-12 py-3 bg-black/40 border ${errors.password ? 'border-red-500' : 'border-gray-700'} rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500 transition-colors`}
+                  placeholder="••••••••••"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
+              {errors.password && <p className="mt-1 text-sm text-red-400">{errors.password}</p>}
+            </div>
+
+            <div className="flex items-center justify-between text-sm">
+              <label className="flex items-center gap-2 text-gray-400">
+                <input type="checkbox" className="accent-yellow-500" />
+                Remember me
+              </label>
+              <Link to="/forgot-password" className="text-yellow-500 hover:underline">
+                Forgot password?
+              </Link>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:bg-yellow-800 disabled:cursor-not-allowed text-black font-black py-4 rounded-2xl transition-all shadow-lg shadow-yellow-500/20 flex items-center justify-center gap-2 uppercase tracking-tighter"
+              className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${
+                loading
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  : 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg shadow-yellow-500/20'
+              }`}
             >
               {loading ? (
-                <>
+                <span className="flex items-center justify-center gap-2">
                   <Loader2 className="animate-spin" size={20} />
-                  Authenticating Node...
-                </>
+                  Authenticating...
+                </span>
               ) : (
-                <>
-                  Access Node
-                  <ArrowRight size={18} />
-                </>
+                'Sign In'
               )}
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-gray-500">
-            <Link to="/forgot-password" className="text-yellow-500 hover:text-yellow-400">
-              Forgot Node Cipher?
+          <p className="mt-6 text-center text-gray-400">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-yellow-500 font-bold hover:underline">
+              Create one now
             </Link>
-          </div>
-          <div className="mt-8 pt-6 border-t border-white/5 text-center text-sm text-gray-500">
-            New to Trustra Capital?{' '}
-            <Link to="/register" className="text-yellow-500 font-bold hover:text-yellow-400">
-              Initialize Node
-            </Link>
-          </div>
+          </p>
+        </div>
+
+        <div className="text-center text-xs text-gray-600">
+          <ShieldCheck className="inline mr-1" size={14} /> End-to-End Encrypted • AES-256
         </div>
       </div>
     </div>

@@ -9,12 +9,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@headlessui/react": "^2.0.0",
+    "@headlessui/react": "^2.2.9",
     "@heroicons/react": "^2.1.0",
-    "@tanstack/react-query": "^5.90.21",
+    "@tanstack/react-query": "^5.94.5",
     "apexcharts": "^3.45.0",
     "axios": "^1.13.6",
     "buffer": "^6.0.3",
+    "clipboard-copy": "^4.0.1",
+    "clsx": "^2.1.1",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "framer-motion": "^11.18.2",
@@ -32,6 +34,7 @@
     "react-router-dom": "^6.22.0",
     "recharts": "^2.15.4",
     "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
     "util": "^0.12.5",
     "vite-plugin-node-polyfills": "^0.2.0"

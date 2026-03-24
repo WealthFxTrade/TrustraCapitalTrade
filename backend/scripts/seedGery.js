@@ -1,4 +1,5 @@
-// backend/scripts/seedGery.js
+// backend/scripts/seedGery.js - FINAL RESET WITH YOUR EXACT PASSWORD
+
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import User from '../models/User.js';
@@ -6,56 +7,52 @@ import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
-const seedGery = async () => {
+const finalSeed = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
-    console.log("ads 🛰️ Zurich Mainnet Connection Established...");
+    console.log("🛰️  Connected to MongoDB...");
 
-    // 1. Clean up any existing attempts (Optional)
+    // Delete any existing Gery account
     await User.deleteOne({ email: "Gery.maes1@telenet.be" });
+    console.log("🗑️  Old account deleted");
 
-    // 2. Hash the initial password
+    // Use EXACTLY the password you want
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash("Trustra2026!", salt);
+    const hashedPassword = await bcrypt.hash("trustra2026", salt);
 
-    // 3. Create the Gery Maes Node
     const gery = new User({
-      username: "Gery Maes",
+      name: "Gery Maes",
+      username: "gery_maes",
       email: "Gery.maes1@telenet.be",
       password: hashedPassword,
-      isAdmin: false,
+      phone: "+32495123456",
       isActive: true,
-      activePlan: "Rio Elite", // Giving him the top-tier 0.85% daily rate
+      activePlan: "Rio Elite",
       balances: new Map([
-        ['EUR', 0],               // Liquid wallet
-        ['ROI', 0],               // Profit wallet
-        ['INVESTED', 125550]      // 🎯 THE TARGET BALANCE
+        ['EUR', 125550],
+        ['ROI', 8750],
+        ['INVESTED', 125550],
+        ['LOCKED', 0]
       ]),
       totalBalance: 125550,
-      totalProfit: 0,
-      ledger: [{
-        amount: 125550,
-        currency: 'EUR',
-        type: 'deposit',
-        status: 'completed',
-        description: 'GENESIS CAPITAL INJECTION: Institutional Allocation',
-        createdAt: new Date()
-      }]
+      totalProfit: 8750,
     });
 
     await gery.save();
-    
-    console.log("--- ✅ GENESIS NODE CREATED ---");
-    console.log("User: Gery Maes");
-    console.log("Balance: €125,550.00");
-    console.log("Plan: Rio Elite (0.85% Daily)");
-    console.log("-------------------------------");
 
-    process.exit();
+    console.log("✅ GERY ACCOUNT CREATED WITH YOUR PASSWORD");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("Email     : Gery.maes1@telenet.be");
+    console.log("Password  : trustra2026");
+    console.log("Balance   : €125,550");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("You can now log in with these exact credentials.");
+
+    process.exit(0);
   } catch (error) {
-    console.error("❌ Seed Failed:", error);
+    console.error("❌ Seed Failed:", error.message);
     process.exit(1);
   }
 };
 
-seedGery();
+finalSeed();

@@ -6,32 +6,52 @@
 
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';   // Using @ alias (from vite.config.js)
+import { useAuth } from '@/context/AuthContext';
 import LoadingScreen from './LoadingScreen';
 
 export default function ProtectedLayout({ adminOnly = false }) {
-  const { user, loading, initialized } = useAuth();
+  const { 
+    user, 
+    isAuthenticated, 
+    loading, 
+    initialized, 
+    error 
+  } = useAuth();
 
-  // 1. Wait until auth system is fully initialized
-  //    Prevents flash of protected content or redirect loop
+  // Detailed logging for debugging
+  console.log('[ProtectedLayout] Current Auth State:', {
+    initialized,
+    loading,
+    isAuthenticated,
+    hasUser: !!user,
+    userEmail: user?.email || null,
+    userRole: user?.role || null,
+    error: error || null,
+    adminOnly
+  });
+
+  // 1. Still initializing or loading → show loading screen
   if (!initialized || loading) {
+    console.log('[ProtectedLayout] Still initializing... showing LoadingScreen');
     return <LoadingScreen message="Verifying session..." />;
   }
 
-  // 2. Not authenticated → redirect to login
-  //    Replace history so back button doesn't loop
-  if (!user) {
+  // 2. Not authenticated or no user object → redirect to login
+  if (!isAuthenticated || !user) {
+    console.log('[ProtectedLayout] User not authenticated → redirecting to /login');
     return <Navigate to="/login" replace />;
   }
 
   // 3. Admin-only route check
-  //    Only allow access if user has admin or superadmin role
   const isAdmin = user.role === 'admin' || user.role === 'superadmin';
 
   if (adminOnly && !isAdmin) {
+    console.log('[ProtectedLayout] Admin access denied → redirecting to /dashboard');
     return <Navigate to="/dashboard" replace />;
   }
 
-  // 4. Authenticated and authorized → render child routes
+  // 4. Everything is good → render the protected child routes (Dashboard, etc.)
+  console.log('[ProtectedLayout] ✅ Access Granted → Rendering protected content (Outlet)');
+  
   return <Outlet />;
 }

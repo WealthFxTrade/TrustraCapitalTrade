@@ -1,16 +1,16 @@
+// server.js
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+
 import connectDB from './config/db.js';
 
-// Engine & Utility Imports
 import { watchBtcDeposits } from './utils/btcWatcher.js';
 import { initRioEngine } from './utils/rioEngine.js';
 
-// Route Imports
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
@@ -20,74 +20,145 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
-// 🌐 1. CORE MIDDLEWARE & CORS (Updated for Termux Network)
+// ── CORS CONFIG ─────────────────────────────────────────────
 const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'http://172.20.10.2:5173' // Your current Network IP
+  'http://localhost:3000',
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.error(`❌ CORS blocked: Origin ${origin} unauthorized`);
-      callback(new Error('CORS blocked: Origin not authorized'));
+      console.warn(`[CORS BLOCKED] ${origin}`);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+};
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors(corsOptions));
+
+// ── MIDDLEWARE ──────────────────────────────────────────────
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// 🔌 2. SOCKET.IO CONFIGURATION
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
+// ── SOCKET.IO ───────────────────────────────────────────────
 const io = new Server(httpServer, {
-  cors: { origin: allowedOrigins, credentials: true }
+  cors: corsOptions,   // Reuse the same clean CORS options
 });
 
 app.set('io', io);
 
 io.on('connection', (socket) => {
-  socket.on('join_room', (userId) => socket.join(userId));
+  console.log(`[SOCKET] Connected: ${socket.id}`);
+
+  socket.on('join_room', (userId) => {
+    if (userId) {
+      socket.join(userId);
+      console.log(`[SOCKET] User ${userId} joined room`);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`[SOCKET] Disconnected: ${socket.id}`);
+  });
 });
 
-// 📂 3. API ROUTES
+// ── ROUTES ──────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
+app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'active', mode: process.env.NODE_ENV });
+// ── HEALTH CHECK ────────────────────────────────────────────
+app.get('/api/admin/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    status: 'active',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// ⚙️ 4. TRUSTRA ENGINES
-const startEngines = () => {
-  setInterval(() => watchBtcDeposits(io), 5 * 60 * 1000);
-  initRioEngine(io);
-  console.log('✅ Engines Active: RIO Engine + BTC Watcher');
+// ── 404 Handler ─────────────────────────────────────────────
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+  });
+});
+
+// ── GLOBAL ERROR HANDLER ────────────────────────────────────
+app.use((err, req, res, next) => {
+  console.error('[SERVER ERROR]', err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error',
+  });
+});
+
+// ── ENGINES ─────────────────────────────────────────────────
+const startEngines = async () => {
+  try {
+    console.log('Starting Trustra Engines...');
+
+    // BTC Watcher every 5 minutes
+    setInterval(() => {
+      watchBtcDeposits(io).catch(err => {
+        console.error('[BTC WATCHER ERROR]', err);
+      });
+    }, 5 * 60 * 1000);
+
+    await initRioEngine(io);
+
+    console.log('RIO Engine initialized');
+    console.log('All engines active ✓');
+  } catch (err) {
+    console.error('[ENGINE ERROR]', err);
+  }
 };
 
-// 🛠️ 5. INITIALIZATION
+// ── START SERVER ────────────────────────────────────────────
 const PORT = process.env.PORT || 10000;
+
 const startServer = async () => {
   try {
     await connectDB();
-    httpServer.listen(PORT, () => {
-      console.log('------------------------------------------------------------');
-      console.log(`🚀 TRUSTRA LIVE | PORT: ${PORT} | MODE: ${process.env.NODE_ENV}`);
-      console.log('------------------------------------------------------------');
+
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server running on port ${PORT}`);
       startEngines();
     });
-  } catch (error) {
+
+  } catch (err) {
+    console.error('Startup failed:', err);
     process.exit(1);
   }
 };
 
 startServer();
 
+// ── GRACEFUL SHUTDOWN ───────────────────────────────────────
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received');
+  httpServer.close(() => process.exit(0));
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received - shutting down...');
+  process.exit(0);
+});

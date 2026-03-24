@@ -11,6 +11,9 @@ import {
   getLedger,
   compoundYield,
   requestWithdrawal,
+  getBalances,
+  getRecentTransactions,
+  getDepositAddress,
 } from '../controllers/userController.js';
 
 import { subscribeToPlan } from '../controllers/investController.js';
@@ -22,6 +25,17 @@ import { getTransactionHistory } from '../controllers/transactionController.js';
 // ────────────────────────────────────────────────────────────────────────────────
 router.get('/profile', protect, getUserProfile);
 router.put('/profile/update', protect, updateProfile);
+
+// ────────────────────────────────────────────────────────────────────────────────
+// BALANCES & RECENT TRANSACTIONS (Used by Dashboard)
+// ────────────────────────────────────────────────────────────────────────────────
+router.get('/balances', protect, getBalances);
+router.get('/transactions/recent', protect, getRecentTransactions);
+
+// ────────────────────────────────────────────────────────────────────────────────
+// DEPOSIT ADDRESS GENERATION (Used by Deposit Page)
+// ────────────────────────────────────────────────────────────────────────────────
+router.get('/deposit-address', protect, getDepositAddress);
 
 // ────────────────────────────────────────────────────────────────────────────────
 // LEDGER & TRANSACTION HISTORY

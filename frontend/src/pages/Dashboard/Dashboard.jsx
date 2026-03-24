@@ -1,283 +1,355 @@
-// src/pages/Dashboard/Dashboard.jsx
-import React, { useState, useEffect, useCallback, useMemo } from "react";
-import api from "../../api/api";
-import { API_ENDPOINTS } from "../../constants/api";
-import { useAuth } from "../../context/AuthContext";
-
-// Components
-import PortfolioValue from "../../components/dashboard/PortfolioValue";
-import AssetCard from "../../components/dashboard/AssetCard";
-import ActivityLedger from "../../components/dashboard/ActivityLedger";
-import TradingChart from "../../components/dashboard/TradingChart";
-import ProfileSettingsModal from "../../components/dashboard/ProfileSettingsModal";
-
-// Icons
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  RefreshCcw,
-  Loader2,
-  Wallet,
-  Coins,
-  Activity,
+  LayoutDashboard,
   Zap,
+  History,
+  Repeat,
+  PlusCircle,
+  LogOut,
+  Wallet,
+  TrendingUp,
+  ArrowUpRight,
+  ArrowDownLeft,
   ShieldCheck,
-  ArrowRight,
-  User,
-  Lock,
-  Bell,
-  Shield,
-} from "lucide-react";
+  Menu,
+  X,
+  Loader2,
+  AlertTriangle,
+  RefreshCw,
+  Clock,
+} from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import api from '../../api/api';
+import toast from 'react-hot-toast';
 
-const Dashboard = () => {
-  const { user } = useAuth();
+function SidebarLink({ icon: Icon, label, active = false, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-4 px-5 py-4 rounded-2xl transition-all w-full text-left group focus:outline-none focus:ring-2 focus:ring-yellow-500/50 ${
+        active
+          ? 'bg-yellow-500 text-black shadow-xl shadow-yellow-500/20'
+          : 'text-gray-400 hover:bg-white/5 hover:text-white'
+      }`}
+    >
+      <Icon size={18} className={active ? 'text-black' : 'text-gray-500 group-hover:text-white'} />
+      <span className="text-[10px] font-black tracking-[0.2em] uppercase italic">{label}</span>
+    </button>
+  );
+}
 
-  // ───── STATES ─────
-  const [balances, setBalances] = useState({ BTC: 0, ETH: 0, EUR: 0, ROI: 0 });
-  const [prices, setPrices] = useState({ BTC: 0, ETH: 0 });
-  const [ledger, setLedger] = useState([]);
-  const [chartData, setChartData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState(null);
+export default function Dashboard() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const [showCompoundModal, setShowCompoundModal] = useState(false);
-  const [isCompounding, setIsCompounding] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [balances, setBalances] = useState({
+    totalBalance: 0,
+    profitBalance: 0,
+    availableBalance: 0,
+  });
+  const [recentTransactions, setRecentTransactions] = useState([]);
+  const [loadingBalances, setLoadingBalances] = useState(true);
+  const [loadingTx, setLoadingTx] = useState(true);
+  const [balanceError, setBalanceError] = useState(null);
+  const [txError, setTxError] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // ───── FETCH MARKET PRICES ─────
-  const fetchMarketPrices = async () => {
+  const fetchBalances = async () => {
+    setLoadingBalances(true);
+    setBalanceError(null);
     try {
-      const res = await fetch(
-        "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=eur"
-      );
-      const data = await res.json();
-      setPrices({ BTC: data.bitcoin.eur, ETH: data.ethereum.eur });
+      const res = await api.get('/api/user/balances');
+      if (res.data?.success && res.data?.data) {
+        setBalances(res.data.data);
+      }
     } catch (err) {
-      console.error("Price fetch error:", err);
+      console.error('[BALANCES ERROR]', err);
+      setBalanceError('Unable to load balances');
+      toast.error('Unable to load balances');
+    } finally {
+      setLoadingBalances(false);
     }
   };
 
-  // ───── DASHBOARD DATA ─────
-  const fetchDashboardData = useCallback(async () => {
+  const fetchRecentTransactions = async () => {
+    setLoadingTx(true);
+    setTxError(null);
     try {
-      const [balanceRes, ledgerRes, chartRes] = await Promise.all([
-        api.get(API_ENDPOINTS.USER.PROFILE),
-        api.get(API_ENDPOINTS.USER.LEDGER),
-        api.get("https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=eur&days=30"),
-      ]);
-
-      if (balanceRes.data.success) setBalances(balanceRes.data.user.balances || {});
-      if (ledgerRes.data.success) setLedger(ledgerRes.data.data.slice(0, 15));
-
-      if (chartRes?.data?.prices) {
-        const formatted = chartRes.data.prices.map((item) => ({
-          time: new Date(item[0]).toLocaleDateString(),
-          value: item[1],
-        }));
-        setChartData(formatted);
+      const res = await api.get('/api/user/transactions/recent?limit=5');
+      if (res.data?.success && res.data?.data) {
+        setRecentTransactions(res.data.data);
       }
     } catch (err) {
-      console.error("Dashboard fetch error:", err);
-      setError("Failed to load dashboard data.");
+      console.error('[TRANSACTIONS ERROR]', err);
+      setTxError('Unable to load recent activity');
     } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // ───── PORTFOLIO & ROI CALCS ─────
-  const portfolioValue = useMemo(() => {
-    const btcValue = balances.BTC * prices.BTC;
-    const ethValue = balances.ETH * prices.ETH;
-    const eurValue = balances.EUR;
-    const roiValue = balances.ROI;
-    return btcValue + ethValue + eurValue + roiValue;
-  }, [balances, prices]);
-
-  const roiPercent = useMemo(() => {
-    const invested = balances.INVESTED || balances.EUR || 1;
-    return ((balances.ROI / invested) * 100).toFixed(2);
-  }, [balances]);
-
-  // ───── REFRESH DASHBOARD ─────
-  const refreshDashboard = async () => {
-    setIsRefreshing(true);
-    await Promise.all([fetchDashboardData(), fetchMarketPrices()]);
-    setIsRefreshing(false);
-  };
-
-  // ───── COMPOUND ROI ─────
-  const handleCompound = async () => {
-    if (balances.ROI < 10) return alert("Minimum €10 required to compound.");
-    setIsCompounding(true);
-    try {
-      const res = await api.post(API_ENDPOINTS.USER.COMPOUND);
-      if (res.data.success) {
-        await refreshDashboard();
-        setShowCompoundModal(false);
-      }
-    } catch (err) {
-      alert(err.response?.data?.message || "Compound failed.");
-    } finally {
-      setIsCompounding(false);
+      setLoadingTx(false);
     }
   };
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchMarketPrices();
-    const interval = setInterval(refreshDashboard, 60000);
-    return () => clearInterval(interval);
-  }, [fetchDashboardData]);
+    fetchBalances();
+    fetchRecentTransactions();
+  }, []);
 
-  if (loading) {
-    return (
-      <div className="h-screen bg-[#050505] flex items-center justify-center">
-        <Loader2 size={36} className="animate-spin text-white/20" />
-      </div>
-    );
-  }
-
-  // ───── LEFT NAV TABS ─────
-  const navTabs = [
-    { id: "profile", icon: User, label: "Profile & Security", action: () => setIsSettingsOpen(true) },
-    { id: "notifications", icon: Bell, label: "Notifications" },
-    { id: "privacy", icon: Shield, label: "Privacy" },
-    { id: "encryption", icon: Lock, label: "Encryption Keys" },
+  const navItems = [
+    { to: '/dashboard', label: 'Terminal', icon: LayoutDashboard, active: true },
+    { to: '/dashboard/deposit', label: 'Inbound', icon: PlusCircle },
+    { to: '/dashboard/withdrawal', label: 'Outbound', icon: Repeat },
+    { to: '/dashboard/ledger', label: 'Ledger', icon: History },
   ];
 
-  return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans p-6 lg:p-10 flex">
-      {/* ───── LEFT NAV ───── */}
-      <div className="w-60 space-y-4">
-        {navTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={tab.action}
-            className="w-full flex items-center gap-3 px-6 py-4 rounded-2xl transition-all group hover:bg-white/5"
-          >
-            <tab.icon size={18} className="text-gray-500 group-hover:text-yellow-500" />
-            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 group-hover:text-white">
-              {tab.label}
-            </span>
-          </button>
-        ))}
-      </div>
+  const handleNavClick = (path) => {
+    navigate(path);
+    setMobileMenuOpen(false);
+  };
 
-      {/* ───── MAIN DASHBOARD ───── */}
-      <div className="flex-1 ml-8 space-y-10">
-        {/* Header */}
-        <header className="flex justify-between items-end">
-          <div>
-            <h1 className="text-4xl font-black italic uppercase tracking-tighter">
-              Terminal: {user?.username}
-            </h1>
-            <p className="text-white/40 text-[10px] font-mono tracking-[0.3em] uppercase mt-2">
-              Zurich Mainnet // Secure Tunnel Active
-            </p>
+  const getStatusBadge = (status) => {
+    const base = 'inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border';
+    if (status === 'completed') return `${base} bg-emerald-500/10 text-emerald-400 border-emerald-500/30`;
+    if (status === 'pending') return `${base} bg-yellow-500/10 text-yellow-400 border-yellow-500/30`;
+    if (status === 'failed') return `${base} bg-rose-500/10 text-rose-400 border-rose-500/30`;
+    return `${base} bg-gray-500/10 text-gray-400 border-gray-500/30`;
+  };
+
+  return (
+    <div className="flex min-h-screen bg-[#020408] text-white font-sans selection:bg-yellow-500/30 overflow-x-hidden">
+
+      {/* Mobile Menu */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
+            <motion.aside initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} className="fixed inset-y-0 left-0 w-80 bg-black/95 border-r border-white/5 z-50 lg:hidden overflow-y-auto">
+              <div className="p-8 flex flex-col h-full">
+                <div className="flex items-center justify-between mb-12">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-yellow-500 p-2 rounded-xl text-black shadow-lg">
+                      <Zap size={22} fill="currentColor" />
+                    </div>
+                    <span className="text-2xl font-black italic tracking-tighter uppercase">Trustra Node</span>
+                  </div>
+                  <button onClick={() => setMobileMenuOpen(false)} className="text-gray-400 hover:text-white">
+                    <X size={28} />
+                  </button>
+                </div>
+
+                <nav className="flex-1 space-y-2">
+                  <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.4em] mb-6 px-4">INTERNAL SYSTEMS</p>
+                  {navItems.map((item) => (
+                    <SidebarLink key={item.to} icon={item.icon} label={item.label} active={item.active} onClick={() => handleNavClick(item.to)} />
+                  ))}
+                </nav>
+
+                <button onClick={logout} className="mt-auto flex items-center gap-4 px-5 py-4 text-gray-500 hover:text-rose-500 transition-colors">
+                  <LogOut size={18} />
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em]">Terminate Session</span>
+                </button>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Desktop Sidebar */}
+      <aside className="w-80 border-r border-white/5 bg-black/50 backdrop-blur-xl p-8 hidden lg:flex flex-col sticky top-0 h-screen overflow-y-auto">
+        <div className="flex items-center gap-3 mb-16 px-4">
+          <div className="bg-yellow-500 p-2 rounded-xl text-black shadow-lg">
+            <Zap size={22} fill="currentColor" />
+          </div>
+          <span className="text-2xl font-black italic tracking-tighter uppercase">
+            Trustra <span className="text-white/50 font-light">Node</span>
+          </span>
+        </div>
+
+        <nav className="flex-1 space-y-2">
+          <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.4em] mb-6 px-4">INTERNAL SYSTEMS</p>
+          {navItems.map((item) => (
+            <SidebarLink
+              key={item.to}
+              icon={item.icon}
+              label={item.label}
+              active={item.active}
+              onClick={() => handleNavClick(item.to)}
+            />
+          ))}
+        </nav>
+
+        <button onClick={logout} className="mt-auto flex items-center gap-4 px-5 py-4 text-gray-500 hover:text-rose-500 transition-colors">
+          <LogOut size={18} />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Terminate Session</span>
+        </button>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-20 border-b border-white/5 bg-[#020408]/80 backdrop-blur-xl flex items-center justify-between px-6 md:px-10 sticky top-0 z-40">
+          <div className="flex items-center gap-4 lg:hidden">
+            <button onClick={() => setMobileMenuOpen(true)} className="text-gray-300 hover:text-white">
+              <Menu size={28} />
+            </button>
+            <span className="text-xl font-black italic tracking-tighter uppercase">Trustra</span>
           </div>
 
-          <button
-            onClick={refreshDashboard}
-            disabled={isRefreshing}
-            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-all"
-          >
-            <RefreshCcw size={14} className={isRefreshing ? "animate-spin" : ""} />
-            {isRefreshing ? "Syncing..." : "Sync Node"}
-          </button>
+          <div className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 flex items-center gap-3 flex-1 justify-center lg:justify-start">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_#10b981]" />
+            SECURE NODE ONLINE
+          </div>
+
+          <div className="flex items-center gap-4 text-gray-600">
+            <ShieldCheck size={16} className="text-emerald-500" />
+            <span className="hidden md:inline text-[9px] font-black uppercase tracking-widest">AES-256 • MULTI-LAYER AUDIT</span>
+          </div>
         </header>
 
-        {/* Portfolio Value */}
-        <PortfolioValue value={portfolioValue} />
-
-        {/* Asset Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <AssetCard label="Bitcoin" value={balances.BTC} price={prices.BTC} icon={<Coins size={20} className="text-orange-500" />} symbol="BTC" />
-          <AssetCard label="Ethereum" value={balances.ETH} price={prices.ETH} icon={<Activity size={20} className="text-indigo-500" />} symbol="ETH" />
-          <AssetCard label="Euro Balance" value={balances.EUR} price={1} icon={<Wallet size={20} className="text-blue-500" />} symbol="EUR" />
-
-          {/* ROI Card */}
-          <div
-            className="bg-yellow-500 text-black p-6 rounded-[2rem] cursor-pointer hover:bg-yellow-400 transition-all shadow-xl shadow-yellow-500/10 flex flex-col justify-between group"
-            onClick={() => setShowCompoundModal(true)}
-          >
-            <div className="flex justify-between items-start">
-              <p className="uppercase text-[10px] font-black tracking-widest opacity-60">Accrued ROI</p>
-              <Zap size={20} fill="black" />
-            </div>
-            <div>
-              <h2 className="text-3xl font-black italic tracking-tighter">€{balances.ROI.toFixed(2)}</h2>
-              <p className="text-[10px] font-bold uppercase tracking-widest mt-1">+{roiPercent}% Protocol Yield</p>
-            </div>
-          </div>
-        </section>
-
-        {/* Ledger & Chart Section */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 bg-white/5 border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-md">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xs font-black uppercase tracking-widest text-white/40">Market Performance</h3>
-              <ShieldCheck size={16} className="text-green-500" />
-            </div>
-            <TradingChart data={chartData} />
-          </div>
-
-          <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-md">
-            <h3 className="mb-8 text-xs font-black uppercase tracking-widest text-white/40">Live Index</h3>
-            <div className="space-y-8">
-              <div className="flex justify-between items-center border-b border-white/5 pb-4">
-                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">BTC / EUR</span>
-                <span className="text-lg font-black italic tracking-tighter">€{prices.BTC.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-white/5 pb-4">
-                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">ETH / EUR</span>
-                <span className="text-lg font-black italic tracking-tighter">€{prices.ETH.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Network Fee</span>
-                <span className="text-xs font-bold text-green-500">0.00%</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Activity Ledger */}
-        <section className="bg-white/5 border border-white/10 rounded-[2.5rem] overflow-hidden backdrop-blur-md">
-          <div className="p-8 border-b border-white/5 bg-white/[0.02] flex justify-between items-center">
-            <h3 className="text-xs font-black uppercase tracking-widest text-white/40 italic">Activity Ledger</h3>
-            <ArrowRight size={16} className="text-white/20" />
-          </div>
-          <ActivityLedger transactions={ledger} />
-        </section>
-      </div>
-
-      {/* ───── PROFILE SETTINGS MODAL ───── */}
-      {isSettingsOpen && <ProfileSettingsModal onClose={() => setIsSettingsOpen(false)} />}
-
-      {/* ───── COMPOUND ROI MODAL ───── */}
-      {showCompoundModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/90 backdrop-blur-xl">
-          <div className="bg-[#0A0A0A] border border-white/10 w-full max-w-md rounded-[3rem] p-12 relative text-center">
-            <button onClick={() => setShowCompoundModal(false)} className="absolute top-8 right-8 text-white/20 hover:text-white transition-colors">
-              <ArrowRight size={24} />
-            </button>
-            <div className="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-8 text-black shadow-xl shadow-white/10">
-              <Zap size={32} fill="black" />
-            </div>
-            <h2 className="text-2xl font-black italic uppercase tracking-tighter">Protocol Compound</h2>
-            <p className="text-white/40 text-[10px] font-black tracking-widest uppercase mb-10 leading-relaxed px-4">
-              Synchronizing €{balances.ROI.toFixed(2)} from Yield to Staking Balance
+        <main className="flex-1 p-6 md:p-12 max-w-[1600px] mx-auto w-full space-y-12">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+            <h1 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">
+              Welcome back, <span className="text-yellow-500">{user?.username || 'gery_maes'}</span>
+            </h1>
+            <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.4em]">
+              Your capital terminal • AES-256 protected • Last activity: {new Date().toLocaleString()}
             </p>
-            <button
-              onClick={handleCompound}
-              disabled={isCompounding}
-              className="w-full bg-white text-black py-5 rounded-2xl font-black text-[10px] tracking-[0.3em] uppercase hover:bg-yellow-500 transition-all shadow-xl shadow-white/5"
-            >
-              {isCompounding ? <Loader2 className="animate-spin mx-auto" size={20} /> : "Authorize Sync"}
-            </button>
+          </motion.div>
+
+          {/* Balances */}
+          {loadingBalances ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="h-12 w-12 animate-spin text-yellow-500 mb-4" />
+              <p className="text-yellow-500 font-black uppercase tracking-widest text-sm">Fetching real-time balances...</p>
+            </div>
+          ) : balanceError ? (
+            <div className="bg-rose-900/20 border border-rose-700/40 rounded-2xl p-8 text-center">
+              <AlertTriangle size={48} className="text-rose-500 mx-auto mb-4" />
+              <h3 className="text-xl font-black text-rose-300 mb-2">Balance Load Failed</h3>
+              <p className="text-rose-200 mb-6">{balanceError}</p>
+              <button onClick={fetchBalances} className="px-8 py-4 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black uppercase tracking-wider flex items-center gap-2 mx-auto">
+                <RefreshCw size={18} /> Retry
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+                className="bg-[#0a0c10] border border-blue-500/30 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
+                <div className="flex items-center gap-3 mb-4">
+                  <Wallet size={24} className="text-blue-400" />
+                  <span className="text-sm font-black uppercase text-gray-500">Total Balance</span>
+                </div>
+                <h2 className="text-5xl font-black text-white">€{balances.totalBalance.toLocaleString('en-IE')}</h2>
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                className="bg-[#0a0c10] border border-emerald-500/30 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
+                <div className="flex items-center gap-3 mb-4">
+                  <TrendingUp size={24} className="text-emerald-400" />
+                  <span className="text-sm font-black uppercase text-gray-500">Realized Profit</span>
+                </div>
+                <h2 className="text-5xl font-black text-emerald-400">+€{balances.profitBalance.toLocaleString('en-IE')}</h2>
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+                className="bg-[#0a0c10] border border-yellow-500/30 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
+                <div className="flex items-center gap-3 mb-4">
+                  <ArrowDownLeft size={24} className="text-yellow-400" />
+                  <span className="text-sm font-black uppercase text-gray-500">Available to Withdraw</span>
+                </div>
+                <h2 className="text-5xl font-black text-yellow-400">€{balances.availableBalance.toLocaleString('en-IE')}</h2>
+              </motion.div>
+            </div>
+          )}
+
+          {/* Quick Actions */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {[
+              { to: '/dashboard/deposit', icon: PlusCircle, label: 'Deposit Funds', color: 'text-yellow-500' },
+              { to: '/dashboard/withdrawal', icon: ArrowUpRight, label: 'Withdraw', color: 'text-rose-400' },
+              { to: '/dashboard/ledger', icon: History, label: 'View Ledger', color: 'text-emerald-400' },
+            ].map((item) => (
+              <button
+                key={item.to}
+                onClick={() => navigate(item.to)}
+                className="p-8 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all flex flex-col items-center gap-3 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+              >
+                <item.icon size={32} className={item.color} />
+                <span className="text-sm font-black uppercase">{item.label}</span>
+              </button>
+            ))}
           </div>
-        </div>
-      )}
+
+          {/* Recent Activity */}
+          <div className="bg-[#0a0c10] border border-white/8 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="p-8 border-b border-white/8 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <History size={24} className="text-emerald-400" />
+                <h3 className="text-xl font-black uppercase tracking-tight">Recent Activity</h3>
+              </div>
+              <button onClick={() => navigate('/dashboard/ledger')} className="text-sm font-black uppercase text-yellow-500 hover:text-yellow-400 flex items-center gap-2">
+                View Full Ledger <ArrowUpRight size={16} />
+              </button>
+            </div>
+
+            {loadingTx ? (
+              <div className="p-12 flex flex-col items-center justify-center">
+                <Loader2 className="h-10 w-10 animate-spin text-yellow-500 mb-4" />
+                <p className="text-gray-500">Loading recent activity...</p>
+              </div>
+            ) : txError ? (
+              <div className="p-12 text-center">
+                <AlertTriangle size={48} className="text-rose-500 mx-auto mb-4" />
+                <p className="text-rose-300 mb-4">{txError}</p>
+                <button onClick={fetchRecentTransactions} className="px-6 py-3 bg-rose-900/30 hover:bg-rose-900/50 border border-rose-700 rounded-xl text-rose-200 font-black uppercase text-sm">
+                  Retry
+                </button>
+              </div>
+            ) : recentTransactions.length === 0 ? (
+              <div className="p-12 text-center text-gray-500">
+                <History size={48} className="mx-auto mb-4 opacity-50" />
+                <p>No recent activity yet</p>
+                <p className="text-sm mt-2">RIO Midnight distributions will appear here automatically</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-white/5">
+                {recentTransactions.map((tx) => (
+                  <div key={tx._id} className="p-6 flex items-center justify-between hover:bg-white/5 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-xl ${tx.amount > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
+                        {tx.amount > 0 ? <ArrowDownLeft size={20} /> : <ArrowUpRight size={20} />}
+                      </div>
+                      <div>
+                        <p className="font-medium text-white capitalize">{tx.description}</p>
+                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                          <Clock size={14} /> {new Date(tx.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className={`font-bold text-lg ${tx.amount > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {tx.amount > 0 ? '+' : ''}€{Math.abs(tx.amount || 0).toLocaleString('en-IE', { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Security Footer */}
+          <div className="bg-[#0a0c10] border border-white/8 rounded-[2.5rem] p-8 flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="flex items-center gap-4">
+              <ShieldCheck size={32} className="text-emerald-500" />
+              <div>
+                <h4 className="text-lg font-black uppercase text-white">Node Security</h4>
+                <p className="text-sm text-gray-500">AES-256 • Multi-layer audit • Active</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Last sync: {new Date().toLocaleTimeString()}</p>
+            </div>
+          </div>
+        </main>
+      </div>
     </div>
   );
-};
-
-export default Dashboard;
+}

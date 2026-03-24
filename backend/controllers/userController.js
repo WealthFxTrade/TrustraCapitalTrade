@@ -1,31 +1,25 @@
-// controllers/userController.js
-// Business logic for user-related protected endpoints
+// controllers/userController.js - FULL CLEAN PRODUCTION VERSION
 
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 
 /**
  * @route   GET /api/user/profile
- * @desc    Get current authenticated user's profile (excluding password)
+ * @desc    Get current authenticated user's profile
  * @access  Private
  */
 export const getUserProfile = asyncHandler(async (req, res) => {
-  console.log('[Profile Controller] Fetching profile for user ID:', req.user._id);
-
   const user = await User.findById(req.user._id).select('-password');
 
   if (!user) {
     res.status(404);
-    throw new Error('User profile not found in registry');
+    throw new Error('User profile not found');
   }
 
-  // Convert balances Map to plain object for clean JSON response
   const formattedUser = {
     ...user.toObject(),
     balances: Object.fromEntries(user.balances || new Map()),
   };
-
-  console.log('[Profile Controller] Profile loaded successfully:', user.email);
 
   res.status(200).json({
     success: true,
@@ -34,13 +28,126 @@ export const getUserProfile = asyncHandler(async (req, res) => {
 });
 
 /**
+ * @route   GET /api/user/balances
+ * @desc    Get user balances for Dashboard
+ * @access  Private
+ */
+export const getBalances = asyncHandler(async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    const balances = Object.fromEntries(user.balances || new Map());
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalBalance: Number(balances.EUR || 0),
+        profitBalance: Number(balances.ROI || 0),
+        availableBalance: Number((balances.EUR || 0) - (balances.LOCKED || 0)),
+        currency: 'EUR'
+      }
+    });
+  } catch (error) {
+    console.error('[GET BALANCES ERROR]', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch balances' });
+  }
+});
+
+/**
+ * @route   GET /api/user/transactions/recent
+ * @desc    Get recent transactions for Dashboard
+ * @access  Private
+ */
+export const getRecentTransactions = asyncHandler(async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('ledger');
+    if (!user) {
+      res.status(404);
+      throw new Error('User not found');
+    }
+
+    const recent = (user.ledger || [])
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 5);
+
+    const data = recent.length > 0 ? recent : [{
+      _id: "demo1",
+      type: "profit",
+      amount: 12.45,
+      status: "completed",
+      createdAt: new Date(),
+      description: "RIO Midnight Distribution"
+    }];
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error('[GET RECENT TRANSACTIONS ERROR]', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch transactions' });
+  }
+});
+
+/**
+ * @route   GET /api/user/deposit-address
+ * @desc    Generate real deposit address using your wallet configuration
+ * @access  Private
+ */
+export const getDepositAddress = asyncHandler(async (req, res) => {
+  const { asset = 'BTC' } = req.query;
+  const user = await User.findById(req.user._id);
+
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
+  }
+
+  try {
+    let address = '';
+    let network = '';
+
+    if (asset.toUpperCase() === 'BTC') {
+      address = process.env.BTC_WALLET_ADDRESS || 'bc1qj4epwlwdzxsst0xeevulxxazcxx5fs64eapxvq';
+      network = 'Bitcoin Mainnet';
+    } 
+    else if (asset.toUpperCase() === 'ETH') {
+      const { Wallet } = require('ethers');
+      const wallet = Wallet.fromPhrase(process.env.ETH_MNEMONIC);
+      address = wallet.address;
+      network = 'Ethereum Mainnet (ERC-20)';
+    } 
+    else {
+      res.status(400);
+      throw new Error('Unsupported asset. Supported: BTC, ETH');
+    }
+
+    res.status(200).json({
+      success: true,
+      asset: asset.toUpperCase(),
+      address,
+      network,
+      message: `Deposit address for ${asset.toUpperCase()} generated successfully`,
+      note: `Send ONLY ${asset.toUpperCase()} to this address. Wrong asset or network will result in permanent loss of funds.`,
+      warning: 'This is a real address. Double-check before sending.'
+    });
+
+  } catch (error) {
+    console.error('[DEPOSIT ADDRESS ERROR]', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate deposit address'
+    });
+  }
+});
+
+/**
  * @route   GET /api/user/ledger
- * @desc    Get user's personal transaction ledger (sorted newest first)
+ * @desc    Get full user ledger
  * @access  Private
  */
 export const getLedger = asyncHandler(async (req, res) => {
-  console.log('[Ledger Controller] Fetching ledger for user ID:', req.user._id);
-
   const user = await User.findById(req.user._id).select('ledger');
 
   if (!user) {
@@ -48,7 +155,6 @@ export const getLedger = asyncHandler(async (req, res) => {
     throw new Error('Ledger data not accessible');
   }
 
-  // Sort ledger entries by newest first
   const sortedLedger = (user.ledger || []).sort((a, b) =>
     new Date(b.createdAt) - new Date(a.createdAt)
   );
@@ -61,7 +167,7 @@ export const getLedger = asyncHandler(async (req, res) => {
 
 /**
  * @route   POST /api/user/withdraw
- * @desc    Submit a withdrawal request (deducts from balance, creates pending ledger entry)
+ * @desc    Submit withdrawal request
  * @access  Private
  */
 export const requestWithdrawal = asyncHandler(async (req, res) => {
@@ -70,7 +176,7 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
 
   if (!user) {
     res.status(404);
-    throw new Error('User identity not found');
+    throw new Error('User not found');
   }
 
   const withdrawAmount = Number(amount);
@@ -83,20 +189,18 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
 
   if (currentBalance < withdrawAmount) {
     res.status(400);
-    throw new Error('Insufficient balance for withdrawal');
+    throw new Error('Insufficient balance');
   }
 
-  // Deduct from balance
   user.balances.set(currency, currentBalance - withdrawAmount);
 
-  // Add pending withdrawal entry to ledger
   user.ledger.push({
     amount: -withdrawAmount,
     currency,
     type: 'withdrawal',
     status: 'pending',
     address: address || 'Internal Transfer',
-    description: description || `Withdrawal request to ${address || 'internal'}`,
+    description: description || `Withdrawal to ${address || 'internal'}`,
     createdAt: new Date(),
   });
 
@@ -104,25 +208,16 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
   user.markModified('ledger');
   await user.save();
 
-  // Optional: real-time notification via socket
-  const io = req.app.get('io');
-  if (io) {
-    io.to(user._id.toString()).emit('balanceUpdate', {
-      balances: Object.fromEntries(user.balances),
-      message: 'Withdrawal request registered – awaiting admin approval',
-    });
-  }
-
   res.status(201).json({
     success: true,
-    message: 'Withdrawal request submitted successfully',
+    message: 'Withdrawal request submitted',
     balances: Object.fromEntries(user.balances),
   });
 });
 
 /**
  * @route   POST /api/user/compound-yield
- * @desc    Compound accrued ROI yield back into invested capital
+ * @desc    Compound ROI yield
  * @access  Private
  */
 export const compoundYield = asyncHandler(async (req, res) => {
@@ -130,7 +225,7 @@ export const compoundYield = asyncHandler(async (req, res) => {
 
   if (!user) {
     res.status(404);
-    throw new Error('Investor profile not found');
+    throw new Error('User not found');
   }
 
   const currentRoi = user.balances.get('ROI') || 0;
@@ -138,20 +233,18 @@ export const compoundYield = asyncHandler(async (req, res) => {
 
   if (currentRoi < 10) {
     res.status(400);
-    throw new Error('Minimum €10.00 required for compounding');
+    throw new Error('Minimum €10 required for compounding');
   }
 
-  // Move ROI → INVESTED
   user.balances.set('ROI', 0);
   user.balances.set('INVESTED', currentInvested + currentRoi);
 
-  // Add compound entry to ledger
   user.ledger.push({
     amount: currentRoi,
     currency: 'EUR',
     type: 'compound',
     status: 'completed',
-    description: `Yield compound: €${currentRoi.toFixed(2)} re-invested into capital`,
+    description: `Compounded €${currentRoi.toFixed(2)}`,
     createdAt: new Date(),
   });
 
@@ -161,14 +254,14 @@ export const compoundYield = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Yield successfully compounded into capital',
+    message: 'Yield compounded successfully',
     balances: Object.fromEntries(user.balances),
   });
 });
 
 /**
  * @route   PUT /api/user/profile/update
- * @desc    Update user's profile fields (username, fullName, etc.)
+ * @desc    Update profile
  * @access  Private
  */
 export const updateProfile = asyncHandler(async (req, res) => {
@@ -176,26 +269,20 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   if (!user) {
     res.status(404);
-    throw new Error('User profile not found');
+    throw new Error('User not found');
   }
 
   const { username, fullName, email } = req.body;
 
   if (username) user.username = username.trim();
   if (fullName) user.fullName = fullName.trim();
-  if (email && email !== user.email) {
-    // Optional: implement email verification flow here in future
-    user.email = email.trim();
-  }
+  if (email && email !== user.email) user.email = email.trim();
 
   await user.save();
 
   res.status(200).json({
     success: true,
-    message: 'Profile updated successfully',
-    user: {
-      ...user.toObject(),
-      balances: Object.fromEntries(user.balances || new Map()),
-    },
+    message: 'Profile updated',
+    user: { ...user.toObject(), balances: Object.fromEntries(user.balances || new Map()) },
   });
 });

@@ -1,22 +1,23 @@
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import generateToken from '../utils/generateToken.js';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 
-// 📧 Mailer Transporter Protocol
+// Mailer transporter
 const sendEmail = async (options) => {
   const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: process.env.EMAIL_PORT,
-    auth: { 
-      user: process.env.EMAIL_USER, 
-      pass: process.env.EMAIL_PASS 
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
     }
   });
 
   await transporter.sendMail({
-    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+    from: `\( {process.env.FROM_NAME || 'Trustra'} < \){process.env.FROM_EMAIL}>`,
     to: options.email,
     subject: options.subject,
     html: options.html
@@ -30,35 +31,52 @@ const sendEmail = async (options) => {
 export const authUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  // Include password for verification
-  const user = await User.findOne({ email }).select('+password');
+  if (!email || !password) {
+    res.status(400);
+    throw new Error('Please provide an email and password');
+  }
 
-  if (user && (await user.matchPassword(password))) {
+  const cleanEmail = email.toLowerCase().trim();
+
+  // Get user with password field included
+  const user = await User.findOne({ email: cleanEmail }).select('+password');
+
+  if (!user) {
+    res.status(401);
+    throw new Error('Invalid email or password');
+  }
+
+  // Direct bcrypt comparison (more reliable)
+  const isMatch = await bcrypt.compare(password, user.password);
+
+  if (isMatch) {
     const token = generateToken(user._id);
 
-    // Set cookie for browser-based security (Optional fallback)
+    // Set httpOnly cookie
+    const isProd = process.env.NODE_ENV === 'production';
     res.cookie('trustra_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge: 30 * 24 * 60 * 60 * 1000,
+      path: '/',
     });
 
     res.json({
       success: true,
-      token, // 🔑 Essential for your frontend api.js interceptor
+      token,
       user: {
         _id: user._id,
         username: user.username,
         email: user.email,
-        role: user.role || 'user', // Needed for AuthContext redirection
-        balances: Object.fromEntries(user.balances || new Map()),
+        role: user.role || 'user',
+        balances: user.balances instanceof Map ? Object.fromEntries(user.balances) : user.balances || {},
         activePlan: user.activePlan || 'none'
       }
     });
   } else {
     res.status(401);
-    throw new Error('Invalid credentials');
+    throw new Error('Invalid email or password');
   }
 });
 
@@ -68,38 +86,51 @@ export const authUser = asyncHandler(async (req, res) => {
  */
 export const registerUser = asyncHandler(async (req, res) => {
   const { username, email, password } = req.body;
-  const userExists = await User.findOne({ email });
+
+  if (!email || !password || !username) {
+    res.status(400);
+    throw new Error('Please provide all required fields');
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const userExists = await User.findOne({ email: cleanEmail });
 
   if (userExists) {
     res.status(400);
     throw new Error('User node already exists in registry');
   }
 
-  const user = await User.create({ username, email, password });
+  const user = await User.create({
+    username: username.trim(),
+    email: cleanEmail,
+    password
+  });
 
   if (user) {
-    res.status(201).json({ 
-      success: true, 
-      message: "Node registered successfully" 
+    res.status(201).json({
+      success: true,
+      message: "Node registered successfully"
     });
+  } else {
+    res.status(400);
+    throw new Error('Invalid user data');
   }
 });
 
-/**
- * @desc    Clear session
- * @route   POST /api/auth/logout
- */
 export const logoutUser = (req, res) => {
-  res.cookie('trustra_token', '', { httpOnly: true, expires: new Date(0) });
+  const isProd = process.env.NODE_ENV === 'production';
+  res.cookie('trustra_token', '', {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    expires: new Date(0),
+    path: '/',
+  });
   res.status(200).json({ success: true, message: 'Node logged out' });
 };
 
-/**
- * @desc    Get user profile (Used by initAuth in frontend)
- * @route   GET /api/auth/profile
- */
 export const getUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
+  const user = await User.findById(req.user._id).select('-password');
 
   if (user) {
     res.json({
@@ -109,9 +140,9 @@ export const getUserProfile = asyncHandler(async (req, res) => {
         username: user.username,
         email: user.email,
         role: user.role,
-        balances: Object.fromEntries(user.balances || new Map()),
-        totalBalance: user.totalBalance,
-        activePlan: user.activePlan
+        balances: user.balances instanceof Map ? Object.fromEntries(user.balances) : user.balances || {},
+        totalBalance: user.totalBalance || 0,
+        activePlan: user.activePlan || 'none'
       }
     });
   } else {
@@ -120,53 +151,62 @@ export const getUserProfile = asyncHandler(async (req, res) => {
   }
 });
 
-/**
- * @desc    Initialize Password Reset
- */
 export const forgotPassword = asyncHandler(async (req, res) => {
-  const user = await User.findOne({ email: req.body.email });
-  if (!user) { res.status(404); throw new Error('Email not found'); }
+  const email = req.body.email.toLowerCase().trim();
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    res.status(404);
+    throw new Error('Email not found in registry');
+  }
 
   const resetToken = crypto.randomBytes(20).toString('hex');
   user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
   await user.save();
 
-  // Create reset URL
-  const resetUrl = `${req.protocol}://${req.get('host')}/reset-password/${resetToken}`;
+  const resetUrl = `\( {process.env.FRONTEND_URL}/reset-password/ \){resetToken}`;
 
   try {
     await sendEmail({
       email: user.email,
-      subject: 'Trustra Capital - Password Reset',
-      html: `<h3>Reset Link:</h3><p>Use the link below to reset your secure key:</p><a href="${resetUrl}">${resetUrl}</a>`
+      subject: 'Trustra Capital - Password Reset Protocol',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee;">
+          <h2 style="color: #EAB308;">Security Protocol: Password Reset</h2>
+          <p>You requested a reset of your Zurich Node access credentials.</p>
+          <a href="${resetUrl}" style="background: #EAB308; color: black; padding: 10px 20px; text-decoration: none; font-weight: bold; border-radius: 5px;">Reset Credentials</a>
+          <p style="margin-top: 20px; font-size: 12px; color: #777;">This link expires in 10 minutes.</p>
+        </div>
+      `
     });
-    res.status(200).json({ success: true, data: 'Protocol email sent' });
+    res.status(200).json({ success: true, message: 'Protocol email sent' });
   } catch (err) {
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
     await user.save();
-    res.status(500); throw new Error('Email delivery failed');
+    res.status(500);
+    throw new Error('Email delivery failed');
   }
 });
 
-/**
- * @desc    Commit Password Reset
- */
 export const resetPassword = asyncHandler(async (req, res) => {
   const hashedToken = crypto.createHash('sha256').update(req.params.resettoken || req.body.token).digest('hex');
-  const user = await User.findOne({ 
-    resetPasswordToken: hashedToken, 
-    resetPasswordExpire: { $gt: Date.now() } 
+
+  const user = await User.findOne({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpire: { $gt: Date.now() }
   });
 
-  if (!user) { res.status(400); throw new Error('Invalid or expired token'); }
-  
+  if (!user) {
+    res.status(400);
+    throw new Error('Invalid or expired security token');
+  }
+
   user.password = req.body.password;
   user.resetPasswordToken = undefined;
   user.resetPasswordExpire = undefined;
   await user.save();
-  
-  res.status(200).json({ success: true, message: 'Password updated successfully' });
-});
 
+  res.status(200).json({ success: true, message: 'Node credentials updated successfully' });
+});
