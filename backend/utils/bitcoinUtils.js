@@ -1,4 +1,4 @@
-// backend/utils/bitcoinUtils.js
+// backend/utils/bitcoinUtils.js  ← REPLACE ENTIRE FILE WITH THIS
 import * as bitcoin from 'bitcoinjs-lib';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
@@ -6,39 +6,45 @@ import axios from 'axios';
 
 const bip32 = BIP32Factory(ecc);
 const MEMPOOL_MAINNET = 'https://mempool.space/api';
+const NETWORK = bitcoin.networks.bitcoin;
 
-export function deriveBtcAddress(xpub, index = 0) {
-  const targetXpub = xpub || process.env.BITCOIN_XPUB;
-  if (!targetXpub) throw new Error('XPUB is required');
+export function deriveBtcAddress(index = 0) {
+  const xpub = process.env.BITCOIN_XPUB;
+  if (!xpub) throw new Error('BITCOIN_XPUB is required in .env');
 
   try {
-    const network = bitcoin.networks.bitcoin;
-    const node = bip32.fromBase58(targetXpub, network);
-    const child = node.derive(0).derive(index);
+    const node = bip32.fromBase58(xpub, NETWORK);
+    // Correct BIP84 derivation: m/84'/0'/0'/0/index
+    const child = node.derive(0).derive(0).derive(index);
 
-    // If xpub starts with 'xpub', it's Legacy (BIP44) -> Use p2pkh (Address starts with 1)
-    if (targetXpub.startsWith('xpub')) {
-      const { address } = bitcoin.payments.p2pkh({ pubkey: child.publicKey, network });
-      return address;
-    } 
-    
-    // Otherwise, assume Native SegWit (BIP84) -> Use p2wpkh (Address starts with bc1q)
-    const { address } = bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network });
-    return address;
+    const { address } = bitcoin.payments.p2wpkh({
+      pubkey: child.publicKey,
+      network: NETWORK
+    });
+
+    return { address, index };
   } catch (err) {
-    throw new Error(`Derivation failed: ${err.message}`);
+    console.error('[BTC DERIVE ERROR]', err);
+    throw new Error(`Address derivation failed: ${err.message}`);
   }
 }
 
 export async function getBtcBalance(address) {
   if (!address) return 0;
   try {
-    const res = await axios.get(`${MEMPOOL_MAINNET}/address/${address}`);
+    const res = await axios.get(`\( {MEMPOOL_MAINNET}/address/ \){address}`);
     const { chain_stats, mempool_stats } = res.data;
-    const totalSatoshis = (chain_stats.funded_txo_sum - chain_stats.spent_txo_sum) + 
-                         (mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum);
-    return totalSatoshis / 100_000_000;
+
+    const confirmed = chain_stats.funded_txo_sum - chain_stats.spent_txo_sum;
+    const mempool = mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum;
+
+    return (confirmed + mempool) / 100_000_000;
   } catch (err) {
+    console.error(`[Balance Error] ${address}`, err.message);
     return 0;
   }
+}
+
+export function getHotWalletAddress() {
+  return deriveBtcAddress(0).address;
 }

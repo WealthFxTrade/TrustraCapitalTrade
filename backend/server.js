@@ -1,4 +1,4 @@
-// server.js
+// server.js - FINAL CORRECTED VERSION WITH PROPER ADMIN HEALTH ROUTE
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -52,7 +52,9 @@ app.use((req, res, next) => {
 });
 
 // ── SOCKET.IO ───────────────────────────────────────────────
-const io = new Server(httpServer, { cors: { origin: allowedOrigins, credentials: true } });
+const io = new Server(httpServer, { 
+  cors: { origin: allowedOrigins, credentials: true } 
+});
 app.set('io', io);
 
 io.on('connection', (socket) => {
@@ -63,20 +65,31 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => console.log(`[SOCKET] Disconnected: ${socket.id}`));
 });
 
-// ── ROUTES ──────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/admin', adminRoutes);
+// ── PUBLIC KEEP-ALIVE PING ──────────────────────────────────
+app.get('/ping', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Server is alive ✅',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
 
-// ── HEALTH CHECK ────────────────────────────────────────────
+// ── PUBLIC HEALTH CHECK (for Render keep-alive) ─────────────
 app.get('/api/admin/health', (req, res) => {
   res.status(200).json({
     success: true,
     status: 'active',
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
+    message: 'Trustra server is running normally'
   });
 });
+
+// ── ROUTES ──────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // ── 404 HANDLER ─────────────────────────────────────────────
 app.use((req, res) => res.status(404).json({ success: false, message: 'Route not found' }));
@@ -84,13 +97,17 @@ app.use((req, res) => res.status(404).json({ success: false, message: 'Route not
 // ── GLOBAL ERROR HANDLER ────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('[SERVER ERROR]', err);
-  res.status(err.status || 500).json({ success: false, message: err.message || 'Internal server error' });
+  res.status(err.status || 500).json({ 
+    success: false, 
+    message: err.message || 'Internal server error' 
+  });
 });
 
 // ── ENGINES ─────────────────────────────────────────────────
 const startEngines = async () => {
   try {
     console.log('Starting Trustra Engines...');
+    
     // BTC Watcher every 5 minutes
     setInterval(() => {
       watchBtcDeposits(io).catch(err => console.error('[BTC WATCHER ERROR]', err));
@@ -104,12 +121,24 @@ const startEngines = async () => {
   }
 };
 
-// ── INTERNAL KEEP-ALIVE PING ────────────────────────────────
+// ── SELF-PING ───────────────────────────────────────────────
+const SELF_PING_INTERVAL = 10 * 60 * 1000;
+
 setInterval(() => {
-  http.get(`http://localhost:${PORT}/api/admin/health`, res => {
+  const url = `http://localhost:${PORT}/ping`;
+  http.get(url, (res) => {
+    console.log(`[SELF-PING] Status: ${res.statusCode}`);
+  }).on('error', (err) => {
+    console.error('[SELF-PING ERROR]', err.message);
+  });
+}, SELF_PING_INTERVAL);
+
+// ── KEEP-ALIVE PING (now uses public /ping) ─────────────────
+setInterval(() => {
+  http.get(`http://localhost:${PORT}/ping`, res => {
     console.log(`[KEEP-ALIVE] Status: ${res.statusCode}`);
   }).on('error', err => console.error('[KEEP-ALIVE ERROR]', err));
-}, 4 * 60 * 1000); // every 4 minutes
+}, 4 * 60 * 1000);
 
 // ── START SERVER ────────────────────────────────────────────
 const startServer = async () => {
@@ -117,6 +146,7 @@ const startServer = async () => {
     await connectDB();
     httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`✅ Keep-alive endpoint: /ping`);
       startEngines();
     });
   } catch (err) {

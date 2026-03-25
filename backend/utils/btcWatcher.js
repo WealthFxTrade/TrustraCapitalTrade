@@ -1,4 +1,4 @@
-// backend/utils/btcWatcher.js
+// utils/btcWatcher.js - FULLY CORRECTED & UNSHORTENED VERSION
 import Deposit from '../models/Deposit.js';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
@@ -11,98 +11,91 @@ import axios from 'axios';
  */
 export const watchBtcDeposits = async (io) => {
   try {
-    // 1. Identify all 'pending' or 'confirming' deposits
     const activeDeposits = await Deposit.find({
       status: { $in: ['pending', 'confirming'] },
       currency: 'BTC'
-    });
+    }).populate('user');
 
     if (activeDeposits.length === 0) return;
 
-    // 2. FIX: Correct CoinGecko API URL and parameters
-    // Old URL was missing the endpoint path and used '&' instead of '?'
+    // Get current BTC price in EUR
     const priceRes = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur');
-    
-    if (!priceRes.data || !priceRes.data.bitcoin || !priceRes.data.bitcoin.eur) {
-      throw new Error('Failed to retrieve price from CoinGecko API');
-    }
-    
-    const btcPriceEur = parseFloat(priceRes.data.bitcoin.eur);
+    const btcPriceEur = parseFloat(priceRes.data?.bitcoin?.eur) || 0;
 
-    for (let deposit of activeDeposits) {
-      // Logic to fetch balance from blockchain (ensure bitcoinUtils is working)
-      const balance = await getBtcBalance(deposit.address);
+    for (const deposit of activeDeposits) {
+      const receivedBtc = await getBtcBalance(deposit.address);
 
-      // Check if deposit met or exceeded the expected amount
-      if (balance >= deposit.amount && !deposit.locked) {
-        
-        // LOCK: Prevent double-crediting during async loop
+      if (receivedBtc >= (deposit.expectedAmount || 0.00005) && !deposit.locked) {
+
+        // Lock deposit to prevent double crediting
         deposit.locked = true;
-        deposit.amountBTC = balance; // Ensure we store actual received amount
-        deposit.amountEUR = balance * btcPriceEur;
+        deposit.amountBTC = receivedBtc;
+        deposit.amountEUR = receivedBtc * btcPriceEur;
         deposit.status = 'confirmed';
-        deposit.confirmations = 3;
+        deposit.confirmations = 6;
         await deposit.save();
 
-        // 3. CREDIT THE USER
-        const user = await User.findById(deposit.user);
-        
-        if (user) {
-          // Initialize balances if they don't exist
-          if (!user.balances) user.balances = new Map();
+        const user = deposit.user;
+        if (!user) continue;
 
-          const currentEur = user.balances.get('EUR') || 0;
-          const currentBtc = user.balances.get('BTC') || 0;
+        // Update user balances safely
+        if (!user.balances) user.balances = new Map();
 
-          // Update Map values
-          user.balances.set('EUR', currentEur + deposit.amountEUR);
-          user.balances.set('BTC', currentBtc + balance);
-          
-          // Increment total balance
-          user.totalBalance = (user.totalBalance || 0) + deposit.amountEUR;
+        const currentEUR = user.balances.get('EUR') || 0;
+        const currentBTC = user.balances.get('BTC') || 0;
 
-          // 4. ADD TO LEDGER
-          user.ledger.push({
-            amount: deposit.amountEUR,
-            currency: 'EUR',
-            type: 'deposit',
-            status: 'completed',
-            description: `BTC Deposit Confirmed @ €${btcPriceEur.toLocaleString()}/BTC`
+        user.balances.set('EUR', currentEUR + deposit.amountEUR);
+        user.balances.set('BTC', currentBTC + receivedBtc);
+
+        user.totalBalance = (user.totalBalance || 0) + deposit.amountEUR;
+        user.realizedProfit = (user.realizedProfit || 0) + deposit.amountEUR;
+
+        // Add to user ledger
+        user.ledger.push({
+          amount: deposit.amountEUR,
+          currency: 'EUR',
+          type: 'deposit',
+          status: 'completed',
+          address: deposit.address,
+          description: `BTC Deposit Confirmed (${receivedBtc.toFixed(8)} BTC)`,
+          createdAt: new Date()
+        });
+
+        user.markModified('balances');
+        user.markModified('ledger');
+        await user.save();
+
+        // Create unified transaction record
+        await Transaction.create({
+          user: user._id,
+          type: 'deposit',
+          amount: deposit.amountEUR,
+          signedAmount: deposit.amountEUR,
+          currency: 'EUR',
+          status: 'completed',
+          method: 'BTC',
+          walletAddress: deposit.address,
+          description: `BTC Deposit - ${receivedBtc.toFixed(8)} BTC`
+        });
+
+        // Real-time updates via Socket.IO
+        if (io) {
+          io.to(user._id.toString()).emit('balanceUpdate', {
+            totalBalance: user.totalBalance,
+            realizedProfit: user.realizedProfit,
+            balances: Object.fromEntries(user.balances),
+            message: `✅ ${receivedBtc.toFixed(8)} BTC Deposit Confirmed!`
           });
 
-          // CRITICAL: Mark Map as modified for Mongoose
-          user.markModified('balances');
-          await user.save();
-
-          // 5. UNIFIED TRANSACTION RECORD
-          await Transaction.create({
-            user: user._id,
-            type: 'deposit',
-            amount: deposit.amountEUR,
-            signedAmount: deposit.amountEUR,
-            currency: 'EUR',
-            status: 'completed',
-            walletAddress: deposit.address,
-            method: 'crypto'
+          io.to(user._id.toString()).emit('ledgerUpdate', {
+            ledger: user.ledger.slice(-10)
           });
-
-          // 6. REAL-TIME SYNC VIA SOCKET.IO
-          if (io) {
-            // Convert Map to Object for JSON emission
-            const balanceObj = Object.fromEntries(user.balances);
-            
-            io.to(user._id.toString()).emit('balanceUpdate', {
-              balances: balanceObj,
-              totalBalance: user.totalBalance,
-              message: `✅ Deposit of ${balance} BTC Confirmed!`
-            });
-          }
-
-          console.log(`[WATCHER] Success: Credited ${user.username} with €${deposit.amountEUR.toFixed(2)}`);
         }
+
+        console.log(`[WATCHER] ✅ Credited \( {user.username || user._id} with € \){deposit.amountEUR.toFixed(2)}`);
       }
     }
   } catch (error) {
-    console.error('⚠️ [WATCHER] Sync Error:', error.message);
+    console.error('⚠️ [BTC WATCHER ERROR]', error.message);
   }
 };

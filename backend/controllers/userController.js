@@ -1,7 +1,8 @@
-// controllers/userController.js - FULL CLEAN PRODUCTION VERSION
-
+// controllers/userController.js - FULLY CORRECTED & UNSHORTENED VERSION
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
+import Deposit from '../models/Deposit.js';
+import { deriveBtcAddress } from '../utils/bitcoinUtils.js';
 
 /**
  * @route   GET /api/user/profile
@@ -16,14 +17,12 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     throw new Error('User profile not found');
   }
 
-  const formattedUser = {
-    ...user.toObject(),
-    balances: Object.fromEntries(user.balances || new Map()),
-  };
-
   res.status(200).json({
     success: true,
-    user: formattedUser,
+    user: {
+      ...user.toObject(),
+      balances: Object.fromEntries(user.balances || new Map()),
+    },
   });
 });
 
@@ -33,28 +32,23 @@ export const getUserProfile = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getBalances = asyncHandler(async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      res.status(404);
-      throw new Error('User not found');
-    }
-
-    const balances = Object.fromEntries(user.balances || new Map());
-
-    res.status(200).json({
-      success: true,
-      data: {
-        totalBalance: Number(balances.EUR || 0),
-        profitBalance: Number(balances.ROI || 0),
-        availableBalance: Number((balances.EUR || 0) - (balances.LOCKED || 0)),
-        currency: 'EUR'
-      }
-    });
-  } catch (error) {
-    console.error('[GET BALANCES ERROR]', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch balances' });
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
   }
+
+  const balances = Object.fromEntries(user.balances || new Map());
+
+  res.status(200).json({
+    success: true,
+    data: {
+      totalBalance: Number(balances.EUR || 0),
+      profitBalance: Number(balances.ROI || 0),
+      availableBalance: Number((balances.EUR || 0) - (balances.LOCKED || 0)),
+      currency: 'EUR'
+    }
+  });
 });
 
 /**
@@ -63,36 +57,25 @@ export const getBalances = asyncHandler(async (req, res) => {
  * @access  Private
  */
 export const getRecentTransactions = asyncHandler(async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id).select('ledger');
-    if (!user) {
-      res.status(404);
-      throw new Error('User not found');
-    }
-
-    const recent = (user.ledger || [])
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 5);
-
-    const data = recent.length > 0 ? recent : [{
-      _id: "demo1",
-      type: "profit",
-      amount: 12.45,
-      status: "completed",
-      createdAt: new Date(),
-      description: "RIO Midnight Distribution"
-    }];
-
-    res.status(200).json({ success: true, data });
-  } catch (error) {
-    console.error('[GET RECENT TRANSACTIONS ERROR]', error);
-    res.status(500).json({ success: false, message: 'Failed to fetch transactions' });
+  const user = await User.findById(req.user._id).select('ledger');
+  if (!user) {
+    res.status(404);
+    throw new Error('User not found');
   }
+
+  const recent = (user.ledger || [])
+    .sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date))
+    .slice(0, 5);
+
+  res.status(200).json({
+    success: true,
+    data: recent.length > 0 ? recent : []
+  });
 });
 
 /**
  * @route   GET /api/user/deposit-address
- * @desc    Generate real deposit address using your wallet configuration
+ * @desc    Generate UNIQUE BTC address per user using HD wallet (xpub)
  * @access  Private
  */
 export const getDepositAddress = asyncHandler(async (req, res) => {
@@ -104,64 +87,90 @@ export const getDepositAddress = asyncHandler(async (req, res) => {
     throw new Error('User not found');
   }
 
-  try {
-    let address = '';
-    let network = '';
+  if (asset.toUpperCase() !== 'BTC') {
+    return res.status(400).json({
+      success: false,
+      message: 'Only BTC deposit is supported at the moment. ETH support coming soon.'
+    });
+  }
 
-    if (asset.toUpperCase() === 'BTC') {
-      address = process.env.BTC_WALLET_ADDRESS || 'bc1qj4epwlwdzxsst0xeevulxxazcxx5fs64eapxvq';
-      network = 'Bitcoin Mainnet';
-    } 
-    else if (asset.toUpperCase() === 'ETH') {
-      const { Wallet } = require('ethers');
-      const wallet = Wallet.fromPhrase(process.env.ETH_MNEMONIC);
-      address = wallet.address;
-      network = 'Ethereum Mainnet (ERC-20)';
-    } 
-    else {
-      res.status(400);
-      throw new Error('Unsupported asset. Supported: BTC, ETH');
+  try {
+    // Reuse existing address if already generated for this user
+    if (user.btcDepositAddress) {
+      return res.status(200).json({
+        success: true,
+        asset: 'BTC',
+        address: user.btcDepositAddress,
+        network: 'Bitcoin Mainnet (SegWit)',
+        minDeposit: 0.0001,
+        confirmations: 6,
+        message: 'Your personal BTC deposit address',
+        note: 'Send ONLY BTC to this address. All funds go to the platform hot wallet.'
+      });
     }
+
+    // Generate new unique address using next index
+    const nextIndex = (user.lastBtcIndex || 100) + 1;
+    const { address } = deriveBtcAddress(nextIndex);
+
+    // Create pending deposit record with ALL required fields
+    await Deposit.create({
+      user: user._id,
+      currency: 'BTC',
+      address: address,
+      amount: 0,                    // Required field - fixed
+      expectedAmount: 0.0001,
+      status: 'pending',
+      locked: false
+    });
+
+    // Save address to user
+    user.btcDepositAddress = address;
+    user.lastBtcIndex = nextIndex;
+    await user.save();
 
     res.status(200).json({
       success: true,
-      asset: asset.toUpperCase(),
+      asset: 'BTC',
       address,
-      network,
-      message: `Deposit address for ${asset.toUpperCase()} generated successfully`,
-      note: `Send ONLY ${asset.toUpperCase()} to this address. Wrong asset or network will result in permanent loss of funds.`,
-      warning: 'This is a real address. Double-check before sending.'
+      network: 'Bitcoin Mainnet (SegWit)',
+      minDeposit: 0.0001,
+      confirmations: 6,
+      message: 'Your personal BTC deposit address generated successfully',
+      note: 'Send ONLY BTC (any amount above minimum) to this address. Funds will be credited automatically after confirmation.'
     });
 
   } catch (error) {
     console.error('[DEPOSIT ADDRESS ERROR]', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to generate deposit address'
+      message: error.message || 'Failed to generate deposit address. Please try again.'
     });
   }
 });
 
 /**
  * @route   GET /api/user/ledger
- * @desc    Get full user ledger
+ * @desc    Get full user ledger - Fixed to stop spinning
  * @access  Private
  */
 export const getLedger = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select('ledger');
+  const user = await User.findById(req.user._id).select('ledger totalBalance realizedProfit');
 
   if (!user) {
     res.status(404);
-    throw new Error('Ledger data not accessible');
+    throw new Error('User not found');
   }
 
   const sortedLedger = (user.ledger || []).sort((a, b) =>
-    new Date(b.createdAt) - new Date(a.createdAt)
+    new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date)
   );
 
   res.status(200).json({
     success: true,
     data: sortedLedger,
+    totalBalance: user.totalBalance || 0,
+    realizedProfit: user.realizedProfit || 0,
   });
 });
 
@@ -199,8 +208,8 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
     currency,
     type: 'withdrawal',
     status: 'pending',
-    address: address || 'Internal Transfer',
-    description: description || `Withdrawal to ${address || 'internal'}`,
+    address: address || 'Internal',
+    description: description || `Withdrawal request`,
     createdAt: new Date(),
   });
 
@@ -210,8 +219,8 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: 'Withdrawal request submitted',
-    balances: Object.fromEntries(user.balances),
+    message: 'Withdrawal request submitted successfully',
+    remainingBalance: user.balances.get(currency),
   });
 });
 
@@ -222,19 +231,18 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
  */
 export const compoundYield = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-
   if (!user) {
     res.status(404);
     throw new Error('User not found');
   }
 
   const currentRoi = user.balances.get('ROI') || 0;
-  const currentInvested = user.balances.get('INVESTED') || 0;
-
   if (currentRoi < 10) {
     res.status(400);
     throw new Error('Minimum €10 required for compounding');
   }
+
+  const currentInvested = user.balances.get('INVESTED') || 0;
 
   user.balances.set('ROI', 0);
   user.balances.set('INVESTED', currentInvested + currentRoi);
@@ -244,7 +252,7 @@ export const compoundYield = asyncHandler(async (req, res) => {
     currency: 'EUR',
     type: 'compound',
     status: 'completed',
-    description: `Compounded €${currentRoi.toFixed(2)}`,
+    description: `Compounded €${currentRoi.toFixed(2)} into investment`,
     createdAt: new Date(),
   });
 
@@ -255,18 +263,17 @@ export const compoundYield = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Yield compounded successfully',
-    balances: Object.fromEntries(user.balances),
+    newInvested: user.balances.get('INVESTED'),
   });
 });
 
 /**
  * @route   PUT /api/user/profile/update
- * @desc    Update profile
+ * @desc    Update user profile
  * @access  Private
  */
 export const updateProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-
   if (!user) {
     res.status(404);
     throw new Error('User not found');
@@ -282,7 +289,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    message: 'Profile updated',
+    message: 'Profile updated successfully',
     user: { ...user.toObject(), balances: Object.fromEntries(user.balances || new Map()) },
   });
 });

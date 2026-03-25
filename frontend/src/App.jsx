@@ -1,7 +1,5 @@
-/**
- * TRUSTRA CAPITAL TRADE - MAIN APPLICATION ROUTER
- * Final Corrected Version: Includes all User & Admin nested routes.
- */
+// src/App.jsx - FULLY CORRECTED & UNSHORTENED VERSION (March 2026)
+// Clean routing, proper nesting, and admin access fixed
 
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
@@ -22,7 +20,7 @@ import UserDashboard from './pages/Dashboard/Dashboard';
 import Deposit from './pages/Dashboard/Deposit';
 import Withdrawal from './pages/Dashboard/WithdrawalForm';
 import UserProfile from './pages/Dashboard/Profile';
-import Ledger from './pages/Dashboard/Ledger'; // ✅ Matches your Ledger.jsx file
+import Ledger from './pages/Dashboard/Ledger';
 
 // ── ADMIN DASHBOARD & LAYOUT ─────────────────────────────────
 import AdminLayout from './pages/Admin/AdminLayout';
@@ -37,43 +35,52 @@ import AdminSupport from './pages/Admin/AdminSupport';
 function App() {
   return (
     <>
-      {/* Global Terminal-style Toast Notifications */}
+      {/* Global Toast Notifications - Terminal Style */}
       <Toaster
         position="top-right"
         toastOptions={{
           style: {
             background: '#020408',
             color: '#fff',
-            border: '1px solid rgba(255,255,255,0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
             fontFamily: 'monospace',
-            fontSize: '12px',
+            fontSize: '13px',
+            padding: '12px 16px',
+          },
+          success: {
+            iconTheme: { primary: '#eab308', secondary: '#020408' },
+          },
+          error: {
+            iconTheme: { primary: '#ef4444', secondary: '#020408' },
           },
         }}
       />
 
       <Routes>
-        {/* ── PUBLIC ROUTES ── */}
+        {/* ── PUBLIC ROUTES ──────────────────────────────────────── */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Signup />} />
 
-        {/* ── USER SECURE NODE ROUTES (PROTECTED) ── */}
+        {/* ── USER SECURE NODE ROUTES (Protected) ─────────────────── */}
         <Route path="/dashboard" element={<ProtectedRoute />}>
-          {/* UserLayout provides the Sidebar/Terminal UI */}
+          {/* UserLayout wraps all user dashboard pages with sidebar */}
           <Route element={<UserLayout />}>
             <Route index element={<UserDashboard />} />
             <Route path="deposit" element={<Deposit />} />
             <Route path="withdrawal" element={<Withdrawal />} />
             <Route path="profile" element={<UserProfile />} />
-            <Route path="ledger" element={<Ledger />} /> {/* ✅ Matches Sidebar Link */}
+            <Route path="ledger" element={<Ledger />} />
           </Route>
         </Route>
 
-        {/* ── ADMIN CONTROL CENTER ROUTES (ADMIN ONLY) ── */}
+        {/* ── ADMIN CONTROL CENTER ROUTES (Admin Only) ───────────── */}
         <Route path="/admin" element={<AdminRoute />}>
+          {/* AdminLayout wraps all admin pages */}
           <Route element={<AdminLayout />}>
-            {/* Default admin landing */}
+            {/* Default redirect when visiting /admin */}
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
+            
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="withdrawals" element={<AdminWithdrawals />} />
@@ -84,8 +91,7 @@ function App() {
           </Route>
         </Route>
 
-        {/* ── CATCH-ALL REDIRECT ── */}
-        {/* If a route is missing, redirect to home instead of showing a blank page */}
+        {/* ── CATCH-ALL: Redirect unknown routes to Landing Page ─── */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
@@ -93,4 +99,3 @@ function App() {
 }
 
 export default App;
-

@@ -1,3 +1,4 @@
+// routes/adminRoutes.js - FULLY CORRECTED VERSION
 import express from 'express';
 import { protect, admin } from '../middleware/authMiddleware.js';
 import {
@@ -13,19 +14,18 @@ import {
 
 const router = express.Router();
 
-// User & Node Management
+// ── PUBLIC HEALTH CHECK (No auth required for keep-alive) ─────────────────────
+router.get('/health', getSystemHealth);   // ← Made public
+
+// ── PROTECTED ADMIN ROUTES ───────────────────────────────────────────────────
 router.get('/users', protect, admin, getUsers);
 router.put('/users/:id/balance', protect, admin, updateUserBalance);
 router.put('/users/:id/plan', protect, admin, updateUserPlan);
 
-// Extractions
 router.get('/withdrawals', protect, admin, getWithdrawals);
 router.patch('/withdrawal/:id', protect, admin, processWithdrawal);
 
-// Oversight & Infrastructure
 router.get('/ledger', protect, admin, getGlobalLedger);
-router.get('/health', protect, admin, getSystemHealth);
 router.post('/trigger-roi', protect, admin, triggerManualRoi);
 
 export default router;
-
