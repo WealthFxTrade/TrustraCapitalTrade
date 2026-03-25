@@ -1,4 +1,4 @@
-// src/pages/Dashboard/Dashboard.jsx - FULLY CORRECTED & UNSHORTENED FINAL VERSION
+// src/pages/Dashboard/Dashboard.jsx - FULLY UNSHORTENED & CORRECTED FINAL VERSION
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -319,7 +319,7 @@ export default function Dashboard() {
               </button>
             ))}
 
-            {/* ADMIN PANEL BUTTON - ONLY VISIBLE WHEN ROLE IS ADMIN */}
+            {/* ADMIN PANEL BUTTON - ONLY VISIBLE TO ADMINS */}
             {user?.role === 'admin' && (
               <button
                 onClick={() => navigate('/admin')}

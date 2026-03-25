@@ -1,4 +1,4 @@
-// src/pages/Admin/AdminDashboard.jsx - FULLY CORRECTED & UNSHORTENED VERSION
+// src/pages/Admin/AdminDashboard.jsx - PROFESSIONAL ADMIN PANEL INTERFACE
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
@@ -6,20 +6,20 @@ import {
   Wallet,
   Clock,
   Zap,
-  RefreshCw,
-  Loader2,
   TrendingUp,
   ShieldCheck,
+  RefreshCw,
+  Loader2,
   AlertTriangle,
 } from 'lucide-react';
 import api from '../../api/api';
-import SystemHealth from './SystemHealth';
 import toast from 'react-hot-toast';
+import SystemHealth from './SystemHealth';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState({
     totalUsers: 0,
-    totalDeposits: 0,
+    totalBalance: 0,
     pendingWithdrawals: 0,
     activeNodes: 1,
   });
@@ -34,38 +34,27 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      // Fetch users (we already have this route)
+      // Get users
       const usersRes = await api.get('/api/admin/users');
-      
-      // Fetch health for system stats
-      const healthRes = await api.get('/api/admin/health');
+      const userList = usersRes.data.users || usersRes.data.data || [];
+      setUsers(userList);
 
-      let userList = [];
-      if (usersRes.data?.success) {
-        userList = usersRes.data.users || usersRes.data.data || [];
-        setUsers(userList);
-      }
-
-      // Calculate basic stats from users
+      // Calculate stats
       const totalUsers = userList.length;
-      const totalDeposits = userList.reduce((sum, user) => {
+      const totalBalance = userList.reduce((sum, user) => {
         return sum + (user.totalBalance || user.balances?.EUR || 0);
       }, 0);
 
-      const pendingWithdrawals = 0; // You can extend this later when withdrawal endpoint is ready
-
       setStats({
         totalUsers,
-        totalDeposits: Math.round(totalDeposits),
-        pendingWithdrawals,
+        totalBalance: Math.round(totalBalance),
+        pendingWithdrawals: 0, // Update when withdrawal route is ready
         activeNodes: 1,
       });
-
     } catch (err) {
       console.error('[ADMIN DASHBOARD ERROR]', err);
-      const msg = err.response?.data?.message || 'Failed to load admin dashboard';
-      setError(msg);
-      toast.error(msg);
+      setError('Failed to load dashboard data');
+      toast.error('Failed to load admin dashboard');
     } finally {
       setLoading(false);
     }
@@ -87,12 +76,10 @@ export default function AdminDashboard() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
           <div>
             <div className="flex items-center gap-3 mb-4 text-yellow-500">
-              <ShieldCheck size={20} className="animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-[0.5em]">
-                COMMAND CENTER v8.6
-              </span>
+              <ShieldCheck size={24} className="animate-pulse" />
+              <span className="text-[10px] font-black uppercase tracking-[0.5em]">COMMAND CENTER</span>
             </div>
-            <h1 className="text-5xl font-black italic uppercase tracking-tighter leading-none">
+            <h1 className="text-5xl font-black italic uppercase tracking-tighter">
               System <span className="text-yellow-500">Oversight</span>
             </h1>
           </div>
@@ -100,108 +87,62 @@ export default function AdminDashboard() {
           <button
             onClick={fetchDashboardData}
             disabled={loading}
-            className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+            className="flex items-center gap-3 px-8 py-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all text-xs font-black uppercase tracking-widest disabled:opacity-50"
           >
-            {loading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <RefreshCw size={16} />
-            )}
-            {loading ? 'SYNCHRONIZING...' : 'REFRESH PROTOCOL'}
+            {loading ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+            {loading ? 'SYNCHRONIZING...' : 'REFRESH ALL'}
           </button>
         </div>
 
-        {/* Stats Grid */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          <StatCard
-            title="GLOBAL USERS"
-            value={stats.totalUsers}
-            icon={<Users />}
-            color="yellow"
-          />
-          <StatCard
-            title="TOTAL DEPOSITS"
-            value={`€${stats.totalDeposits.toLocaleString()}`}
-            icon={<Wallet />}
-            color="yellow"
-          />
-          <StatCard
-            title="PENDING PAYOUTS"
-            value={stats.pendingWithdrawals}
-            icon={<Clock />}
-            color="red"
-          />
-          <StatCard
-            title="ACTIVE NODES"
-            value={stats.activeNodes}
-            icon={<Zap />}
-            color="green"
-          />
+          <StatCard title="TOTAL USERS" value={stats.totalUsers} icon={<Users />} color="yellow" />
+          <StatCard title="TOTAL BALANCE" value={`€${stats.totalBalance.toLocaleString()}`} icon={<Wallet />} color="yellow" />
+          <StatCard title="PENDING WITHDRAWALS" value={stats.pendingWithdrawals} icon={<Clock />} color="red" />
+          <StatCard title="ACTIVE NODES" value={stats.activeNodes} icon={<Zap />} color="green" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* User Registry */}
           <div className="lg:col-span-2">
-            <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8 backdrop-blur-md">
-              <div className="flex items-center justify-between mb-8">
-                <h3 className="text-xs font-black uppercase tracking-widest text-white/40">
-                  IDENTITY REGISTRY
-                </h3>
-
-                <div className="relative w-72">
-                  <input
-                    type="text"
-                    placeholder="Search username or email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-black/60 border border-white/10 rounded-full pl-10 pr-4 py-3 text-sm focus:border-yellow-500/50 outline-none"
-                  />
-                </div>
+            <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-xs font-black uppercase tracking-widest text-white/40">IDENTITY REGISTRY</h3>
+                <input
+                  type="text"
+                  placeholder="Search users..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="bg-black/60 border border-white/10 rounded-full px-5 py-3 text-sm w-80 focus:border-yellow-500 outline-none"
+                />
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-white/5 text-[9px] font-black uppercase tracking-widest text-white/30">
-                      <th className="pb-5 text-left">USERNAME</th>
-                      <th className="pb-5 text-left">EMAIL</th>
+                      <th className="pb-5">USERNAME</th>
+                      <th className="pb-5">EMAIL</th>
                       <th className="pb-5 text-right">BALANCE (EUR)</th>
                       <th className="pb-5 text-center">KYC</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5 text-sm">
+                  <tbody className="divide-y divide-white/5">
                     {loading ? (
-                      <tr>
-                        <td colSpan="4" className="py-20 text-center">
-                          <Loader2 className="animate-spin mx-auto text-yellow-500" size={40} />
-                        </td>
-                      </tr>
-                    ) : error ? (
-                      <tr>
-                        <td colSpan="4" className="py-20 text-center text-rose-400">
-                          <AlertTriangle size={48} className="mx-auto mb-4" />
-                          {error}
-                        </td>
-                      </tr>
+                      <tr><td colSpan="4" className="py-20 text-center"><Loader2 className="animate-spin mx-auto" size={40} /></td></tr>
                     ) : filteredUsers.length === 0 ? (
-                      <tr>
-                        <td colSpan="4" className="py-20 text-center text-gray-500">
-                          No users found
-                        </td>
-                      </tr>
+                      <tr><td colSpan="4" className="py-20 text-center text-gray-500">No users found</td></tr>
                     ) : (
                       filteredUsers.slice(0, 10).map((user) => (
-                        <tr key={user._id} className="hover:bg-white/5 transition-colors">
+                        <tr key={user._id} className="hover:bg-white/5">
                           <td className="py-5 font-bold">{user.username}</td>
-                          <td className="py-5 text-gray-400 text-sm">{user.email}</td>
+                          <td className="py-5 text-gray-400">{user.email}</td>
                           <td className="py-5 text-right font-mono text-yellow-400">
                             €{(user.totalBalance || user.balances?.EUR || 0).toLocaleString()}
                           </td>
                           <td className="py-5 text-center">
                             <span className={`text-xs px-4 py-1 rounded-full border ${
-                              user.kycStatus === 'verified' 
-                                ? 'border-emerald-500 text-emerald-400' 
-                                : 'border-white/20 text-gray-500'
+                              user.kycStatus === 'verified' ? 'border-emerald-500 text-emerald-400' : 'border-gray-500 text-gray-400'
                             }`}>
                               {user.kycStatus?.toUpperCase() || 'UNSUBMITTED'}
                             </span>
@@ -215,7 +156,7 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* System Health Sidebar */}
+          {/* System Health */}
           <div className="lg:col-span-1">
             <SystemHealth />
           </div>
@@ -227,26 +168,21 @@ export default function AdminDashboard() {
 
 // Reusable Stat Card
 function StatCard({ title, value, icon, color }) {
-  const colors = {
-    yellow: 'border-yellow-500/30 text-yellow-400 bg-yellow-500/5',
-    red: 'border-red-500/30 text-red-400 bg-red-500/5',
-    green: 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5',
+  const colorMap = {
+    yellow: 'border-yellow-500/30 text-yellow-400',
+    red: 'border-red-500/30 text-red-400',
+    green: 'border-emerald-500/30 text-emerald-400',
   };
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`p-8 rounded-[2.5rem] border backdrop-blur-sm ${colors[color]}`}
+      className={`p-8 rounded-[2.5rem] border backdrop-blur-sm ${colorMap[color]}`}
     >
-      <div className="flex justify-between items-start mb-6">
-        <div className="text-4xl opacity-80">{icon}</div>
-      </div>
-      <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-60">{title}</p>
+      <div className="text-5xl mb-6 opacity-80">{icon}</div>
+      <p className="text-xs font-black uppercase tracking-widest mb-1 opacity-60">{title}</p>
       <h3 className="text-5xl font-black tracking-tighter">{value}</h3>
-      <div className="mt-6 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest opacity-50">
-        <TrendingUp size={14} /> LIVE
-      </div>
     </motion.div>
   );
 }
