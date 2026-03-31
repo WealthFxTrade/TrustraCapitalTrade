@@ -1,54 +1,95 @@
-import axios from 'axios';
-import { BASE_API_URL } from '../constants/api';
+// src/api/api.js
+import api from '../constants/api';
 
 /**
- * TRUSTRA CAPITAL API INSTANCE
- * Configured with the Render URL from constants/api.js
+ * ── GENERIC SAFE REQUEST WRAPPER ──
+ * Prevents UI freezing when backend is down
  */
-const api = axios.create({
-  baseURL: BASE_API_URL,
-  timeout: 15000,
-  withCredentials: true, // Necessary for cross-origin session/cookie support
-});
+const safeRequest = async (requestFn) => {
+  try {
+    const response = await requestFn();
+    return {
+      success: true,
+      data: response.data,
+    };
+  } catch (error) {
+    console.error('API FAILURE:', error.message || error);
 
-// Attach JWT token to every request from LocalStorage
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    
-    // FIXED: Cleaned up the template literal for logging in Termux/Browser
-    console.log(`[API →] ${config.method?.toUpperCase()} ${config.url} | Token: ${!!token}`);
-    
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-/**
- * Response Interceptor
- * Handles 401 Unauthorized globally by purging local session
- */
-api.interceptors.response.use(
-  (res) => res,
-  (error) => {
-    const status = error.response ? error.response.status : null;
-
-    if (status === 401) {
-      console.error('[API] 401 Unauthorized - Purging token from registry');
-      localStorage.removeItem('token');
-      
-      // Prevent infinite redirect loops if already on the login page
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
-    }
-    
-    return Promise.reject(error);
+    return {
+      success: false,
+      error: error.message || 'Service unavailable',
+    };
   }
-);
+};
 
+/**
+ * ─────────────────────────────────────────
+ * IDENTITY & USER MANAGEMENT
+ * ─────────────────────────────────────────
+ */
+export const fetchUsers = () =>
+  safeRequest(() => api.get('/admin/users'));
+
+export const fetchUserDetail = (id) =>
+  safeRequest(() => api.get(`/admin/users/${id}`));
+
+export const updateUser = (id, data) =>
+  safeRequest(() => api.patch(`/admin/users/${id}`, data));
+
+export const deleteUser = (id) =>
+  safeRequest(() => api.delete(`/admin/users/${id}`));
+
+/**
+ * ─────────────────────────────────────────
+ * FINANCIAL & LEDGER OPERATIONS
+ * ─────────────────────────────────────────
+ */
+export const fetchWithdrawals = () =>
+  safeRequest(() => api.get('/admin/withdrawals'));
+
+export const updateWithdrawalStatus = (id, status) =>
+  safeRequest(() =>
+    api.patch(`/admin/withdrawals/${id}`, { status })
+  );
+
+export const fetchDeposits = () =>
+  safeRequest(() => api.get('/admin/deposits'));
+
+export const updateDepositStatus = (id, status) =>
+  safeRequest(() =>
+    api.patch(`/admin/deposits/${id}`, { status })
+  );
+
+/**
+ * ─────────────────────────────────────────
+ * YIELD & RIO OPERATIONS
+ * ─────────────────────────────────────────
+ */
+export const distributeProfit = (data) =>
+  safeRequest(() =>
+    api.post('/admin/distribute-profit', data)
+  );
+
+export const triggerManualRoi = () =>
+  safeRequest(() => api.post('/admin/trigger-roi'));
+
+/**
+ * ─────────────────────────────────────────
+ * SYSTEM & COMPLIANCE
+ * ─────────────────────────────────────────
+ */
+export const fetchKycQueue = () =>
+  safeRequest(() => api.get('/admin/kyc-queue'));
+
+export const verifyKyc = (id, status) =>
+  safeRequest(() =>
+    api.patch(`/admin/kyc/${id}`, { status })
+  );
+
+export const fetchSystemHealth = () =>
+  safeRequest(() => api.get('/admin/health'));
+
+/**
+ * Export base API if needed
+ */
 export default api;
-

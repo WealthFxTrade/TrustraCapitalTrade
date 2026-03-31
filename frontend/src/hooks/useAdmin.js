@@ -1,26 +1,29 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { request } from '../api/api';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import api from '@/api/api';
 
+// GET PENDING WITHDRAWALS
 export const usePendingWithdrawals = () => {
-  return useQuery(['pendingWithdrawals'], () => request('/transactions/pending-withdrawals', 'GET', null, localStorage.getItem('token')));
+  return useQuery({
+    queryKey: ['pendingWithdrawals'],
+    queryFn: async () => {
+      const res = await api.get('/transactions/pending-withdrawals');
+      return res.data;
+    },
+  });
 };
 
+// APPROVE WITHDRAWAL
 export const useApproveWithdrawal = () => {
-  const queryClient = useQueryClient();
-  return useMutation(
-    ({ id, txHash }) => request(`/admin/withdrawals/${id}/approve`, 'POST', { txHash }, localStorage.getItem('token')),
-    {
-      onSuccess: () => queryClient.invalidateQueries(['pendingWithdrawals']),
-    }
-  );
+  return useMutation({
+    mutationFn: ({ id, txHash }) =>
+      api.post(`/admin/withdrawals/${id}/approve`, { txHash }),
+  });
 };
 
+// REJECT WITHDRAWAL
 export const useRejectWithdrawal = () => {
-  const queryClient = useQueryClient();
-  return useMutation(
-    ({ id, reason }) => request(`/admin/withdrawals/${id}/reject`, 'POST', { reason }, localStorage.getItem('token')),
-    {
-      onSuccess: () => queryClient.invalidateQueries(['pendingWithdrawals']),
-    }
-  );
+  return useMutation({
+    mutationFn: ({ id, reason }) =>
+      api.post(`/admin/withdrawals/${id}/reject`, { reason }),
+  });
 };

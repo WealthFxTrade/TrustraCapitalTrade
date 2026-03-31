@@ -1,286 +1,253 @@
-// src/pages/Dashboard/Deposit.jsx - FULLY CORRECTED & UNSHORTENED VERSION
+// src/pages/Dashboard/Deposit.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import toast from 'react-hot-toast';
 import {
-  Zap,
-  PlusCircle,
-  History,
-  Repeat,
-  LogOut,
-  Copy,
-  Check,
-  Loader2,
-  ShieldCheck,
-  AlertTriangle,
-  RefreshCw,
-  ChevronLeft,
-  Globe,
+  LayoutDashboard, ArrowDownLeft, ArrowUpRight, History, LogOut,
+  Copy, Check, Loader2, ShieldCheck, AlertTriangle, Wallet, Info, Globe, Building2
 } from 'lucide-react';
-import { motion } from 'framer-motion';
-import api from '../../api/api';
+import { motion, AnimatePresence } from 'framer-motion';
+import api, { API_ENDPOINTS } from '../../constants/api';
 import { useAuth } from '../../context/AuthContext';
+
+function SidebarLink({ icon: Icon, label, active = false, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all w-full text-left group ${
+        active
+          ? 'bg-emerald-600 text-black shadow-lg shadow-emerald-600/20'
+          : 'text-gray-400 hover:bg-white/5 hover:text-white'
+      }`}
+    >
+      <Icon size={18} className={active ? 'text-black' : 'group-hover:text-emerald-500'} />
+      <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+    </button>
+  );
+}
 
 export default function Deposit() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isAuthenticated, initialized } = useAuth();
 
-  const [asset, setAsset] = useState('BTC');
-  const [depositAddress, setDepositAddress] = useState(null);
-  const [minDeposit, setMinDeposit] = useState('0.0001');
-  const [confirmations, setConfirmations] = useState('6');
-  const [network, setNetwork] = useState('Bitcoin Mainnet (SegWit)');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [method, setMethod] = useState('crypto');
+  const [asset, setAsset] = useState('USDT');
+  const [depositData, setDepositData] = useState({ address: '', memo: '' });
+  const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const loadDepositAddress = useCallback(async () => {
-    if (!user) return;
-
+    if (!isAuthenticated || method !== 'crypto') return;
     setLoading(true);
-    setError(null);
-
     try {
-      const res = await api.get(`/api/user/deposit-address?asset=${asset}`);
-
-      if (res.data?.success && res.data?.address) {
-        setDepositAddress(res.data.address);
-        setMinDeposit(res.data.minDeposit || '0.0001');
-        setConfirmations(res.data.confirmations || '6');
-        setNetwork(res.data.network || 'Bitcoin Mainnet (SegWit)');
-
-        toast.success(`✅ ${asset} deposit address loaded successfully`, { duration: 4000 });
-      } else {
-        throw new Error(res.data?.message || 'Failed to generate deposit address');
+      // Hits: GET /user/deposit-address?asset=BTC
+      const res = await api.get(`${API_ENDPOINTS.USER.UPDATE.replace('update', 'deposit-address')}?asset=${asset}`);
+      if (res.data?.success) {
+        setDepositData({
+          address: res.data.address,
+          memo: res.data.memo || ''
+        });
       }
     } catch (err) {
-      console.error('[DEPOSIT ADDRESS ERROR]', err);
-      const msg = err.response?.data?.message || 
-                 err.message || 
-                 'Failed to connect to deposit gateway. Please try again.';
-      setError(msg);
-      toast.error(msg);
+      toast.error('Vault Sync Failed: BTC Node Offline');
     } finally {
       setLoading(false);
     }
-  }, [user, asset]);
+  }, [isAuthenticated, asset, method]);
 
   useEffect(() => {
-    loadDepositAddress();
-  }, [loadDepositAddress]);
+    if (initialized) {
+      if (!isAuthenticated) navigate('/login');
+      else loadDepositAddress();
+    }
+  }, [initialized, isAuthenticated, loadDepositAddress, navigate]);
 
-  const copyToClipboard = async () => {
-    if (!depositAddress) return;
-
+  const copyToClipboard = async (text) => {
     try {
-      await navigator.clipboard.writeText(depositAddress);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
-      toast.success('Address copied to clipboard!', { icon: '📋' });
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      toast.error('Failed to copy address');
+      toast.success('Address Copied to Secure Clipboard');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      toast.error('Clipboard Access Denied');
     }
   };
 
+  if (!initialized || !user) {
+    return (
+      <div className="min-h-screen bg-[#020408] flex items-center justify-center">
+        <Loader2 className="animate-spin text-emerald-500" size={48} />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen bg-[#020408] text-white font-sans selection:bg-yellow-500/20">
-      {/* Sidebar */}
-      <aside className="w-80 border-r border-white/5 bg-black/50 backdrop-blur-xl p-8 hidden lg:flex flex-col sticky top-0 h-screen overflow-y-auto">
-        <div className="flex items-center gap-3 mb-16 px-4">
-          <div className="bg-yellow-500 p-2 rounded-xl text-black shadow-lg">
-            <Zap size={22} fill="currentColor" />
-          </div>
-          <span className="text-2xl font-black italic tracking-tighter uppercase">
-            Trustra <span className="text-white/50 font-light">Vault</span>
-          </span>
+    <div className="flex min-h-screen bg-[#020408] text-white overflow-hidden font-sans">
+      {/* ── DESKTOP SIDEBAR ── */}
+      <aside className="hidden lg:flex w-80 bg-[#0a0c10] border-r border-white/5 p-8 flex-col h-screen">
+        <div className="flex items-center gap-3 mb-16 cursor-pointer" onClick={() => navigate('/')}>
+          <ShieldCheck className="text-emerald-500" size={32} />
+          <h1 className="text-2xl font-black tracking-tighter uppercase italic">Trustra</h1>
         </div>
-
         <nav className="flex-1 space-y-2">
-          <a href="/dashboard" className="flex items-center gap-4 px-5 py-4 rounded-2xl text-gray-400 hover:bg-white/5 hover:text-white transition-all">
-            <PlusCircle size={18} /> Terminal
-          </a>
-          <a href="/dashboard/deposit" className="flex items-center gap-4 px-5 py-4 rounded-2xl bg-yellow-500 text-black shadow-xl shadow-yellow-500/20">
-            <PlusCircle size={18} className="text-black" /> Inbound
-          </a>
-          <a href="/dashboard/withdrawal" className="flex items-center gap-4 px-5 py-4 rounded-2xl text-gray-400 hover:bg-white/5 hover:text-white transition-all">
-            <Repeat size={18} /> Outbound
-          </a>
-          <a href="/dashboard/ledger" className="flex items-center gap-4 px-5 py-4 rounded-2xl text-gray-400 hover:bg-white/5 hover:text-white transition-all">
-            <History size={18} /> Ledger
-          </a>
+          <SidebarLink icon={LayoutDashboard} label="Portfolio" onClick={() => navigate('/dashboard')} />
+          <SidebarLink icon={ArrowDownLeft} label="Capital Injection" active onClick={() => navigate('/dashboard/deposit')} />
+          <SidebarLink icon={ArrowUpRight} label="Asset Withdrawal" onClick={() => navigate('/dashboard/withdrawal')} />
+          <SidebarLink icon={History} label="Audit History" onClick={() => navigate('/dashboard/ledger')} />
         </nav>
-
-        <button
-          onClick={logout}
-          className="mt-auto flex items-center gap-4 px-5 py-4 text-gray-500 hover:text-rose-500 transition-all"
-        >
-          <LogOut size={18} />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Terminate Session</span>
+        <button onClick={logout} className="mt-auto flex items-center gap-4 px-6 py-4 text-gray-500 hover:text-rose-400 transition-all border-t border-white/5 pt-8">
+          <LogOut size={20} />
+          <span className="text-[10px] font-black uppercase tracking-widest">End Session</span>
         </button>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-6 lg:p-12 pt-28 lg:pt-32">
-        <div className="max-w-5xl mx-auto space-y-12">
-          {/* Header */}
-          <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8">
-            <div>
-              <div className="flex items-center gap-3 mb-3 text-yellow-500/80">
-                <Globe size={18} />
-                <span className="text-[10px] font-black uppercase tracking-[0.5em]">Zurich Secure Gateway • v2.5.3</span>
-              </div>
-              <h1 className="text-5xl lg:text-6xl font-black italic uppercase tracking-tighter leading-none">
-                Deposit <span className="text-yellow-500">Assets</span>
-              </h1>
-            </div>
+      {/* ── MAIN CONTENT ── */}
+      <main className="flex-1 overflow-y-auto h-screen p-6 lg:p-12 space-y-12">
+        <header className="flex justify-between items-center">
+          <div>
+            <h2 className="text-2xl font-black tracking-tighter uppercase italic leading-none">Capital Injection</h2>
+            <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">Node Security: SSL v3 Encrypted</p>
+          </div>
+          <div className="hidden sm:flex items-center gap-3 px-4 py-2 bg-emerald-500/5 border border-emerald-500/20 rounded-full">
+            <Globe size={12} className="text-emerald-500" />
+            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500">Global Liquidity Pool Active</span>
+          </div>
+        </header>
 
+        {/* Toggle Protocol */}
+        <div className="flex p-1.5 bg-[#0a0c10] border border-white/5 rounded-2xl max-w-sm">
+          {['crypto', 'bank'].map((type) => (
             <button
-              onClick={loadDepositAddress}
-              disabled={loading}
-              className="flex items-center gap-3 px-8 py-4 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition-all disabled:opacity-50"
+              key={type}
+              onClick={() => setMethod(type)}
+              className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                method === type ? 'bg-emerald-600 text-black shadow-lg' : 'text-gray-500 hover:text-white'
+              }`}
             >
-              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-              <span className="text-[10px] font-black uppercase tracking-widest">
-                {loading ? 'Generating...' : 'Refresh Address'}
-              </span>
+              {type === 'crypto' ? 'Digital Assets' : 'Fiat Wire'}
             </button>
-          </header>
+          ))}
+        </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-10 lg:gap-12">
-            {/* Left: Protocol Specs & Warnings */}
-            <div className="lg:col-span-2 space-y-8">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-8 bg-white/5 border border-white/10 rounded-[2.5rem]"
-              >
-                <h3 className="text-xs font-black uppercase tracking-widest text-yellow-500 mb-6 flex items-center gap-3">
-                  <ShieldCheck size={18} /> Deposit Protocol Specs
-                </h3>
-                <ul className="space-y-6 text-sm">
-                  <li className="flex justify-between border-b border-white/5 pb-4">
-                    <span className="text-gray-400">Minimum Deposit</span>
-                    <span className="font-black text-yellow-400">{minDeposit} {asset}</span>
-                  </li>
-                  <li className="flex justify-between border-b border-white/5 pb-4">
-                    <span className="text-gray-400">Confirmations Required</span>
-                    <span className="font-black">{confirmations}</span>
-                  </li>
-                  <li className="flex justify-between border-b border-white/5 pb-4">
-                    <span className="text-gray-400">Supported Network</span>
-                    <span className="font-black text-emerald-400">{network}</span>
-                  </li>
-                  <li className="flex justify-between">
-                    <span className="text-gray-400">Fees</span>
-                    <span className="font-black">Network only (no platform fee)</span>
-                  </li>
-                </ul>
-              </motion.div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          {/* ── LEFT: INTERFACE ── */}
+          <div className="lg:col-span-7">
+            <AnimatePresence mode="wait">
+              {method === 'crypto' ? (
+                <motion.div key="crypto" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+                  <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-10 flex flex-col items-center gap-8 relative overflow-hidden">
+                    <div className="bg-white p-6 rounded-3xl shadow-2xl relative z-10">
+                      {loading ? (
+                        <div className="w-52 h-52 flex items-center justify-center bg-black rounded-xl">
+                          <Loader2 className="animate-spin text-emerald-500" size={40} />
+                        </div>
+                      ) : (
+                        <QRCodeSVG value={depositData.address || "Trustra"} size={208} level="H" />
+                      )}
+                    </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-8 bg-rose-900/10 border border-rose-700/30 rounded-[2.5rem]"
-              >
-                <div className="flex gap-4">
-                  <AlertTriangle className="text-rose-500 mt-1" size={24} />
-                  <div>
-                    <h4 className="font-black text-rose-400 mb-2">CRITICAL SECURITY NOTICE</h4>
-                    <p className="text-sm text-rose-300/90 leading-relaxed">
-                      Send <strong>ONLY {asset}</strong> to this address.<br />
-                      Wrong asset or network = <strong>permanent loss</strong> of funds.
-                    </p>
+                    <div className="flex gap-2 w-full">
+                      {['USDT', 'BTC', 'ETH'].map((coin) => (
+                        <button
+                          key={coin}
+                          onClick={() => setAsset(coin)}
+                          className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${
+                            asset === coin ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500' : 'border-white/5 text-gray-500'
+                          }`}
+                        >
+                          {coin}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="w-full space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">Public Vault Address ({asset})</label>
+                        <div className="bg-black border border-white/10 p-5 rounded-2xl flex items-center justify-between group hover:border-emerald-500/50 transition-all">
+                          <span className="text-[11px] font-mono text-gray-300 break-all select-all">{depositData.address || 'Generating...'}</span>
+                          <button onClick={() => copyToClipboard(depositData.address)} className="p-2 text-emerald-500 hover:scale-110 transition-transform">
+                            {copied ? <Check size={18} /> : <Copy size={18} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {depositData.memo && (
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-rose-500 ml-2 italic">Mandatory Payment ID (MEMO)</label>
+                          <div className="bg-rose-500/5 border border-rose-500/20 p-5 rounded-2xl flex items-center justify-between">
+                            <span className="text-sm font-black tracking-widest text-white">{depositData.memo}</span>
+                            <button onClick={() => copyToClipboard(depositData.memo)} className="p-2 text-rose-500"><Copy size={18} /></button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            </div>
-
-            {/* Right: QR + Address */}
-            <div className="lg:col-span-3">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-[#0A0C10] border border-white/8 rounded-[3rem] p-10 lg:p-14 relative overflow-hidden"
-              >
-                {loading ? (
-                  <div className="py-32 flex flex-col items-center justify-center gap-6">
-                    <Loader2 size={56} className="text-yellow-500 animate-spin" />
-                    <p className="text-yellow-500/70 font-black uppercase tracking-widest text-sm">
-                      Generating secure deposit address...
-                    </p>
+                </motion.div>
+              ) : (
+                <motion.div key="bank" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-10 space-y-8">
+                  <div className="flex items-center gap-4 text-emerald-500">
+                    <Building2 size={32} />
+                    <h3 className="text-xl font-black uppercase italic tracking-tighter">Institutional Wire (SEPA/SWIFT)</h3>
                   </div>
-                ) : error ? (
-                  <div className="py-32 text-center">
-                    <AlertTriangle size={64} className="text-rose-500 mx-auto mb-6" />
-                    <p className="text-rose-400 text-xl mb-8">{error}</p>
-                    <button
-                      onClick={loadDepositAddress}
-                      className="px-12 py-5 bg-rose-600 hover:bg-rose-500 rounded-2xl font-black uppercase tracking-widest"
-                    >
-                      Retry
+                  <div className="p-8 bg-black border border-white/5 rounded-3xl space-y-6">
+                    <p className="text-xs text-gray-400 leading-relaxed uppercase font-bold tracking-wider">
+                      To inject capital via traditional banking, please initiate a transfer to our Zurich Custodial Node. 
+                      Include your Client Reference ID to avoid settlement delays.
+                    </p>
+                    <div className="space-y-4">
+                      <div className="flex justify-between border-b border-white/5 pb-3">
+                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Client Reference ID</span>
+                        <span className="text-[10px] font-black text-emerald-500">TRUSTRA-{user._id.toString().slice(-6).toUpperCase()}</span>
+                      </div>
+                      <div className="flex justify-between border-b border-white/5 pb-3">
+                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Processing Time</span>
+                        <span className="text-[10px] font-black text-white">12 - 24 Hours</span>
+                      </div>
+                    </div>
+                    <button className="w-full bg-white text-black py-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all">
+                      Download Wire Instructions (PDF)
                     </button>
                   </div>
-                ) : depositAddress ? (
-                  <div className="space-y-12">
-                    {/* QR Code */}
-                    <div className="flex justify-center">
-                      <div className="bg-white p-8 rounded-3xl shadow-2xl">
-                        <QRCodeSVG
-                          value={depositAddress}
-                          size={260}
-                          bgColor="#ffffff"
-                          fgColor="#000000"
-                          level="H"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Address Box */}
-                    <div className="space-y-4">
-                      <p className="text-center text-[10px] font-black uppercase tracking-[0.4em] text-white/40">
-                        YOUR UNIQUE {asset} DEPOSIT ADDRESS
-                      </p>
-
-                      <div
-                        onClick={copyToClipboard}
-                        className="w-full bg-black/70 border border-white/10 p-6 rounded-2xl flex items-center justify-between cursor-pointer hover:border-yellow-500/50 transition-all active:scale-[0.985]"
-                      >
-                        <span className="font-mono text-yellow-400 break-all pr-8 text-sm select-all">
-                          {depositAddress}
-                        </span>
-                        {copied ? (
-                          <Check className="text-emerald-500" size={28} />
-                        ) : (
-                          <Copy className="text-white/40 hover:text-white" size={28} />
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Security Footer */}
-                    <div className="flex items-center justify-center gap-4 py-6 border-t border-white/10">
-                      <ShieldCheck className="text-emerald-500" size={22} />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                        Zurich Vault • End-to-End Encrypted • SSL/TLS 1.3
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
-              </motion.div>
-            </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          {/* Return Button */}
-          <div className="flex justify-center mt-16">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="flex items-center gap-3 px-12 py-5 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 text-gray-300 hover:text-white transition-all"
-            >
-              <ChevronLeft size={20} /> Return to Terminal
-            </button>
+          {/* ── RIGHT: AUDIT INSTRUCTIONS ── */}
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-[#0a0c10] border border-white/5 p-8 rounded-[2.5rem] space-y-6">
+              <h4 className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-white">
+                <Info size={16} className="text-emerald-500" /> Transfer Protocol
+              </h4>
+              <ul className="space-y-4">
+                {[
+                  "Assets are vaulted upon 2 blockchain confirmations.",
+                  "Ensure you only send " + asset + " to this address.",
+                  "Funds are auto-credited to your EUR principal.",
+                  "Trustra does not charge fees for inbound liquidity."
+                ].map((text, i) => (
+                  <li key={i} className="flex gap-3 text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
+                    <span className="text-emerald-500">•</span> {text}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="bg-amber-500/5 border border-amber-500/20 p-8 rounded-[2.5rem] flex gap-4">
+              <AlertTriangle className="text-amber-500 shrink-0" size={24} />
+              <div>
+                <h5 className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-2">Network Warning</h5>
+                <p className="text-[9px] text-amber-500/60 leading-relaxed uppercase font-bold">
+                  Sending any asset other than {asset} or using an incompatible network will result in permanent capital loss. 
+                  Audit your destination address carefully.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </main>
     </div>
   );
 }
+

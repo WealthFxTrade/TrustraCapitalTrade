@@ -18,7 +18,7 @@ export default function KYCStatsCard({ token }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/kyc/stats`, {
+      const res = await fetch(`${BACKEND_URL}/admin/kyc/stats`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

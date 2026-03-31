@@ -1,6 +1,6 @@
+// routes/plan.js - Fully Corrected
 import express from 'express';
-// ✅ FIX: Ensure this path matches your actual file (likely authMiddleware.js based on your file list)
-import { protect } from '../middleware/authMiddleware.js'; 
+import { protect } from '../middleware/authMiddleware.js';
 import User from '../models/User.js';
 
 const router = express.Router();
@@ -15,77 +15,80 @@ const RIO_PLANS = [
 
 /**
  * @route   GET /api/plans
+ * @desc    Fetch available investment plans
  */
-router.get('/', (req, res) => {                      
-  res.status(200).json({
+router.get('/', (req, res) => {
+  res.status(200).json({                                                                    
     success: true,
     plans: RIO_PLANS,
-    data: RIO_PLANS // Included for frontend compatibility
+    data: RIO_PLANS 
   });
 });
 
 /**
  * @route   POST /api/plans/invest
+ * @desc    Execute a new investment plan
  */
 router.post('/invest', protect, async (req, res, next) => {
   try {
-    const { planId, amount } = req.body;             
-    const user = await User.findById(req.user._id); // ✅ FIX: Use req.user._id (standard Passport/JWT)
+    const { planId, amount } = req.body;
+    const user = await User.findById(req.user._id);
 
     if (!user) {
-        return res.status(404).json({ success: false, message: 'User not found' });
+        return res.status(404).json({ success: false, message: 'User identity not found' });
     }
 
-    const plan = RIO_PLANS.find(p => p.id === planId);                                                    
+    const plan = RIO_PLANS.find(p => p.id === planId);                                      
     if (!plan) {
       return res.status(404).json({ success: false, message: 'Invalid plan selected' });
     }
 
-    // Validate investment amount
     const investAmount = Number(amount);
     if (investAmount < plan.min || (plan.max !== Infinity && investAmount > plan.max)) {
       return res.status(400).json({
-        success: false,                              
+        success: false,
         message: `Investment for ${plan.name} must be between €${plan.min} and ${plan.max === Infinity ? 'above' : '€' + plan.max}`
-      });                                            
+      });
+    }                                                                                            
+
+    // Check Balance in Mongoose Map
+    const currentEurBalance = user.balances.get('EUR') || 0;                                   
+    if (currentEurBalance < investAmount) {                                                      
+      return res.status(400).json({ success: false, message: 'Insufficient EUR balance for this plan' });                                                                                         
     }
 
-    // Check user EUR balance
-    const currentBalance = user.balances.get('EUR') || 0;                                                 
-    if (currentBalance < investAmount) {                   
-      return res.status(400).json({ success: false, message: 'Insufficient EUR balance' });
-    }
+    // Update User Balances
+    user.balances.set('EUR', currentEurBalance - investAmount);
+    const currentInvested = user.balances.get('INVESTED') || 0;
+    user.balances.set('INVESTED', currentInvested + investAmount);
 
-    // Execute Transaction
-    user.balances.set('EUR', currentBalance - investAmount);                                                                                                         
+    // ✅ FIXED: Matches User.js Schema fields
+    user.activePlan = plan.name;
+    user.isNodeActive = true; 
 
-    // Update User Plan Status
-    user.plan = plan.name;
-    user.isPlanActive = true;
-
-    // Add to Ledger
+    // ✅ FIXED: Pushing to correct ledger schema
     user.ledger.push({
-      amount: investAmount,                                
+      amount: investAmount,
       currency: 'EUR',
-      type: 'investment',                            
-      status: 'completed',                           
-      createdAt: new Date()                          
+      type: 'investment',
+      status: 'completed',
+      description: `Committed €${investAmount} to ${plan.name} Protocol`,
+      createdAt: new Date()
     });
 
     await user.save();
 
     res.status(200).json({
-      success: true,                                 
-      message: `Successfully invested €${investAmount} in ${plan.name}`,                                        
+      success: true,
+      message: `Protocol Activation Successful: €${investAmount} allocated to ${plan.name}`,                      
       user: {
-        plan: user.plan,
-        balance: user.balances.get('EUR')
+        activePlan: user.activePlan,
+        balances: Object.fromEntries(user.balances)
       }
     });
-  } catch (error) {                                  
-    next(error); // ✅ FIX: Use the global error handler
+  } catch (error) {                                                                         
+    next(error); 
   }
 });
 
 export default router;
-

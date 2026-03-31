@@ -13,7 +13,7 @@ export default function DepositApprovalTable({ token }) {
   const fetchPending = async () => {
     setLoading(true);
     try {
-      const endpoint = API_ENDPOINTS.ADMIN_DEPOSITS || '/api/admin/deposits';
+      const endpoint = API_ENDPOINTS.ADMIN_DEPOSITS || '/admin/deposits';
       const res = await fetch(`\( {BACKEND_URL} \){endpoint}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -40,7 +40,7 @@ export default function DepositApprovalTable({ token }) {
     if (!window.confirm(msg)) return;
 
     try {
-      const endpoint = API_ENDPOINTS.ADMIN_DEPOSITS || '/api/admin/deposits';
+      const endpoint = API_ENDPOINTS.ADMIN_DEPOSITS || '/admin/deposits';
       const res = await fetch(`\( {BACKEND_URL} \){endpoint}/\( {id}/ \){action}`, {
         method: 'PATCH',
         headers: {

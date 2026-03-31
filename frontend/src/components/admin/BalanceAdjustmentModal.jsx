@@ -16,7 +16,7 @@ export default function BalanceAdjustmentModal({ user, onClose, onUpdate }) {
 
     setIsSubmitting(true);
     try {
-      const { data } = await api.put(`/api/admin/users/${user._id}/balance`, {
+      const { data } = await api.put(`/admin/users/${user._id}/balance`, {
         amount: parseFloat(amount),
         type,
         description: description || `Manual ${type} adjustment by Admin`

@@ -32,7 +32,7 @@ export default function GlobalLedger() {
   const fetchGlobalLedger = async () => {
     setRefreshing(true);
     try {
-      const { data } = await api.get('/api/admin/ledger');
+      const { data } = await api.get('/admin/ledger');
       setTransactions(data.transactions || data.data || data || []);
       setCurrentPage(1);
     } catch (err) {

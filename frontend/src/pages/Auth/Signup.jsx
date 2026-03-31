@@ -1,240 +1,116 @@
-// src/pages/Auth/Signup.jsx
-import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { ShieldCheck, Eye, EyeOff, Loader2, ArrowRight, Lock } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useAuth } from '../../context/AuthContext';
-import { toast } from 'react-hot-toast';
-import { allCountries } from 'country-telephone-data';
-import {
-  ShieldCheck,
-  Mail,
-  Lock,
-  User,
-  Phone,
-  ArrowRight,
-  Loader2,
-  Eye,
-  EyeOff,
-  Globe,
-} from 'lucide-react';
+import toast from 'react-hot-toast';
 
-const Signup = () => {
+export default function Signup() {
+  const { signup } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { signup, isAuthenticated, initialized } = useAuth();
-
-  // Memoize country list for performance and sort by name
-  const countryList = useMemo(() => {
-    return allCountries
-      .map((c) => ({
-        name: c.name,
-        iso2: c.iso2,
-        dialCode: `+${c.dialCode}`,
-        flag: c.iso2.toUpperCase().replace(/./g, (char) => 
-          String.fromCodePoint(char.charCodeAt(0) + 127397)
-        ),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, []);
+  const location = useLocation();
 
   const [formData, setFormData] = useState({
-    name: '',
-    username: '',
+    firstName: '',
+    lastName: '',
     email: '',
-    phone: '',
     password: '',
     confirmPassword: '',
-    inviteCode: searchParams.get('invite') || '',
+    selectedPlan: location.state?.plan || 'Rio Standard'
   });
 
-  const [selectedCountryCode, setSelectedCountryCode] = useState('+32'); // Default to Belgium
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [agreed, setAgreed] = useState(false);
-  const [errors, setErrors] = useState({});
+  const [agreedToRisk, setAgreedToRisk] = useState(false);
 
-  useEffect(() => {
-    if (initialized && isAuthenticated) {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, initialized, navigate]);
+  const plans = [
+    { name: 'Rio Starter', yield: '0.25%', min: '€100' },
+    { name: 'Rio Basic', yield: '0.35%', min: '€1,000' },
+    { name: 'Rio Standard', yield: '0.50%', min: '€5,000' },
+    { name: 'Rio Advanced', yield: '0.65%', min: '€15,000' },
+    { name: 'Rio Elite', yield: '0.85%', min: '€50,000' }
+  ];
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    if (name === 'phone') {
-      setFormData((prev) => ({ ...prev, phone: value.replace(/\D/g, '') }));
-    } else {
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    }
-    setErrors((prev) => ({ ...prev, [name]: '' }));
-  };
-
-  const validateForm = () => {
-    const newErrors = {};
-    if (!formData.name.trim()) newErrors.name = 'Full name required';
-    if (!formData.username.trim()) newErrors.username = 'Username required';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = 'Invalid email';
-    if (formData.phone.length < 7) newErrors.phone = 'Invalid phone number';
-    if (formData.password.length < 8) newErrors.password = 'Min 8 characters required';
-    if (formData.password !== formData.confirmPassword) newErrors.confirmPassword = 'Keys do not match';
-    if (!agreed) newErrors.agreed = 'Acceptance required';
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
+  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
-
+    if (!agreedToRisk) return toast.error("Please acknowledge the Risk Disclosure to proceed.");
+    if (formData.password !== formData.confirmPassword) return toast.error("Access Keys do not match.");
+    
     setLoading(true);
-    const toastId = toast.loading('Synchronizing with Trustra Registry...');
-
     try {
-      const payload = {
-        name: formData.name.trim(),
-        username: formData.username.trim().toLowerCase(),
-        email: formData.email.trim(),
-        phone: `${selectedCountryCode}${formData.phone}`,
+      const result = await signup({
+        name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
         password: formData.password,
-        inviteCode: formData.inviteCode.trim() || undefined,
-      };
-
-      const result = await signup(payload);
-
-      if (result.success) {
-        toast.success('Node Registered Successfully!', { id: toastId });
-        setTimeout(() => navigate('/login'), 1500);
-      } else {
-        toast.error(result.message || 'Registration failed', { id: toastId });
+        activePlan: formData.selectedPlan
+      });
+      if (result?.success) {
+        toast.success("Account Provisioned. You may now log in.");
+        navigate('/login');
       }
     } catch (err) {
-      toast.error('Network protocol failure.', { id: toastId });
+      toast.error(err.response?.data?.message || "Account Provisioning Failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020408] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-lg space-y-10">
-        <div className="text-center space-y-4">
-          <div className="inline-flex p-4 bg-yellow-500/10 rounded-3xl border border-yellow-500/20 shadow-lg">
-            <ShieldCheck className="text-yellow-500" size={40} />
-          </div>
-          <h1 className="text-4xl sm:text-5xl font-black italic uppercase tracking-tighter text-white">
-            Initialize <span className="text-yellow-500">Node</span>
-          </h1>
-          <p className="text-sm text-gray-400 font-medium uppercase tracking-widest">Global Access Protocol</p>
+    <div className="min-h-screen bg-[#020408] text-white flex items-center justify-center p-6 font-sans relative overflow-hidden">
+      <div className="absolute inset-0 bg-emerald-500/5 blur-[120px] pointer-events-none" />
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-2xl z-10 py-12">
+        <div className="flex flex-col items-center mb-10 text-center">
+          <ShieldCheck className="text-emerald-500 mb-4" size={56} />
+          <h1 className="text-3xl font-black tracking-tighter uppercase italic text-white">Create <span className="text-emerald-500">Investor Account</span></h1>
+          <p className="text-[10px] font-black text-gray-500 tracking-[0.3em] mt-2 uppercase text-center">Private Wealth Management • Zurich Vault Secured</p>
         </div>
 
-        <div className="bg-[#0a0c10]/90 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-8 sm:p-10 shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            
-            {/* Full Name */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-[0.2em] ml-1">Identity Name</label>
-              <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={18} />
-                <input 
-                  type="text" name="name" value={formData.name} onChange={handleChange}
-                  className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white outline-none focus:border-yellow-500/50 transition-all"
-                  placeholder="Gery Maes"
-                />
-              </div>
-              {errors.name && <p className="text-rose-500 text-[10px] mt-1 ml-1">{errors.name}</p>}
-            </div>
-
-            {/* Username & Email */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <input 
-                type="text" name="username" value={formData.username} onChange={handleChange}
-                className="w-full bg-black border border-white/10 rounded-2xl py-4 px-4 text-white outline-none focus:border-yellow-500/50"
-                placeholder="Username"
-              />
-              <input 
-                type="email" name="email" value={formData.email} onChange={handleChange}
-                className="w-full bg-black border border-white/10 rounded-2xl py-4 px-4 text-white outline-none focus:border-yellow-500/50"
-                placeholder="Email Address"
-              />
-            </div>
-
-            {/* Phone Protocol with Full Country Select */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-gray-500 tracking-[0.2em] ml-1">Phone Protocol</label>
-              <div className="flex gap-2">
-                <div className="relative group">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-yellow-500" size={14} />
-                  <select 
-                    value={selectedCountryCode}
-                    onChange={(e) => setSelectedCountryCode(e.target.value)}
-                    className="h-full bg-black border border-white/10 rounded-2xl pl-9 pr-2 text-white text-sm outline-none focus:border-yellow-500/50 appearance-none min-w-[100px]"
+        <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 md:p-12 shadow-2xl">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Select Investment Protocol</label>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                {plans.map((plan) => (
+                  <button
+                    key={plan.name} type="button"
+                    onClick={() => setFormData({...formData, selectedPlan: plan.name})}
+                    className={`p-3 rounded-xl border text-left transition-all ${formData.selectedPlan === plan.name ? 'border-emerald-500 bg-emerald-500/10' : 'border-white/5 bg-white/5 hover:border-white/20'}`}
                   >
-                    {countryList.map((c) => (
-                      <option key={`${c.iso2}-${c.dialCode}`} value={c.dialCode}>
-                        {c.flag} {c.dialCode}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="relative flex-1">
-                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
-                  <input 
-                    type="text" name="phone" value={formData.phone} onChange={handleChange}
-                    className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white outline-none focus:border-yellow-500/50"
-                    placeholder="474576142"
-                  />
-                </div>
+                    <p className={`text-[8px] font-black uppercase truncate ${formData.selectedPlan === plan.name ? 'text-emerald-400' : 'text-gray-500'}`}>{plan.name.replace('Rio ', '')}</p>
+                    <p className="text-sm font-black mt-1">{plan.yield}</p>
+                  </button>
+                ))}
               </div>
-              {errors.phone && <p className="text-rose-500 text-[10px] mt-1 ml-1">{errors.phone}</p>}
             </div>
 
-            {/* Access Keys */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <input 
-                  type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleChange}
-                  className="w-full bg-black border border-white/10 rounded-2xl py-4 px-4 text-white outline-none focus:border-yellow-500/50"
-                  placeholder="Access Key"
-                />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600">
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              <input 
-                type="password" name="confirmPassword" value={formData.confirmPassword} onChange={handleChange}
-                className="w-full bg-black border border-white/10 rounded-2xl py-4 px-4 text-white outline-none focus:border-yellow-500/50"
-                placeholder="Confirm Key"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <input type="text" name="firstName" placeholder="FIRST NAME" onChange={handleChange} required className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold focus:border-emerald-500/50 outline-none placeholder-gray-800" />
+              <input type="text" name="lastName" placeholder="LAST NAME" onChange={handleChange} required className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold focus:border-emerald-500/50 outline-none placeholder-gray-800" />
             </div>
 
-            {/* Terms and Disclosure */}
-            <div className="flex items-start gap-3 px-1">
-              <input 
-                type="checkbox" checked={agreed} onChange={() => setAgreed(!agreed)}
-                className="mt-1 w-4 h-4 rounded border-white/10 bg-black accent-yellow-500"
-              />
-              <p className="text-[10px] text-gray-500 leading-tight uppercase font-bold">
-                I authorize node initialization and accept the <span className="text-yellow-500 underline">Trustra Security Protocols</span>.
-              </p>
+            <input type="email" name="email" placeholder="INSTITUTIONAL EMAIL" onChange={handleChange} required className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold focus:border-emerald-500/50 outline-none placeholder-gray-800" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <input type="password" name="password" placeholder="ACCESS KEY" onChange={handleChange} required className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold focus:border-emerald-500/50 outline-none placeholder-gray-800" />
+              <input type="password" name="confirmPassword" placeholder="CONFIRM ACCESS KEY" onChange={handleChange} required className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xs font-bold focus:border-emerald-500/50 outline-none placeholder-gray-800" />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:bg-yellow-800 text-black font-black py-5 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-yellow-500/20"
-            >
-              {loading ? <Loader2 className="animate-spin" /> : <>INITIALIZE NODE <ArrowRight size={20} /></>}
+            <div className="bg-emerald-500/5 border border-emerald-500/20 p-5 rounded-2xl flex items-start gap-4">
+              <input type="checkbox" checked={agreedToRisk} onChange={(e) => setAgreedToRisk(e.target.checked)} className="mt-1 accent-emerald-500" />
+              <p className="text-[10px] text-gray-400 leading-relaxed uppercase font-medium">I acknowledge the Risk Disclosure statement. I understand that capital growth is performance-based and subject to market conditions.</p>
+            </div>
+
+            <button type="submit" disabled={loading} className="w-full bg-white text-black font-black uppercase tracking-[0.2em] py-5 rounded-2xl transition-all flex items-center justify-center gap-3 hover:bg-emerald-500 active:scale-[0.98]">
+              {loading ? <Loader2 className="animate-spin" size={20} /> : <>Create Account <ArrowRight size={18} /></>}
             </button>
-
-            <p className="text-center text-gray-500 text-[10px] font-bold uppercase tracking-widest">
-              Secured by Trustra Capital AES-256
-            </p>
           </form>
+
+          <p className="mt-8 text-center text-xs text-gray-500 uppercase tracking-widest font-bold">Already a client? <Link to="/login" className="text-emerald-500">Authorize Entry</Link></p>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
-};
-
-export default Signup;
-
+}

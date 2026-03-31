@@ -9,10 +9,13 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "NODE_ENV=production node server.js",
+    "dev": "NODE_ENV=development nodemon server.js",
+    "seed:gery": "node scripts/seedGery.js",
+    "reset:production": "node scripts/resetProductionUsers.js",
     "build": "echo 'No build step required for backend'",
-    "preview": "npm run start"
+    "preview": "npm run start",
+    "lint": "echo 'Linting not configured yet'"
   },
   "dependencies": {
     "axios": "^1.13.6",
@@ -20,29 +23,33 @@
     "bip32": "^5.0.1",
     "bip39": "^3.1.0",
     "bitcoinjs-lib": "^7.0.1",
+    "compression": "^1.8.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
+    "crypto": "^1.0.1",
     "dotenv": "^16.4.5",
     "ethers": "^6.16.0",
     "express": "^4.21.1",
     "express-async-handler": "^1.2.0",
+    "express-rate-limit": "^7.5.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.1",
     "morgan": "^1.10.0",
     "multer": "^2.1.1",
     "node-cron": "^3.0.3",
-    "nodemailer": "^8.0.3",
+    "nodemailer": "^8.0.4",
     "socket.io": "^4.8.0",
     "tiny-secp256k1": "^2.2.4"
   },
   "devDependencies": {
-    "nodemon": "^3.1.7"
+    "nodemon": "^3.1.14"
   },
   "nodemonConfig": {
     "ignore": [
       "node_modules",
-      ".git"
+      ".git",
+      "uploads/*"
     ],
     "ext": "js,json",
     "watch": [
@@ -51,7 +58,9 @@
       "routes",
       "middleware",
       "utils",
-      "models"
+      "models",
+      "scripts"
     ]
   }
 }
+

@@ -10,7 +10,7 @@ export default function AuditLogTable() {
   useEffect(() => {
     const fetchLogs = async () => {
       try {
-        const { data } = await api.get('/api/admin/audit-logs');
+        const { data } = await api.get('/admin/audit-logs');
         setLogs(data.logs || []);
       } catch (err) { console.error("Audit sync failed"); }
       finally { setLoading(false); }

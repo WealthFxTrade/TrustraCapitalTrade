@@ -1,101 +1,78 @@
-// utils/btcWatcher.js - FULLY CORRECTED & UNSHORTENED VERSION
-import Deposit from '../models/Deposit.js';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
-import { getBtcBalance } from './bitcoinUtils.js';
 import axios from 'axios';
 
 /**
- * 🛰️ BTC DEPOSIT MONITOR
- * Scans pending deposits and confirms them via Mempool.space
+ * Fetch BTC balance in BTC from public explorer
  */
+const fetchBlockchainBalance = async (address) => {
+  try {
+    const { data } = await axios.get(`https://blockchain.info{address}`);
+    return data.final_balance / 100000000; // Satoshis to BTC
+  } catch (err) {
+    console.error(`[BTC API ERROR] Address ${address}:`, err.message);
+    return null;
+  }
+};
+
 export const watchBtcDeposits = async (io) => {
   try {
-    const activeDeposits = await Deposit.find({
-      status: { $in: ['pending', 'confirming'] },
-      currency: 'BTC'
-    }).populate('user');
+    // 1. Get all users with BTC addresses
+    const users = await User.find({ "balances.BTC_ADDRESS": { $exists: true } });
+    if (users.length === 0) return;
 
-    if (activeDeposits.length === 0) return;
-
-    // Get current BTC price in EUR
-    const priceRes = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur');
+    // 2. Get current price
+    const priceRes = await axios.get('https://coingecko.com');
     const btcPriceEur = parseFloat(priceRes.data?.bitcoin?.eur) || 0;
 
-    for (const deposit of activeDeposits) {
-      const receivedBtc = await getBtcBalance(deposit.address);
+    for (const user of users) {
+      const userBtcAddress = user.balances.get('BTC_ADDRESS');
+      const blockchainBalance = await fetchBlockchainBalance(userBtcAddress);
 
-      if (receivedBtc >= (deposit.expectedAmount || 0.00005) && !deposit.locked) {
+      if (blockchainBalance === null) continue;
 
-        // Lock deposit to prevent double crediting
-        deposit.locked = true;
-        deposit.amountBTC = receivedBtc;
-        deposit.amountEUR = receivedBtc * btcPriceEur;
-        deposit.status = 'confirmed';
-        deposit.confirmations = 6;
-        await deposit.save();
+      const currentStoredBtc = user.balances.get('BTC') || 0;
 
-        const user = deposit.user;
-        if (!user) continue;
+      // 3. Check for new deposits
+      if (blockchainBalance > currentStoredBtc) {
+        const depositAmountBtc = blockchainBalance - currentStoredBtc;
+        const depositAmountEur = depositAmountBtc * btcPriceEur;
 
-        // Update user balances safely
-        if (!user.balances) user.balances = new Map();
+        // 4. Update User Balances (EUR + BTC)
+        user.balances.set('BTC', Number(blockchainBalance.toFixed(8)));
+        const currentEur = user.balances.get('EUR') || 0;
+        user.balances.set('EUR', Number((currentEur + depositAmountEur).toFixed(2)));
 
-        const currentEUR = user.balances.get('EUR') || 0;
-        const currentBTC = user.balances.get('BTC') || 0;
-
-        user.balances.set('EUR', currentEUR + deposit.amountEUR);
-        user.balances.set('BTC', currentBTC + receivedBtc);
-
-        user.totalBalance = (user.totalBalance || 0) + deposit.amountEUR;
-        user.realizedProfit = (user.realizedProfit || 0) + deposit.amountEUR;
-
-        // Add to user ledger
-        user.ledger.push({
-          amount: deposit.amountEUR,
-          currency: 'EUR',
-          type: 'deposit',
-          status: 'completed',
-          address: deposit.address,
-          description: `BTC Deposit Confirmed (${receivedBtc.toFixed(8)} BTC)`,
-          createdAt: new Date()
-        });
-
-        user.markModified('balances');
-        user.markModified('ledger');
-        await user.save();
-
-        // Create unified transaction record
+        // 5. Create Transaction Record (Matches your Transaction.js schema)
         await Transaction.create({
           user: user._id,
           type: 'deposit',
-          amount: deposit.amountEUR,
-          signedAmount: deposit.amountEUR,
+          amount: depositAmountEur,
           currency: 'EUR',
+          signedAmount: depositAmountEur, // Pre-validate hook will also handle this
           status: 'completed',
-          method: 'BTC',
-          walletAddress: deposit.address,
-          description: `BTC Deposit - ${receivedBtc.toFixed(8)} BTC`
+          method: 'crypto',
+          walletAddress: userBtcAddress,
+          txHash: `AUTO-SYNC-${Date.now()}`, 
+          description: `Blockchain Auto-Sync: ${depositAmountBtc.toFixed(8)} BTC detected`
         });
 
-        // Real-time updates via Socket.IO
+        user.markModified('balances');
+        await user.save();
+
+        // 6. Socket.io Notification
         if (io) {
           io.to(user._id.toString()).emit('balanceUpdate', {
-            totalBalance: user.totalBalance,
-            realizedProfit: user.realizedProfit,
             balances: Object.fromEntries(user.balances),
-            message: `✅ ${receivedBtc.toFixed(8)} BTC Deposit Confirmed!`
-          });
-
-          io.to(user._id.toString()).emit('ledgerUpdate', {
-            ledger: user.ledger.slice(-10)
+            message: `✅ Assets Vaulted: +${depositAmountBtc.toFixed(8)} BTC (~€${depositAmountEur.toFixed(2)})`
           });
         }
 
-        console.log(`[WATCHER] ✅ Credited \( {user.username || user._id} with € \){deposit.amountEUR.toFixed(2)}`);
+        console.log(`[WATCHER] 💰 Credited ${user.email}: €${depositAmountEur.toFixed(2)}`);
       }
     }
   } catch (error) {
-    console.error('⚠️ [BTC WATCHER ERROR]', error.message);
+    console.error('⚠️ [BTC WATCHER ERROR]:', error.message);
   }
 };
+

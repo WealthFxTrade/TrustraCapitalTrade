@@ -1,157 +1,155 @@
 // src/pages/Auth/ForgotPassword.jsx
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Mail, ShieldCheck, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
-import api from '../../api/api';
+import { useNavigate, Link } from 'react-router-dom';
+import { ShieldCheck, Mail, ArrowLeft, Loader2, AlertTriangle, CheckCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const { forgotPassword } = useAuth();
   const navigate = useNavigate();
 
-  const validateEmail = () => {
-    const trimmed = email.trim();
-    if (!trimmed) {
-      setError('Email is required');
-      return false;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      setError('Please enter a valid email address');
-      return false;
-    }
-    setError('');
-    return true;
-  };
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!validateEmail()) {
-      toast.error('Please correct the email field');
-      return;
-    }
-
     setLoading(true);
-    const toastId = toast.loading('Verifying node identity...');
+    setError('');
 
     try {
-      const { data } = await api.post('/auth/forgot-password', { email: email.trim() });
+      const result = await forgotPassword(email);
 
-      toast.success(data.message || 'Recovery instructions sent to your email', {
-        id: toastId,
-        duration: 8000,
-      });
-
-      // Optional: navigate to a confirmation page or back to login
-      setTimeout(() => navigate('/login'), 2000);
+      if (result.success) {
+        setSuccess(true);
+        toast.success(result.message);
+      } else {
+        setError(result.message);
+        toast.error(result.message);
+      }
     } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.response?.status === 404 ? 'No account found with this email' :
-        'Failed to send recovery email. Please try again later.';
-      toast.error(msg, { id: toastId, duration: 6000 });
+      const msg = 'Unable to send reset link. Please try again.';
       setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#020408] flex items-center justify-center p-6">
-      <div className="w-full max-w-md space-y-10">
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <div className="inline-flex p-4 bg-yellow-500/10 rounded-3xl border border-yellow-500/20 shadow-lg shadow-yellow-900/10">
-            <ShieldCheck className="text-yellow-500" size={40} />
+    <div className="min-h-screen bg-[#020408] text-white flex items-center justify-center p-4 md:p-10 font-sans relative overflow-hidden">
+      {/* Background Accent */}
+      <div className="absolute inset-0 bg-emerald-500/5 blur-[120px] pointer-events-none" />
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="w-full max-w-md z-10"
+      >
+        {/* Branding Header */}
+        <div className="flex flex-col items-center mb-12 text-center">
+          <div
+            className="flex items-center gap-3 cursor-pointer mb-6 group"
+            onClick={() => navigate('/')}
+          >
+            <ShieldCheck className="text-emerald-500 transition-transform group-hover:scale-110" size={48} />
+            <div>
+              <span className="text-3xl font-black tracking-tighter uppercase block">TRUSTRA</span>
+              <span className="text-xs font-bold text-emerald-500 tracking-[0.25em]">CAPITAL TRADE</span>
+            </div>
           </div>
-          <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white">
-            Recover <span className="text-yellow-500">Node Access</span>
-          </h1>
-          <p className="text-sm text-gray-400 font-medium">
-            Enter your node email to receive recovery instructions
-          </p>
+          <h1 className="text-3xl font-black tracking-tighter">Forgot Password</h1>
+          <p className="text-gray-400 text-sm mt-2">Reset your account password</p>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-[#0a0c10]/90 backdrop-blur-2xl border border-white/8 rounded-[2.5rem] p-8 sm:p-10 shadow-2xl relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-yellow-900/5 to-transparent pointer-events-none" />
-
-          <form onSubmit={handleSubmit} className="space-y-8 relative z-10">
-            {/* Email Field */}
-            <div className="space-y-3">
-              <label htmlFor="email" className="text-xs font-black uppercase text-gray-500 tracking-[0.25em] ml-1 block">
-                Node Email Identifier *
-              </label>
-              <div className="relative group">
-                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-yellow-500 transition-colors" size={18} />
-                <input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    setError('');
-                  }}
-                  placeholder="node@trustra.capital"
-                  required
-                  disabled={loading}
-                  aria-invalid={!!error}
-                  aria-describedby={error ? 'email-error' : undefined}
-                  className={`w-full bg-black/50 border ${error ? 'border-rose-500 focus:border-rose-600' : 'border-white/10 focus:border-yellow-500/50'} rounded-2xl py-4 pl-14 pr-4 outline-none transition-all font-medium placeholder:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed`}
-                />
-              </div>
-              {error && (
-                <p id="email-error" className="text-rose-400 text-xs mt-1 ml-2 flex items-center gap-1">
-                  <AlertCircle size={14} /> {error}
-                </p>
-              )}
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full py-5 rounded-2xl font-black uppercase text-base tracking-wider flex items-center justify-center gap-3 transition-all shadow-xl ${
-                loading
-                  ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black'
-              }`}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="animate-spin" size={20} />
-                  Sending Recovery Instructions...
-                </>
-              ) : (
-                <>
-                  Request Recovery Link
-                  <ArrowRight size={20} />
-                </>
-              )}
-            </button>
-
-            {/* Back to Login */}
-            <div className="text-center mt-6">
-              <Link
-                to="/login"
-                className="text-yellow-500 hover:text-yellow-400 font-medium text-sm transition-colors flex items-center justify-center gap-2"
+        {/* Main Card */}
+        <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-10 shadow-2xl">
+          {success ? (
+            /* Success State */
+            <div className="text-center py-8">
+              <CheckCircle size={64} className="mx-auto text-emerald-500 mb-6" />
+              <h3 className="text-2xl font-semibold mb-3">Reset Link Sent</h3>
+              <p className="text-gray-400 mb-8">
+                We've sent password reset instructions to <strong>{email}</strong>.<br />
+                Please check your inbox (and spam folder).
+              </p>
+              <button
+                onClick={() => navigate('/login')}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-black font-semibold py-4 rounded-2xl transition-all"
               >
-                <ArrowRight size={16} className="rotate-180" /> Back to Sign In
-              </Link>
+                Return to Login
+              </button>
             </div>
-          </form>
+          ) : (
+            /* Form State */
+            <>
+              <p className="text-gray-400 text-center mb-8">
+                Enter your email address and we'll send you instructions to reset your password.
+              </p>
 
-          {/* Footer Info */}
-          <div className="mt-10 text-center text-sm text-gray-500 space-y-2">
-            <p>Check your spam/junk folder if the email doesn't arrive within 5 minutes.</p>
-            <p className="text-[10px] uppercase tracking-widest opacity-70">
-              Secure Recovery • AES-256 Encrypted • Zurich Vault Node
-            </p>
-          </div>
+              {error && (
+                <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl flex items-start gap-3 text-rose-400 text-sm">
+                  <AlertTriangle size={20} className="flex-shrink-0 mt-0.5" />
+                  <div>{error}</div>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-gray-400 block">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="w-full bg-black/60 border border-white/10 rounded-2xl px-12 py-4 focus:border-emerald-500 outline-none transition-all font-mono"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800/30 disabled:text-emerald-900/50 text-black font-black uppercase tracking-widest py-5 rounded-2xl transition-all flex items-center justify-center gap-3 shadow-xl"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="animate-spin" size={20} />
+                      Sending Reset Link...
+                    </>
+                  ) : (
+                    'Send Reset Link'
+                  )}
+                </button>
+              </form>
+            </>
+          )}
         </div>
-      </div>
+
+        {/* Back to Login */}
+        <div className="mt-8 text-center">
+          <Link 
+            to="/login" 
+            className="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft size={16} />
+            Back to Login
+          </Link>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-12 text-center text-[10px] text-gray-600">
+          © 2026 Trustra Capital Trade • Simulation & Analytics Platform
+          <br />
+          Capital at risk • Not financial advice
+        </div>
+      </motion.div>
     </div>
   );
 }

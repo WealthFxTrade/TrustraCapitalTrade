@@ -1,80 +1,58 @@
+// backend/scripts/seedGery.js
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import User from '../models/User.js';
 
-// Fix for ES Modules __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
 
-// Explicitly point to the .env file in the parent directory
-dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-
-const finalSeed = async () => {
+const seedGery = async () => {
   try {
-    console.log("🛰️  Connecting to Trustra Registry...");
-    
-    const uri = process.env.MONGO_URI;
-    if (!uri) {
-      throw new Error("MONGO_URI is missing. Check if .env exists in ~/TrustraCapitalTrade/");
-    }
+    console.log('📡 Connecting to MongoDB for seeding...');
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('✅ Database Connected');
 
-    await mongoose.connect(uri);
-    console.log("📡  Connected to MongoDB Cluster.");
+    const email = 'Gery.maes1@telenet.be';
+    const username = 'gerymaes';
 
-    const email = "Gery.maes1@telenet.be";
-    const username = "gery_maes";
-    
-    // Purge old data to prevent Duplicate Key errors
-    await User.deleteMany({ 
-        $or: [{ email: email }, { username: username }] 
-    });
-    console.log("🗑️  Previous node records purged.");
+    await User.deleteMany({ email });
+    console.log(`🗑️  Cleared existing data for ${email}`);
 
-    /**
-     * PASS PLAIN TEXT PASSWORD
-     * User.js pre('save') hook will handle the hashing.
-     */
     const gery = new User({
-      name: "Gery Maes",
+      name: 'Gery Maes',
       username: username,
       email: email,
-      password: "trustra2026", 
-      phone: "+32474576142",
-      role: "user",
+      password: 'trustra2026', 
+      phone: '+32474576142',
+      role: 'user',
       isActive: true,
       isNodeActive: true,
-      kycStatus: "verified",
-      activePlan: "Rio Elite",
-      balances: {
-        EUR: 125550,
-        ROI: 8750,
-        BTC: 0.45,
-        ETH: 12.5,
-        USDT: 5000,
-        INVESTED: 125550,
-      },
+      kycStatus: 'verified',
+      activePlan: 'Rio Elite',
+      // ONLY NUMBERS IN BALANCES TO MATCH SCHEMA
+      balances: new Map([
+        ['EUR', 125550],
+        ['ROI', 8750],
+        ['BTC', 0.45],
+        ['ETH', 12.5],
+        ['USDT', 5000],
+        ['INVESTED', 116800]
+      ]),
       totalBalance: 125550,
-      totalProfit: 8750,
+      totalProfit: 8750
     });
 
     await gery.save();
-
-    console.log("\n✅ GERY NODE INITIALIZED SUCCESSFULLY");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log(`Email     : ${email}`);
-    console.log("Password  : trustra2026");
-    console.log("Balance   : €125,550.00");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("IMPORTANT: Clear LocalStorage in your browser before logging in.");
+    
+    console.log('------------------------------------');
+    console.log('✅ Gery Maes Seeded Successfully');
+    console.log('------------------------------------');
 
     process.exit(0);
   } catch (error) {
-    console.error("❌ Seed Protocol Failed:", error.message);
+    console.error('❌ Seeding failed:', error.message);
     process.exit(1);
   }
 };
 
-finalSeed();
+seedGery();
 

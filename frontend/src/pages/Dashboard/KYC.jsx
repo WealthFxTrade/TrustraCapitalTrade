@@ -1,129 +1,133 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ShieldCheck, Upload, FileText, CheckCircle2, 
-  AlertCircle, ArrowRight, Loader2, Camera 
+  AlertCircle, ArrowRight, Loader2, Camera, Globe, X 
 } from 'lucide-react';
 import api from '../../api/api';
 import toast from 'react-hot-toast';
 
 export default function KYC() {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [files, setFiles] = useState({ idFront: null, idBack: null, selfie: null });
+  const [previews, setPreviews] = useState({ idFront: null, idBack: null, selfie: null });
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('unverified'); // unverified, pending, verified
+  const [status, setStatus] = useState('unverified');
 
-  const handleFileChange = (e) => {
+  const handleFileChange = (e, type) => {
     const selected = e.target.files[0];
     if (selected) {
-      setFile(selected);
-      setPreview(URL.createObjectURL(selected));
+      if (selected.size > 10 * 1024 * 1024) return toast.error("File size must be under 10MB");
+      
+      setFiles(prev => ({ ...prev, [type]: selected }));
+      setPreviews(prev => ({ ...prev, [type]: URL.createObjectURL(selected) }));
     }
   };
 
   const handleUpload = async () => {
-    if (!file) return toast.error("Please select a valid document.");
-    
+    if (!files.idFront || !files.idBack || !files.selfie) {
+      return toast.error("Please provide all required identification nodes.");
+    }
+
     setLoading(true);
+    const toastId = toast.loading("Encrypting and uploading credentials...");
+    
     const formData = new FormData();
-    formData.append('document', file);
+    formData.append('idFront', files.idFront);
+    formData.append('idBack', files.idBack);
+    formData.append('selfie', files.selfie);
 
     try {
-      await api.post('/user/kyc-upload', formData, {
+      // Endpoint updated to match the Admin and User controller logic
+      await api.post('/user/kyc-submit', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      
       setStatus('pending');
-      toast.success("Document transmitted to Zurich Compliance.");
+      toast.success("Identity packet submitted successfully.", { id: toastId });
     } catch (err) {
-      toast.error("Transmission failed. Check network link.");
+      toast.error("Handshake failed. Protocol error.", { id: toastId });
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#020408] text-white p-6 lg:p-12 pt-28">
-      <div className="max-w-3xl mx-auto">
-        
-        {/* HEADER */}
-        <div className="mb-12">
-          <div className="flex items-center gap-3 mb-4">
-            <ShieldCheck className="text-yellow-500" size={20} />
-            <span className="text-[10px] font-black uppercase tracking-[0.5em] text-yellow-500/60">
-              Identity Protocol
-            </span>
+  const renderUploadSlot = (type, label, icon: any) => (
+    <div className="space-y-3">
+      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 ml-2">{label}</label>
+      <div className="relative group h-40 bg-black/40 border-2 border-dashed border-white/10 rounded-[2rem] flex flex-col items-center justify-center overflow-hidden hover:border-emerald-500/30 transition-all">
+        {previews[type] ? (
+          <>
+            <img src={previews[type]} alt={type} className="w-full h-full object-cover opacity-50" />
+            <button 
+              onClick={() => {
+                setFiles(p => ({...p, [type]: null}));
+                setPreviews(p => ({...p, [type]: null}));
+              }}
+              className="absolute top-4 right-4 p-2 bg-red-500/20 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all z-20"
+            >
+              <X size={14} />
+            </button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-2">
+            <div className="p-3 bg-white/5 rounded-xl text-gray-600 group-hover:text-emerald-500 transition-colors">
+              {icon}
+            </div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-gray-600">Select Node</span>
           </div>
-          <h1 className="text-4xl font-black italic uppercase tracking-tighter">Clearance Level 1</h1>
-          <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest mt-2">
-            Required for institutional node access
-          </p>
-        </div>
+        )}
+        <input 
+          type="file" 
+          accept="image/*" 
+          onChange={(e) => handleFileChange(e, type)} 
+          className="absolute inset-0 opacity-0 cursor-pointer z-10" 
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#020408] text-white p-6 lg:p-12 pt-28 font-sans">
+      <div className="max-w-4xl mx-auto">
+        <header className="mb-12">
+          <div className="flex items-center gap-3 mb-4">
+            <Globe className="text-emerald-500" size={18} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-emerald-500">Compliance Protocol v2.5.4</span>
+          </div>
+          <h1 className="text-4xl font-bold tracking-tight uppercase italic">Identity <span className="text-emerald-500 font-black">Verification</span></h1>
+        </header>
 
         {status === 'unverified' ? (
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white/[0.03] border border-white/10 rounded-[3rem] p-10 backdrop-blur-3xl"
-          >
-            <div className="flex items-center gap-6 mb-10 p-6 bg-yellow-500/5 border border-yellow-500/10 rounded-2xl">
-              <AlertCircle className="text-yellow-500" size={24} />
-              <p className="text-[11px] font-bold uppercase leading-relaxed opacity-70">
-                Upload a clear photo of your Passport or National ID. Documents are encrypted and stored in an offline vault.
-              </p>
-            </div>
-
-            <div className="space-y-8">
-              <div className="relative group">
-                <input 
-                  type="file" 
-                  accept="image/*,.pdf"
-                  onChange={handleFileChange}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                />
-                <div className="border-2 border-dashed border-white/10 rounded-[2rem] p-16 flex flex-col items-center justify-center gap-4 group-hover:border-yellow-500/30 transition-all">
-                  {preview ? (
-                    <img src={preview} alt="Preview" className="w-48 h-32 object-cover rounded-xl border border-white/20" />
-                  ) : (
-                    <>
-                      <div className="p-5 bg-white/5 rounded-full text-yellow-500">
-                        <Camera size={32} />
-                      </div>
-                      <span className="text-[10px] font-black uppercase tracking-widest opacity-40">
-                        Drop file or click to browse
-                      </span>
-                    </>
-                  )}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+            <div className="bg-[#0a0c10] border border-white/10 rounded-[3rem] p-10 shadow-2xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                {renderUploadSlot('idFront', 'ID Front / Passport', <FileText size={24} />)}
+                {renderUploadSlot('idBack', 'ID Back / Details', <FileText size={24} />)}
+                <div className="md:col-span-2">
+                  {renderUploadSlot('selfie', 'Identity Portrait (Holding ID)', <Camera size={24} />)}
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={handleUpload}
-                disabled={loading || !file}
-                className="w-full py-8 bg-white text-black font-black uppercase italic tracking-tighter rounded-[2rem] flex items-center justify-center gap-4 hover:bg-yellow-500 transition-all disabled:opacity-20"
+                disabled={loading || !files.idFront}
+                className="w-full py-6 bg-emerald-600 text-black font-black uppercase tracking-[0.4em] rounded-2xl flex items-center justify-center gap-3 hover:bg-emerald-500 transition-all disabled:opacity-20"
               >
-                {loading ? <Loader2 className="animate-spin" /> : 'Begin Handshake'}
-                <ArrowRight size={20} />
+                {loading ? <Loader2 className="animate-spin" /> : 'Initialize Sequence'}
+                {!loading && <ArrowRight size={20} />}
               </button>
             </div>
           </motion.div>
         ) : (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white/[0.03] border border-emerald-500/20 rounded-[3rem] p-16 text-center"
-          >
-            <div className="h-20 w-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-8">
-              <CheckCircle2 size={40} />
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#0a0c10] border border-emerald-500/20 rounded-[3rem] p-20 text-center shadow-2xl">
+            <div className="h-24 w-24 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-10 border border-emerald-500/20">
+              <CheckCircle2 size={48} />
             </div>
-            <h2 className="text-2xl font-black italic uppercase mb-4">Transmission Received</h2>
-            <p className="text-sm opacity-40 max-w-xs mx-auto mb-10 uppercase font-bold tracking-widest leading-loose">
-              Zurich HQ is verifying your credentials. Status will update within 12–24 hours.
+            <h2 className="text-3xl font-black uppercase tracking-tighter italic mb-4">Under Audit</h2>
+            <p className="text-xs text-gray-500 max-w-sm mx-auto mb-10 font-bold uppercase tracking-widest leading-loose">
+              Our governance team is validating your node credentials. Clearance takes approximately 1-6 hours.
             </p>
-            <div className="h-[1px] w-full bg-white/5 mb-10" />
-            <button 
-              onClick={() => window.location.href = '/dashboard'}
-              className="text-[10px] font-black uppercase tracking-[0.3em] text-yellow-500 hover:text-white transition-colors"
-            >
+            <button onClick={() => window.location.href = '/dashboard'} className="px-12 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] text-white transition-all">
               Return to Terminal
             </button>
           </motion.div>

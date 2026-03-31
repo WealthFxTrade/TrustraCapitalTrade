@@ -1,31 +1,50 @@
-// routes/adminRoutes.js - FULLY CORRECTED VERSION
+/**
+ * Trustra Capital Trade - Admin Routes
+ * Final Production Alignment with AdminDashboard.jsx
+ */
+
 import express from 'express';
-import { protect, admin } from '../middleware/authMiddleware.js';
 import {
-  getUsers,
-  updateUserBalance,
-  getWithdrawals,
-  processWithdrawal,
-  getSystemHealth,
-  triggerManualRoi,
-  getGlobalLedger,
-  updateUserPlan
+  getPlatformStats,       // Mapped to /health
+  getAllUsers,
+  updateUserStatus,       // Handles /users/:id/:action
+  getPendingKYCs,         // Mapped to /kyc
+  updateKYCStatus,
+  triggerYieldDistribution
 } from '../controllers/adminController.js';
+
+import { protect, admin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// ── PUBLIC HEALTH CHECK (No auth required for keep-alive) ─────────────────────
-router.get('/health', getSystemHealth);   // ← Made public
+/**
+ * 🛡️ SECURITY LAYER
+ * Ensure req.user exists and has role: 'admin'
+ */
+router.use(protect);
+router.use(admin);
 
-// ── PROTECTED ADMIN ROUTES ───────────────────────────────────────────────────
-router.get('/users', protect, admin, getUsers);
-router.put('/users/:id/balance', protect, admin, updateUserBalance);
-router.put('/users/:id/plan', protect, admin, updateUserPlan);
+// ── 📊 SYSTEM HEALTH & ANALYTICS ──
+// Dashboard calls api.get('/admin/health') for stats
+router.get('/health', getPlatformStats); 
+router.get('/stats', getPlatformStats); // Alias for redundancy
 
-router.get('/withdrawals', protect, admin, getWithdrawals);
-router.patch('/withdrawal/:id', protect, admin, processWithdrawal);
+// ── 👥 NODE / USER REGISTRY ──
+router.get('/users', getAllUsers);
 
-router.get('/ledger', protect, admin, getGlobalLedger);
-router.post('/trigger-roi', protect, admin, triggerManualRoi);
+// Dashboard calls api.put(`/admin/users/${userId}/${action}`)
+// This single route handles both 'ban' and 'activate' via the controller logic
+router.put('/users/:id/:action', updateUserStatus);
+
+// ── 🪪 KYC OVERSIGHT ──
+// Dashboard calls api.get('/admin/kyc')
+router.get('/kyc', getPendingKYCs);
+router.put('/kyc/update', updateKYCStatus);
+
+// ── ⚡ PROTOCOL ACTIONS ──
+// Dashboard calls api.post('/admin/health') via the "Zap" button
+router.post('/health', triggerYieldDistribution);
+router.post('/trigger-yield', triggerYieldDistribution);
 
 export default router;
+

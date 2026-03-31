@@ -1,97 +1,92 @@
-// src/App.jsx - FULLY CORRECTED & UNSHORTENED VERSION (March 2026)
-// Clean routing, proper nesting, and admin access fixed
-
+// src/App.jsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
-// ── AUTH & ROUTE GUARDS ──────────────────────────────────────
+// Navigation Guards
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/routing/AdminRoute';
 
-// ── PUBLIC PAGES ─────────────────────────────────────────────
+// Public Pages
+import LandingPage from './components/landing/Landing';
 import Login from './pages/Auth/Login';
 import Signup from './pages/Auth/Signup';
-import LandingPage from './components/landing/Landing';
+import ForgotPassword from './pages/Auth/ForgotPassword';
+import ResetPassword from './pages/Auth/ResetPassword';
 
-// ── USER DASHBOARD & LAYOUT ──────────────────────────────────
-import UserLayout from './components/layout/ProtectedLayout';
+// User Dashboard Pages
 import UserDashboard from './pages/Dashboard/Dashboard';
 import Deposit from './pages/Dashboard/Deposit';
 import Withdrawal from './pages/Dashboard/WithdrawalForm';
 import UserProfile from './pages/Dashboard/Profile';
 import Ledger from './pages/Dashboard/Ledger';
 
-// ── ADMIN DASHBOARD & LAYOUT ─────────────────────────────────
-import AdminLayout from './pages/Admin/AdminLayout';
-import AdminDashboard from './pages/Admin/AdminDashboard';
-import AdminUsers from './pages/Admin/AdminUsers';
-import AdminWithdrawals from './pages/Admin/AdminWithdrawals';
-import AdminKYC from './pages/Admin/AdminKYC';
-import GlobalLedger from './pages/Admin/GlobalLedger';
-import SystemHealth from './pages/Admin/SystemHealth';
-import AdminSupport from './pages/Admin/AdminSupport';
+// Admin Pages
+import { 
+  AdminDashboard, 
+  AdminOverview,
+  AdminUserTable, 
+  UserIdentityDetail,
+  KycVerificationQueue,
+  WithdrawalRequestsTable,
+  DepositRequestsTable,
+  AdminSettings,
+  SystemHealth 
+} from './pages/Admin';
 
 function App() {
   return (
     <>
-      {/* Global Toast Notifications - Terminal Style */}
-      <Toaster
+      {/* Global Toast Notifications */}
+      <Toaster 
         position="top-right"
         toastOptions={{
           style: {
-            background: '#020408',
+            background: '#0a0c10',
             color: '#fff',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            fontFamily: 'monospace',
-            fontSize: '13px',
-            padding: '12px 16px',
-          },
-          success: {
-            iconTheme: { primary: '#eab308', secondary: '#020408' },
-          },
-          error: {
-            iconTheme: { primary: '#ef4444', secondary: '#020408' },
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            fontSize: '14px',
+            padding: '16px',
+            borderRadius: '12px',
           },
         }}
       />
 
       <Routes>
-        {/* ── PUBLIC ROUTES ──────────────────────────────────────── */}
+        {/* ====================== PUBLIC ROUTES ====================== */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* ── USER SECURE NODE ROUTES (Protected) ─────────────────── */}
-        <Route path="/dashboard" element={<ProtectedRoute />}>
-          {/* UserLayout wraps all user dashboard pages with sidebar */}
-          <Route element={<UserLayout />}>
-            <Route index element={<UserDashboard />} />
-            <Route path="deposit" element={<Deposit />} />
-            <Route path="withdrawal" element={<Withdrawal />} />
-            <Route path="profile" element={<UserProfile />} />
-            <Route path="ledger" element={<Ledger />} />
-          </Route>
+        {/* ====================== PROTECTED USER ROUTES ====================== */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<UserDashboard />} />
+          <Route path="/dashboard/deposit" element={<Deposit />} />
+          <Route path="/dashboard/withdrawal" element={<Withdrawal />} />
+          <Route path="/dashboard/profile" element={<UserProfile />} />
+          <Route path="/dashboard/ledger" element={<Ledger />} />
         </Route>
 
-        {/* ── ADMIN CONTROL CENTER ROUTES (Admin Only) ───────────── */}
-        <Route path="/admin" element={<AdminRoute />}>
-          {/* AdminLayout wraps all admin pages */}
-          <Route element={<AdminLayout />}>
-            {/* Default redirect when visiting /admin */}
+        {/* ====================== PROTECTED ADMIN ROUTES ====================== */}
+        <Route element={<AdminRoute />}>
+          <Route path="/admin" element={<AdminDashboard />}>
+            {/* Default redirect for /admin */}
             <Route index element={<Navigate to="/admin/dashboard" replace />} />
             
-            <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="users" element={<AdminUsers />} />
-            <Route path="withdrawals" element={<AdminWithdrawals />} />
-            <Route path="kyc" element={<AdminKYC />} />
-            <Route path="ledger" element={<GlobalLedger />} />
+            <Route path="dashboard" element={<AdminOverview />} />
+            <Route path="users" element={<AdminUserTable />} />
+            <Route path="users/:id" element={<UserIdentityDetail />} />
+            <Route path="withdrawals" element={<WithdrawalRequestsTable />} />
+            <Route path="deposits" element={<DepositRequestsTable />} />
+            <Route path="kyc" element={<KycVerificationQueue />} />
+            <Route path="settings" element={<AdminSettings />} />
             <Route path="health" element={<SystemHealth />} />
-            <Route path="support" element={<AdminSupport />} />
           </Route>
         </Route>
 
-        {/* ── CATCH-ALL: Redirect unknown routes to Landing Page ─── */}
+        {/* ====================== CATCH-ALL ====================== */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

@@ -1,58 +1,28 @@
-// routes/userRoutes.js
-// All user-related API endpoints – mounted under /api/user
-
 import express from 'express';
-const router = express.Router();
-
-import { protect } from '../middleware/authMiddleware.js';
 import {
-  getUserProfile,
-  updateProfile,
-  getLedger,
-  compoundYield,
-  requestWithdrawal,
-  getBalances,
+  getUserBalances,
   getRecentTransactions,
   getDepositAddress,
+  compoundYield,
+  syncLedger,
+  requestWithdrawal,
+  getWithdrawalHistory
 } from '../controllers/userController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
-import { subscribeToPlan } from '../controllers/investController.js';
-import { submitKyc } from '../controllers/kycController.js';
-import { getTransactionHistory } from '../controllers/transactionController.js';
+const router = express.Router();
 
-// ────────────────────────────────────────────────────────────────────────────────
-// PROFILE & ACCOUNT MANAGEMENT
-// ────────────────────────────────────────────────────────────────────────────────
-router.get('/profile', protect, getUserProfile);
-router.put('/profile/update', protect, updateProfile);
+// Apply protection to all user actions
+router.use(protect);
 
-// ────────────────────────────────────────────────────────────────────────────────
-// BALANCES & RECENT TRANSACTIONS (Used by Dashboard)
-// ────────────────────────────────────────────────────────────────────────────────
-router.get('/balances', protect, getBalances);
-router.get('/transactions/recent', protect, getRecentTransactions);
+router.get('/balances', getUserBalances);
+router.get('/transactions/recent', getRecentTransactions);
+router.get('/deposit-address', getDepositAddress);
+router.get('/withdrawals', getWithdrawalHistory);
 
-// ────────────────────────────────────────────────────────────────────────────────
-// DEPOSIT ADDRESS GENERATION (Used by Deposit Page)
-// ────────────────────────────────────────────────────────────────────────────────
-router.get('/deposit-address', protect, getDepositAddress);
-
-// ────────────────────────────────────────────────────────────────────────────────
-// LEDGER & TRANSACTION HISTORY
-// ────────────────────────────────────────────────────────────────────────────────
-router.get('/ledger', protect, getLedger);
-router.get('/activity', protect, getTransactionHistory);
-
-// ────────────────────────────────────────────────────────────────────────────────
-// YIELD COMPOUNDING & INVESTMENT
-// ────────────────────────────────────────────────────────────────────────────────
-router.post('/compound-yield', protect, compoundYield);
-router.post('/invest', protect, subscribeToPlan);
-
-// ────────────────────────────────────────────────────────────────────────────────
-// WITHDRAWAL & KYC SUBMISSION
-// ────────────────────────────────────────────────────────────────────────────────
-router.post('/withdraw', protect, requestWithdrawal);
-router.post('/kyc/submit', protect, submitKyc);
+router.post('/compound', compoundYield);
+router.post('/sync-ledger', syncLedger);
+router.post('/withdraw', requestWithdrawal);
 
 export default router;
+

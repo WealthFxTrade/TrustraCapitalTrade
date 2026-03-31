@@ -1,35 +1,35 @@
+// frontend/vite.config.js
 import { defineConfig } from 'vite';
-import path from 'path';
+import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = dirname(__filename);
 
 export default defineConfig({
+  plugins: [react()],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, 'src'),
-    },
+    alias: { '@': resolve(__dirname, 'src') },
   },
-
   server: {
     port: 5173,
-    host: '127.0.0.1',
-    watch: {
-      usePolling: true,
-    },
+    strictPort: true,
+    host: true, // Crucial for Network IP access
     proxy: {
-      '/api': {
+      // Forward all core API routes to the backend
+      '^/(auth|user|admin|api)': {
         target: 'http://127.0.0.1:10000',
-        changeOrigin: true,
-        secure: false,
-      },
-      '/socket.io': {
-        target: 'http://127.0.0.1:10000',
-        ws: true,
         changeOrigin: true,
         secure: false,
       },
     },
   },
+  build: {
+    outDir: 'dist',
+    chunkSizeWarningLimit: 1000,
+    minify: 'terser', // Higher compression for production
+    sourcemap: false,
+  },
 });
+

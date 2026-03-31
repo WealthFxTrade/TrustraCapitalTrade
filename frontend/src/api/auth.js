@@ -1,51 +1,22 @@
-import api from './api';
-import { API_ENDPOINTS } from '../constants/api';
+// src/api/auth.js
+import api from '../constants/api';   // assuming this exports the axios instance
 
-/**
- * REGISTER
- */
-export const register = async ({ fullName, email, password }) => {
-  const response = await api.post(API_ENDPOINTS.REGISTER, { fullName, email, password });
-  return response.data;
+export const login = async (email, password) => {
+  const { data } = await api.post('/auth/login', { email, password });
+  return data;
 };
 
-/**
- * LOGIN
- */
-export const login = async ({ email, password }) => {
-  const response = await api.post(API_ENDPOINTS.LOGIN, { email, password });
-
-  if (response.data?.success && response.data?.token) {
-    localStorage.setItem('token', response.data.token);
-    if (response.data.user) {
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-    }
-  }
-
-  return response.data;
+export const register = async (fullName, email, password, phone) => {
+  const { data } = await api.post('/auth/register', { 
+    fullName, 
+    email, 
+    password, 
+    phone 
+  });
+  return data;
 };
 
-/**
- * FORGOT PASSWORD
- */
-export const forgotPassword = async (email) => {
-  const response = await api.post(API_ENDPOINTS.FORGOT_PASSWORD, { email });
-  return response.data;
-};
-
-/**
- * RESET PASSWORD
- */
-export const resetPassword = async (token, password) => {
-  const response = await api.post(API_ENDPOINTS.RESET_PASSWORD(token), { password });
-  return response.data;
-};
-
-/**
- * LOGOUT
- */
-export const logout = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  window.location.replace('/login');
+export const getProfile = async () => {
+  const { data } = await api.get('/auth/profile');
+  return data;
 };

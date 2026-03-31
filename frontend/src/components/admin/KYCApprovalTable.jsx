@@ -19,7 +19,7 @@ export default function KYCApprovalTable({ token }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/kyc/pending`, {
+      const res = await fetch(`${BACKEND_URL}/admin/kyc/pending`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -46,7 +46,7 @@ export default function KYCApprovalTable({ token }) {
     if (!window.confirm('Approve this KYC submission? This cannot be undone.')) return;
 
     try {
-      const res = await fetch(`\( {BACKEND_URL}/api/admin/kyc/ \){id}/approve`, {
+      const res = await fetch(`\( {BACKEND_URL}/admin/kyc/ \){id}/approve`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -73,7 +73,7 @@ export default function KYCApprovalTable({ token }) {
     if (!window.confirm('Reject this KYC? User will see the reason.')) return;
 
     try {
-      const res = await fetch(`\( {BACKEND_URL}/api/admin/kyc/ \){selectedSubmission._id}/reject`, {
+      const res = await fetch(`\( {BACKEND_URL}/admin/kyc/ \){selectedSubmission._id}/reject`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

@@ -1,76 +1,83 @@
 // src/components/dashboard/AssetCard.jsx
 import React from 'react';
 
-const AssetCard = ({ label, value = 0, price = 0, icon, symbol = '' }) => {
-  // Format value: more decimals for crypto, 2 for fiat
-  const formattedValue = symbol === 'EUR'
-    ? value.toFixed(2)
-    : value.toFixed(6);
+const AssetCard = ({ label, value = 0, price = 0, icon, symbol = '', highlight = false }) => {
+  // Safety check: ensure value and price are numbers
+  const safeValue = Number(value) || 0;
+  const safePrice = Number(price) || 0;
 
-  // Format price with commas
-  const formattedPrice = price.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+  // Formatters
+  const formattedValue = symbol === 'EUR' 
+    ? new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2 }).format(safeValue)
+    : safeValue.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+
+  const formattedPrice = safePrice.toLocaleString('de-DE', { 
+    style: 'currency', 
+    currency: 'EUR' 
   });
 
-  // Simple placeholder for % change (you can make dynamic later)
-  const changePercent = (Math.random() * 10 - 5).toFixed(2); // dummy -5% to +5%
-  const isPositive = changePercent >= 0;
+  // Simulated daily node performance
+  const changePercent = (Math.random() * 2 + 0.1).toFixed(2); // 0.1% to 2.1% growth
 
   return (
-    <div 
-      className="
-        bg-gradient-to-br from-white/5 to-black/30 
-        border border-white/10 rounded-[2rem] 
-        p-6 backdrop-blur-lg shadow-xl shadow-black/40 
-        hover:border-white/30 hover:shadow-2xl 
-        transition-all duration-300 group
-      "
-    >
-      {/* Header: Icon + Label + Symbol */}
-      <div className="flex items-center justify-between mb-5">
+    <div className={`relative overflow-hidden transition-all duration-500 group border rounded-[2.5rem] p-8 ${
+      highlight 
+        ? 'bg-emerald-500/10 border-emerald-500/30 shadow-[0_0_40px_-15px_rgba(16,185,129,0.3)]' 
+        : 'bg-[#0a0c10] border-white/5 hover:border-white/20 shadow-2xl'
+    }`}>
+      
+      <div className="flex items-start justify-between mb-8">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white/90 group-hover:scale-110 transition-transform">
-            {icon}
-          </div>
+          {icon && (
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110 ${
+              highlight ? 'bg-emerald-500 text-black' : 'bg-white/5 text-white/70'
+            }`}>
+              {icon}
+            </div>
+          )}
           <div>
-            <h4 className="text-lg font-black uppercase tracking-wide text-white">
-              {label}
-            </h4>
-            <p className="text-xs font-mono text-white/50">{symbol}</p>
+            <h4 className={`text-[10px] font-black uppercase tracking-[0.2em] ${
+              highlight ? 'text-emerald-400' : 'text-gray-500'
+            }`}>{label}</h4>
+            <p className="text-xs font-mono text-gray-600 mt-1">{symbol}</p>
           </div>
         </div>
-
-        {/* Change indicator (placeholder) */}
-        {price > 0 && (
-          <span 
-            className={`
-              text-xs font-bold px-3 py-1.5 rounded-full 
-              ${isPositive 
-                ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                : 'bg-red-500/20 text-red-400 border border-red-500/30'}
-            `}
-          >
-            {isPositive ? '↑' : '↓'} {Math.abs(changePercent)}%
-          </span>
-        )}
+        
+        {/* Node Performance Indicator */}
+        <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
+          highlight 
+            ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' 
+            : 'bg-white/5 border-white/10 text-gray-400'
+        }`}>
+          + {changePercent}%
+        </div>
       </div>
 
-      {/* Main Value */}
-      <div className="mt-2">
-        <p className="text-4xl lg:text-5xl font-black italic tracking-tighter text-white">
-          {symbol === 'EUR' ? '€' : ''}{formattedValue}
-        </p>
+      <div className="relative z-10">
+        <div className="flex items-baseline gap-1">
+          {symbol === 'EUR' && <span className="text-2xl font-black text-gray-500 mr-1">€</span>}
+          <p className={`text-4xl lg:text-5xl font-black tracking-tighter ${
+            highlight ? 'text-white' : 'text-white/90'
+          }`}>
+            {formattedValue}
+          </p>
+        </div>
         
-        {/* Price in EUR (skip for EUR balance) */}
-        {price > 0 && symbol !== 'EUR' && (
-          <p className="text-base text-white/60 mt-2 font-medium">
-            ≈ €{formattedPrice}
+        {safePrice > 0 && symbol !== 'EUR' && (
+          <p className="text-xs font-bold text-gray-500 mt-3 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            MARKET VALUE: {formattedPrice}
           </p>
         )}
       </div>
+
+      {/* Decorative background element for highlight card */}
+      {highlight && (
+        <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-emerald-500/10 blur-3xl rounded-full" />
+      )}
     </div>
   );
 };
 
 export default AssetCard;
+

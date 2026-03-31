@@ -10,7 +10,7 @@ export default function WithdrawalQueue() {
 
   const fetchQueue = async () => {
     try {
-      // Aligned with backend: GET /api/admin/withdrawals
+      // Aligned with backend: GET /admin/withdrawals
       const { data } = await api.get('/admin/withdrawals?status=pending');
       // Ensure we handle the data structure from your controller
       setRequests(data.data || data.withdrawals || []);
@@ -37,7 +37,7 @@ export default function WithdrawalQueue() {
 
     setProcessingId(id);
     try {
-      // Aligned with backend: PATCH /api/admin/withdrawals/:id/status
+      // Aligned with backend: PATCH /admin/withdrawals/:id/status
       await api.patch(`/admin/withdrawals/${id}/status`, {
         status, // 'completed' or 'rejected'
         txHash,

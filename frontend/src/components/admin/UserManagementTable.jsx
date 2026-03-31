@@ -24,7 +24,7 @@ export default function UserManagementTable({ token, logout }) {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/admin/users`, {
+      const res = await fetch(`${BACKEND_URL}/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -71,7 +71,7 @@ export default function UserManagementTable({ token, logout }) {
   // Save plan change
   const savePlanChange = async () => {
     try {
-      const res = await fetch(`\( {BACKEND_URL}/api/admin/users/ \){selectedUser._id}/plan`, {
+      const res = await fetch(`\( {BACKEND_URL}/admin/users/ \){selectedUser._id}/plan`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +97,7 @@ export default function UserManagementTable({ token, logout }) {
     if (!window.confirm(`Are you sure you want to ${action} this user?`)) return;
 
     try {
-      const res = await fetch(`\( {BACKEND_URL}/api/admin/users/ \){user._id}/ban`, {
+      const res = await fetch(`\( {BACKEND_URL}/admin/users/ \){user._id}/ban`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +120,7 @@ export default function UserManagementTable({ token, logout }) {
     if (!window.confirm(`PERMANENTLY delete user ${user.email}? This cannot be undone.`)) return;
 
     try {
-      const res = await fetch(`\( {BACKEND_URL}/api/admin/users/ \){user._id}`, {
+      const res = await fetch(`\( {BACKEND_URL}/admin/users/ \){user._id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -139,7 +139,7 @@ export default function UserManagementTable({ token, logout }) {
     if (!window.confirm(`Reset password for ${user.email}?`)) return;
 
     try {
-      const res = await fetch(`\( {BACKEND_URL}/api/admin/users/ \){user._id}/reset-password`, {
+      const res = await fetch(`\( {BACKEND_URL}/admin/users/ \){user._id}/reset-password`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -161,7 +161,7 @@ export default function UserManagementTable({ token, logout }) {
     setShowDetailsModal(true);
 
     try {
-      const res = await fetch(`\( {BACKEND_URL}/api/admin/users/ \){user._id}`, {
+      const res = await fetch(`\( {BACKEND_URL}/admin/users/ \){user._id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

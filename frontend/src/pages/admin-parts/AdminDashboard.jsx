@@ -33,7 +33,7 @@ export default function AdminDashboard({ token, logout }) {
 
       // 1. Stats and 2. Pending withdrawals using template literals correctly
       const [statsRes, wdRes] = await Promise.all([
-        fetch(`${BACKEND_URL}/api/admin/stats`, {
+        fetch(`${BACKEND_URL}/admin/stats`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
         fetch(`${BACKEND_URL}/api/withdrawals/pending`, {

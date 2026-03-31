@@ -19,7 +19,7 @@ const KYCReviewModal = ({ kyc, onClose, onRefresh }) => {
     
     setSubmitting(true);
     try {
-      // Endpoint: PATCH /api/admin/kyc/:id/approve or /reject
+      // Endpoint: PATCH /admin/kyc/:id/approve or /reject
       await api.patch(`/admin/kyc/${kyc._id}/${action}`, { reason: rejectionReason });
       toast.success(`Investor Node ${action === 'approve' ? 'Verified' : 'Rejected'}`);
       onRefresh();

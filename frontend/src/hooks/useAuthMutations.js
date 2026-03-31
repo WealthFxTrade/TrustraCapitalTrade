@@ -1,14 +1,8 @@
-// src/hooks/useAuthMutations.js
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { login as loginAPI, register as registerAPI } from '../api/auth';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
-/**
- * Hook for user login mutation
- * Handles login API call, token storage, user state update, and navigation
- * @returns {Object} Mutation result from TanStack Query
- */
 export const useLogin = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -21,39 +15,34 @@ export const useLogin = () => {
     },
 
     onSuccess: (data) => {
-      // data should contain { user, token } from backend
-      if (data.token) {
-        // localStorage is kept for backward compatibility
-        // but main auth now uses httpOnly cookie from backend
+      if (data?.token) {
         localStorage.setItem('trustra_token', data.token);
       }
 
-      queryClient.setQueryData(['user'], data.user);
+      if (data?.user) {
+        queryClient.setQueryData(['user'], data.user);
+      }
+
       toast.success('Login successful!', { id: 'login' });
       navigate('/dashboard', { replace: true });
+
+      // Optional: Refresh user data
+      queryClient.invalidateQueries({ queryKey: ['user'] });
     },
 
     onError: (error) => {
-      const msg =
+      const errorMessage =
         error.response?.data?.message ||
+        error.response?.data?.error ||
         error.message ||
-        'Login failed. Please check your credentials and try again.';
+        'Login failed. Please try again.';
 
-      toast.error(msg, { id: 'login' });
-      console.error('Login mutation error:', error);
-    },
-
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      toast.error(errorMessage, { id: 'login' });
+      console.error('Login error:', error);
     },
   });
 };
 
-/**
- * Hook for user registration mutation
- * Handles registration API call, token storage, user state update, and navigation
- * @returns {Object} Mutation result from TanStack Query
- */
 export const useRegister = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -67,88 +56,29 @@ export const useRegister = () => {
     },
 
     onSuccess: (data) => {
-      // data should contain { user, token } from backend
-      if (data.token) {
+      if (data?.token) {
         localStorage.setItem('trustra_token', data.token);
       }
 
-      queryClient.setQueryData(['user'], data.user);
-      toast.success('Registration successful! Welcome.', { id: 'register' });
+      if (data?.user) {
+        queryClient.setQueryData(['user'], data.user);
+      }
+
+      toast.success('Registration successful!', { id: 'register' });
       navigate('/dashboard', { replace: true });
-    },
 
-    onError: (error) => {
-      const msg =
-        error.response?.data?.message ||
-        error.message ||
-        'Registration failed. Please check your details and try again.';
-
-      toast.error(msg, { id: 'register' });
-      console.error('Register mutation error:', error);
-    },
-
-    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['user'] });
     },
-  });
-};
-
-/**
- * Hook for forgot password request (sends OTP email)
- * @returns {Object} Mutation result from TanStack Query
- */
-export const useForgotPassword = () => {
-  return useMutation({
-    mutationFn: ({ email }) => request('/auth/forgot-password', 'POST', { email }),
-
-    onMutate: () => {
-      toast.loading('Sending reset link...', { id: 'forgot' });
-    },
-
-    onSuccess: () => {
-      toast.success('Password reset link sent to your email!', { id: 'forgot' });
-    },
 
     onError: (error) => {
-      const msg =
+      const errorMessage =
         error.response?.data?.message ||
+        error.response?.data?.error ||
         error.message ||
-        'Failed to send reset link. Please check the email address.';
+        'Registration failed. Please try again.';
 
-      toast.error(msg, { id: 'forgot' });
-      console.error('Forgot password error:', error);
-    },
-  });
-};
-
-/**
- * Hook for reset password using OTP
- * @returns {Object} Mutation result from TanStack Query
- */
-export const useResetPassword = () => {
-  const navigate = useNavigate();
-
-  return useMutation({
-    mutationFn: ({ token, password }) =>
-      request(`/auth/reset-password/${token}`, 'POST', { password }),
-
-    onMutate: () => {
-      toast.loading('Resetting password...', { id: 'reset' });
-    },
-
-    onSuccess: () => {
-      toast.success('Password reset successful! Please login.', { id: 'reset' });
-      navigate('/login', { replace: true });
-    },
-
-    onError: (error) => {
-      const msg =
-        error.response?.data?.message ||
-        error.message ||
-        'Password reset failed. Invalid or expired token.';
-
-      toast.error(msg, { id: 'reset' });
-      console.error('Reset password error:', error);
+      toast.error(errorMessage, { id: 'register' });
+      console.error('Registration error:', error);
     },
   });
 };

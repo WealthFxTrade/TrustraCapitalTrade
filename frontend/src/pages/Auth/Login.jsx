@@ -4,7 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
 import {
-  Zap, Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, AlertCircle, ShieldCheck,
+  Zap, Mail, Lock, Eye, EyeOff, Loader2, ShieldCheck,
 } from 'lucide-react';
 
 export default function Login() {
@@ -61,23 +61,26 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-[#020408] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-b from-[#020408] via-[#02120a] to-[#020408] flex items-center justify-center px-4">
       <div className="w-full max-w-md space-y-10">
+        {/* Header */}
         <div className="text-center space-y-4">
-          <Zap className="mx-auto text-yellow-500" size={64} />
+          <Zap className="mx-auto text-emerald-500" size={64} />
           <h1 className="text-5xl font-black text-white tracking-tight">
-            Trustra <span className="text-yellow-500">Node</span>
+            Trustra <span className="text-emerald-500">Node</span>
           </h1>
           <p className="text-gray-400">Secure access to your capital terminal</p>
         </div>
 
-        <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-10 shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Form Card */}
+        <div className="relative bg-[#0a0c10] border border-emerald-500/20 rounded-3xl p-10 shadow-2xl overflow-hidden">
+          {/* Emerald gradient glow */}
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-3xl pointer-events-none"></div>
+
+          <form onSubmit={handleSubmit} className="relative space-y-6 z-10">
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email address
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Email address</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                 <input
@@ -85,18 +88,18 @@ export default function Login() {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`w-full pl-12 pr-4 py-3 bg-black/40 border ${errors.email ? 'border-red-500' : 'border-gray-700'} rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500 transition-colors`}
+                  className={`w-full pl-12 pr-4 py-3 bg-black/40 border ${
+                    errors.email ? 'border-rose-500' : 'border-emerald-500/20'
+                  } rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all`}
                   placeholder="you@trustra.capital"
                 />
               </div>
-              {errors.email && <p className="mt-1 text-sm text-red-400">{errors.email}</p>}
+              {errors.email && <p className="mt-1 text-sm text-rose-400">{errors.email}</p>}
             </div>
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Password
-              </label>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Password</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                 <input
@@ -104,7 +107,9 @@ export default function Login() {
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
-                  className={`w-full pl-12 pr-12 py-3 bg-black/40 border ${errors.password ? 'border-red-500' : 'border-gray-700'} rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500 transition-colors`}
+                  className={`w-full pl-12 pr-12 py-3 bg-black/40 border ${
+                    errors.password ? 'border-rose-500' : 'border-emerald-500/20'
+                  } rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all`}
                   placeholder="••••••••••"
                 />
                 <button
@@ -115,26 +120,28 @@ export default function Login() {
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              {errors.password && <p className="mt-1 text-sm text-red-400">{errors.password}</p>}
+              {errors.password && <p className="mt-1 text-sm text-rose-400">{errors.password}</p>}
             </div>
 
+            {/* Remember + Forgot */}
             <div className="flex items-center justify-between text-sm">
               <label className="flex items-center gap-2 text-gray-400">
-                <input type="checkbox" className="accent-yellow-500" />
+                <input type="checkbox" className="accent-emerald-500" />
                 Remember me
               </label>
-              <Link to="/forgot-password" className="text-yellow-500 hover:underline">
+              <Link to="/forgot-password" className="text-emerald-500 hover:underline">
                 Forgot password?
               </Link>
             </div>
 
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
               className={`w-full py-4 rounded-xl font-bold text-lg transition-all ${
                 loading
                   ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  : 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg shadow-yellow-500/20'
+                  : 'bg-emerald-500 hover:bg-emerald-600 text-black shadow-lg shadow-emerald-500/20'
               }`}
             >
               {loading ? (
@@ -148,16 +155,18 @@ export default function Login() {
             </button>
           </form>
 
-          <p className="mt-6 text-center text-gray-400">
+          {/* Register Link */}
+          <p className="mt-6 text-center text-gray-400 relative z-10">
             Don't have an account?{' '}
-            <Link to="/register" className="text-yellow-500 font-bold hover:underline">
+            <Link to="/register" className="text-emerald-500 font-bold hover:underline">
               Create one now
             </Link>
           </p>
         </div>
 
+        {/* Footer */}
         <div className="text-center text-xs text-gray-600">
-          <ShieldCheck className="inline mr-1" size={14} /> End-to-End Encrypted • AES-256
+          <ShieldCheck className="inline mr-1 text-emerald-500" size={14} /> End-to-End Encrypted • AES-256
         </div>
       </div>
     </div>

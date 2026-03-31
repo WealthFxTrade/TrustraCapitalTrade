@@ -1,20 +1,17 @@
+// models/Transaction.js
 import mongoose from 'mongoose';
 
-/**
- * Transaction Schema v8.4.4
- * Optimized for Elite Yield Protocol & Secure Handshake
- */
 const transactionSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'Transaction must belong to a user node'],
+      required: [true, 'Transaction must belong to a user'],
       index: true,
     },
     type: {
       type: String,
-      enum: ['deposit', 'withdrawal', 'investment', 'profit', 'reinvest'],
+      enum: ['deposit', 'withdrawal', 'investment', 'profit', 'reinvest', 'bonus', 'roi'],
       required: [true, 'Transaction type is required'],
       index: true,
     },
@@ -43,6 +40,7 @@ const transactionSchema = new mongoose.Schema(
       trim: true,
       minlength: 3,
       maxlength: 3,
+      required: true,
     },
     walletAddress: {
       type: String,
@@ -64,7 +62,7 @@ const transactionSchema = new mongoose.Schema(
     description: {
       type: String,
       trim: true,
-      maxlength: [200, 'Description too long'],
+      maxlength: [200, 'Description is too long'],
     },
     referenceId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -88,56 +86,37 @@ const transactionSchema = new mongoose.Schema(
   }
 );
 
-/**
- * ── PRE-VALIDATE HANDSHAKE ──
- * Ensures accounting direction and net amounts are correct
- */
+// Pre-validate middleware
 transactionSchema.pre('validate', function (next) {
-  // 1. Calculate net yield/allocation after protocol fees
   this.netAmount = this.amount - (this.fee || 0);
 
-  // 2. Auto-calculate signedAmount for Ledger (negative for egress)
   if (this.signedAmount == null) {
-    const isNegative = ['withdrawal', 'investment'].includes(this.type);
-    this.signedAmount = isNegative ? -Math.abs(this.netAmount) : Math.abs(this.netAmount);
+    const isNegativeType = ['withdrawal', 'investment'].includes(this.type);
+    this.signedAmount = isNegativeType 
+      ? -Math.abs(this.netAmount) 
+      : Math.abs(this.netAmount);
   }
 
-  // 3. Prevent mathematical overflow
   if (this.netAmount < 0) {
-    this.invalidate('netAmount', 'Net allocation cannot be negative after fees');
+    this.invalidate('netAmount', 'Net amount cannot be negative after fees');
   }
 
   next();
 });
 
-/**
- * ── SYSTEM INDEXES ──
- */
+// Indexes
 transactionSchema.index({ user: 1, createdAt: -1 });
 transactionSchema.index({ status: 1, createdAt: -1 });
+transactionSchema.index({ type: 1, status: 1 });
 
-/**
- * ── VIRTUALS ──
- * Formatted string for Terminal UI
- */
+// Virtual for Euro display
 transactionSchema.virtual('formattedAmount').get(function () {
-  const sign = this.signedAmount >= 0 ? '+' : '-';
-  return `${sign} ${Math.abs(this.netAmount).toLocaleString('de-DE', {
+  const sign = this.signedAmount >= 0 ? '+' : '';
+  return `\( {sign}€ \){Math.abs(this.netAmount).toLocaleString('de-DE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })} ${this.currency}`;
+  })}`;
 });
-
-/**
- * ── STATIC PROTOCOLS ──
- */
-transactionSchema.statics.getPendingWithdrawals = async function (limit = 50) {
-  return this.find({ type: 'withdrawal', status: 'pending' })
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .populate('user', 'email fullName');
-};
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 export default Transaction;
-

@@ -25,7 +25,7 @@ export default function AdminKYC() {
   const fetchKycQueue = async () => {
     setRefreshing(true);
     try {
-      const res = await api.get('/api/admin/kyc/pending');
+      const res = await api.get('/admin/kyc/pending');
       setPendingKyc(res.data.queue || res.data.data || res.data || []);
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to load KYC queue');
@@ -46,7 +46,7 @@ export default function AdminKYC() {
     const toastId = toast.loading(`${actionText} KYC...`);
 
     try {
-      await api.put('/api/admin/kyc/verify', { kycId, status });
+      await api.put('/admin/kyc/verify', { kycId, status });
       toast.success(`KYC ${status === 'verified' ? 'approved' : 'rejected'}`, { id: toastId });
       fetchKycQueue();
     } catch (err) {

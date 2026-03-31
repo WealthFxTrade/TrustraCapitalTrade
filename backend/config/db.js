@@ -1,34 +1,79 @@
 // config/db.js
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 
-const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      // Best options for Termux / unstable mobile networks
-      family: 4,                        // Force IPv4
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      heartbeatFrequencyMS: 10000,
-      connectTimeoutMS: 10000,
-    });
+dotenv.config(); // ✅ ensure env is loaded here
 
-    console.log(`📡 MongoDB Connected: ${conn.connection.host}`);
-    console.log(`   Database: ${conn.connection.name}`);
-    console.log(`   State: connected`);
+const options = {
+  family: 4,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  maxPoolSize: 10,
+  retryWrites: true,
+  autoIndex: process.env.NODE_ENV !== 'production',
+};
 
-  } catch (error) {
-    console.error('❌ MongoDB connection failed:');
-    console.error(`   Error: ${error.message}`);
+let isConnected = false;
 
-    if (error.name === 'MongoServerSelectionError') {
-      console.error('   → Possible causes: DNS issue, no internet, wrong MONGO_URI, or Atlas IP whitelist');
-      console.error('   → Quick fixes:');
-      console.error('     1. Check internet: ping 8.8.8.8');
-      console.error('     2. nslookup ac-kfwhzy7-shard-00-01.w2mghdv.mongodb.net');
-      console.error('     3. In MongoDB Atlas → Network Access → Add Current IP or allow 0.0.0.0/0');
-    }
-    process.exit(1);
+const connectDB = async (retries = 3, baseDelay = 2000) => {
+  const MONGO_URI = process.env.MONGO_URI; // ✅ move INSIDE function
+
+  if (!MONGO_URI) {
+    throw new Error('❌ MONGO_URI is missing in .env');
   }
+
+  // Fast path
+  if (isConnected && mongoose.connection.readyState === 1) {
+    console.log('📡 [Ledger] Already connected to MongoDB');
+    return;
+  }
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`📡 [Ledger] Connecting... (attempt ${attempt}/${retries})`);
+
+      await mongoose.connect(MONGO_URI, options);
+
+      isConnected = true;
+      console.log(`✅ [Ledger] Connected to ${mongoose.connection.host}`);
+
+      setupEventListeners();
+      return;
+
+    } catch (error) {
+      console.error(`❌ [Ledger] Attempt ${attempt} failed: ${error.message}`);
+
+      if (attempt === retries) {
+        console.error('🔥 [Ledger] All retries exhausted.');
+        throw error;
+      }
+
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      console.log(`🔄 [Ledger] Retrying in ${delay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+};
+
+const setupEventListeners = () => {
+  if (mongoose.connection.listenerCount('disconnected') > 0) return;
+
+  mongoose.connection.on('disconnected', () => {
+    isConnected = false;
+    console.warn('⚠️ [Ledger] MongoDB disconnected. Reconnecting...');
+    connectDB(5, 3000).catch(err =>
+      console.error('[Ledger] Reconnect failed:', err.message)
+    );
+  });
+
+  mongoose.connection.on('error', (err) => {
+    console.error('❌ [Ledger] MongoDB error:', err.message);
+  });
+
+  mongoose.connection.on('reconnected', () => {
+    isConnected = true;
+    console.log('✅ [Ledger] MongoDB reconnected');
+  });
 };
 
 export default connectDB;

@@ -1,3 +1,4 @@
+// backend/routes/auth.js
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
@@ -7,7 +8,7 @@ import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// ── AES-256-CBC DECRYPTION PROTOCOL ──
+// ── AES-256-CBC DECRYPTION ──
 const decryptAccessCipher = (cipherText) => {
   try {
     const algorithm = 'aes-256-cbc';
@@ -22,11 +23,12 @@ const decryptAccessCipher = (cipherText) => {
   }
 };
 
+// ── JWT GENERATION ──
 const generateToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: '7d' });
 };
 
-// ── 1. AUTHENTICATE (LOGIN) ──
+// ── 1. LOGIN ──
 router.post('/login', async (req, res, next) => {
   try {
     const { email, password: incomingCipher } = req.body;
@@ -47,39 +49,54 @@ router.post('/login', async (req, res, next) => {
         id: user._id,
         fullName: user.fullName,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
-// ── 2. REGISTER (SIGN UP) ──
+// ── 2. REGISTER ──
 router.post('/register', async (req, res, next) => {
   try {
     const { fullName, email, password: incomingCipher } = req.body;
+    if (!fullName || !email || !incomingCipher) throw new ApiError(400, 'All fields are required');
+
     const password = decryptAccessCipher(incomingCipher);
-    
+
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    if (existingUser) throw new ApiError(409, 'Email already registered');
+
     const user = await User.create({
       fullName,
       email: email.toLowerCase().trim(),
-      password
+      password,
     });
 
     res.status(201).json({
       success: true,
       token: generateToken(user._id, user.role),
-      user: { id: user._id, fullName: user.fullName, email: user.email, role: user.role }
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+      },
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    next(err);
+  }
 });
 
-// ── 3. SESSION VERIFICATION ──
-router.get('/me', protect, async (req, res, next) => {
+// ── 3. PROFILE / SESSION VERIFICATION ──
+router.get('/profile', protect, async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
-    res.json({ success: true, user });
-  } catch (err) { next(err); }
+    // req.user is already set by authMiddleware
+    res.json({ success: true, user: req.user });
+  } catch (err) {
+    next(err);
+  }
 });
 
-// ❗ THIS IS THE FIX ❗
 export default router;
