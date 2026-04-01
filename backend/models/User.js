@@ -1,12 +1,8 @@
-// backend/models/User.js
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: [true, 'Please add a name'],
-    trim: true
-  },
+  name: { type: String, required: [true, 'Please add a name'], trim: true },
   email: {
     type: String,
     required: [true, 'Please add an email'],
@@ -19,22 +15,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please add a password'],
     minlength: 8,
-    select: false // 🛡️ Security: Never include password in queries by default
+    select: false 
   },
-
-  role: {
-    type: String,
-    enum: ['user', 'admin', 'superadmin'],
-    default: 'user'
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  isBanned: {
-    type: Boolean,
-    default: false
-  },
+  role: { type: String, enum: ['user', 'admin', 'superadmin'], default: 'user' },
+  isActive: { type: Boolean, default: true },
+  isBanned: { type: Boolean, default: false },
 
   balances: {
     type: Map,
@@ -50,12 +35,7 @@ const userSchema = new mongoose.Schema({
 
   isNodeActive: { type: Boolean, default: false },
   activePlan: { type: String, default: 'None' },
-
-  kycStatus: {
-    type: String,
-    enum: ['unverified', 'pending', 'submitted', 'verified', 'rejected'],
-    default: 'unverified'
-  },
+  kycStatus: { type: String, enum: ['unverified', 'pending', 'submitted', 'verified', 'rejected'], default: 'unverified' },
   kycNotes: { type: String, default: null },
   kycVerifiedAt: { type: Date, default: null },
   idFrontUrl: { type: String, default: null },
@@ -65,19 +45,25 @@ const userSchema = new mongoose.Schema({
   resetPasswordToken: String,
   resetPasswordExpire: Date,
 
-  twoFactorEnabled: {
-    type: Boolean,
-    default: false
-  }
+  twoFactorEnabled: { type: Boolean, default: false }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
   toObject: { virtuals: true }
 });
 
-// NOTE: We removed userSchema.pre('save') and matchPassword 
-// to prevent double-hashing. Logic is now in middleware/utils.
+// ── PASSWORD HASHING ──
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  const salt = await bcrypt.genSalt(12);
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// ── PASSWORD MATCHING ──
+userSchema.methods.matchPassword = async function(enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
 
 const User = mongoose.model('User', userSchema);
 export default User;
-

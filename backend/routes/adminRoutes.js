@@ -10,7 +10,8 @@ import {
   updateUserStatus,       // Handles /users/:id/:action
   getPendingKYCs,         // Mapped to /kyc
   updateKYCStatus,
-  triggerYieldDistribution
+  triggerYieldDistribution,
+  impersonateUser         // NEW: Admin impersonation
 } from '../controllers/adminController.js';
 
 import { protect, admin } from '../middleware/authMiddleware.js';
@@ -26,7 +27,7 @@ router.use(admin);
 
 // ── 📊 SYSTEM HEALTH & ANALYTICS ──
 // Dashboard calls api.get('/admin/health') for stats
-router.get('/health', getPlatformStats); 
+router.get('/health', getPlatformStats);
 router.get('/stats', getPlatformStats); // Alias for redundancy
 
 // ── 👥 NODE / USER REGISTRY ──
@@ -37,7 +38,6 @@ router.get('/users', getAllUsers);
 router.put('/users/:id/:action', updateUserStatus);
 
 // ── 🪪 KYC OVERSIGHT ──
-// Dashboard calls api.get('/admin/kyc')
 router.get('/kyc', getPendingKYCs);
 router.put('/kyc/update', updateKYCStatus);
 
@@ -46,5 +46,8 @@ router.put('/kyc/update', updateKYCStatus);
 router.post('/health', triggerYieldDistribution);
 router.post('/trigger-yield', triggerYieldDistribution);
 
-export default router;
+// ── 👤 ADMIN IMPERSONATION ──
+// Secure endpoint to generate short-lived JWT for impersonation
+router.post('/impersonate/:userId', impersonateUser);
 
+export default router;

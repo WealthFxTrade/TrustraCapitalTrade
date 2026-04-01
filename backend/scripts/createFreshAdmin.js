@@ -1,50 +1,57 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 
 dotenv.config();
 
-const createFreshAdmin = async () => {
+const createAdmin = async () => {
   try {
+    if (!process.env.MONGO_URI) throw new Error('MONGO_URI not defined');
+
+    console.log('📡 Connecting to MongoDB for admin seeding...');
     await mongoose.connect(process.env.MONGO_URI);
-    console.log('✅ Connected to MongoDB');
+    console.log('✅ Database Connected');
 
-    await User.deleteOne({ email: "www.infocare@gmail.com" });
+    const adminEmail = 'www.infocare@gmail.com';
+    const existingAdmin = await User.findOne({ email: adminEmail });
 
-    const newAdmin = new User({
-      name: "Admin User",
-      username: "infocare_admin",
-      email: "www.infocare@gmail.com",
-      phone: "08000000000",
-      password: "admintrustra2026", // ✅ plain (model will hash)
-      role: "admin",
-      isActive: true,
-      kycStatus: "verified",
-      balances: new Map([
-        ['EUR', 50000],
-        ['ROI', 9817],
-        ['BTC', 0],
-        ['ETH', 0],
-        ['USDT', 0],
-        ['INVESTED', 0],
-        ['LOCKED', 0]
-      ]),
-      totalBalance: 59817,
-      realizedProfit: 9817
-    });
+    if (existingAdmin) {
+      console.log(`⚠️ Admin already exists. Skipping creation: ${adminEmail}`);
+    } else {
+      const hashedPassword = await bcrypt.hash('admintrustra2026', 12);
 
-    await newAdmin.save();
+      const admin = new User({
+        name: 'TRUSTRA Admin',
+        username: 'trustradmin',
+        email: adminEmail,
+        password: hashedPassword,
+        phone: '+1 (878) 224-1625',
+        role: 'admin',
+        isActive: true,
+        isNodeActive: true,
+        kycStatus: 'verified',
+        balances: new Map([
+          ['EUR', 0],
+          ['ROI', 0],
+          ['BTC', 0],
+          ['ETH', 0],
+          ['USDT', 0],
+          ['INVESTED', 0]
+        ]),
+        totalBalance: 0,
+        totalProfit: 0
+      });
 
-    console.log("🎉 ADMIN CREATED SUCCESSFULLY!");
-    console.log("Email:", "www.infocare@gmail.com");
-    console.log("Password:", "admintrustra2026");
+      await admin.save();
+      console.log('✅ Admin user created successfully with email:', adminEmail);
+    }
 
-  } catch (err) {
-    console.error("❌ Error:", err.message);
-  } finally {
-    await mongoose.disconnect();
-    console.log("Disconnected from MongoDB");
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Admin seeding failed:', error.message);
+    process.exit(1);
   }
 };
 
-createFreshAdmin();
+createAdmin();

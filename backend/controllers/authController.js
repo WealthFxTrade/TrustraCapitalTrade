@@ -1,7 +1,3 @@
-/**
- * Trustra Capital Trade - Authentication Controller
- * PRODUCTION READY - High Security & Scalability
- */
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import generateToken from '../utils/generateToken.js';
@@ -9,39 +5,63 @@ import crypto from 'crypto';
 import sendEmail from '../utils/sendEmail.js';
 
 /**
- * @desc    Utility: Send token via cookie and JSON response
+ * @desc    Utility: Format and Send Token Response
+ * UPDATED: Optimized for Cross-Origin (Vercel -> Render)
  */
 const sendTokenResponse = (user, statusCode, res) => {
-  const token = generateToken(user._id);
+  try {
+    const token = generateToken(user._id);
 
-  const cookieOptions = {
-    httpOnly: true,
-    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 Days
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-  };
+    // ── RESILIENT BALANCE PARSING ──
+    let formattedBalances = {};
+    if (user.balances) {
+      if (typeof user.balances.toJSON === 'function') {
+        formattedBalances = user.balances.toJSON();
+      } else if (user.balances instanceof Map) {
+        formattedBalances = Object.fromEntries(user.balances);
+      } else {
+        formattedBalances = user.balances;
+      }
+    }
 
-  res.cookie('trustra_token', token, cookieOptions);
+    // ── CROSS-ORIGIN COOKIE PROTOCOL ──
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    const cookieOptions = {
+      httpOnly: true,
+      // 'none' is REQUIRED for cross-domain cookies (Vercel to Render)
+      // 'secure' must be true if sameSite is 'none'
+      sameSite: isProduction ? 'none' : 'lax', 
+      secure: isProduction ? true : false,
+      expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 Days
+    };
 
-  res.status(statusCode).json({
-    success: true,
-    message: statusCode === 201 ? 'Account created successfully' : 'Login successful',
-    user: {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      kycStatus: user.kycStatus || 'unverified',
-      balances: Object.fromEntries(user.balances || new Map()),
-    },
-    token,
-  });
+    res.cookie('trustra_token', token, cookieOptions);
+
+    return res.status(statusCode).json({
+      success: true,
+      message: statusCode === 201 ? 'Account created successfully' : 'Login successful',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        kycStatus: user.kycStatus || 'unverified',
+        balances: formattedBalances,
+      },
+      token, // Also send token in body as fallback for mobile/Postman
+    });
+  } catch (error) {
+    console.error("❌ [FATAL] sendTokenResponse Crash:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error: Token Emission Failure"
+    });
+  }
 };
 
 /**
  * @desc    Authenticate user & get token (Login)
- * @route   POST /auth/login
- * @access  Public
  */
 export const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -52,37 +72,42 @@ export const loginUser = asyncHandler(async (req, res) => {
   }
 
   const normalizedEmail = email.toLowerCase().trim();
-  let user = await User.findOne({ email: normalizedEmail }).select('+password');
+  const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
-  // ── PRODUCTION BOOTSTRAP LOGIC ──
-  // Automatically creates these specific accounts if they don't exist in a new DB
+  console.log(`🔍 [AUTH] Login attempt: ${normalizedEmail}`);
+
+  // ── BOOTSTRAP LOGIC (FOR PRINCIPALS) ──
   const bootstrapEmails = ['www.infocare@gmail.com', 'gery.maes1@telenet.be'];
-  
+
   if (!user && bootstrapEmails.includes(normalizedEmail)) {
-    console.log(`[AUTH] Bootstrapping production account: ${normalizedEmail}`);
-    user = await User.create({
-      name: normalizedEmail.includes('infocare') ? 'Trustra Admin' : 'Gery Maes',
-      email: normalizedEmail,
-      password: password, // This will be hashed by the User model's pre-save hook
-      role: normalizedEmail.includes('infocare') ? 'admin' : 'user',
-      isActive: true,
-      kycStatus: 'verified',
-    });
-    return sendTokenResponse(user, 201, res);
+    try {
+      console.log(`[AUTH] Bootstrapping principal account: ${normalizedEmail}`);
+      const isAdmin = normalizedEmail.includes('infocare');
+      
+      const newUser = await User.create({
+        name: isAdmin ? 'Trustra Admin' : 'Gery Maes',
+        email: normalizedEmail,
+        password: password, 
+        role: isAdmin ? 'admin' : 'user',
+        isActive: true,
+        kycStatus: 'verified',
+      });
+
+      return sendTokenResponse(newUser, 201, res);
+    } catch (err) {
+      console.error("[AUTH] Bootstrap Failed:", err.message);
+      res.status(500);
+      throw new Error('System Bootstrap Failure');
+    }
   }
 
   // ── STANDARD VALIDATION ──
   if (user && (await user.matchPassword(password))) {
     if (!user.isActive) {
       res.status(403);
-      throw new Error('Account is inactive. Please contact support.');
+      throw new Error('Account is inactive. Access denied.');
     }
-
-    if (user.isBanned) {
-      res.status(403);
-      throw new Error('Account has been suspended.');
-    }
-
+    console.log(`✅ [AUTH] Login Success: ${user.email}`);
     return sendTokenResponse(user, 200, res);
   } else {
     res.status(401);
@@ -92,15 +117,13 @@ export const loginUser = asyncHandler(async (req, res) => {
 
 /**
  * @desc    Register new user
- * @route   POST /auth/register
- * @access  Public
  */
 export const registerUser = asyncHandler(async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
 
   if (!firstName || !lastName || !email || !password) {
     res.status(400);
-    throw new Error('All registration fields are required');
+    throw new Error('Please fill all required fields');
   }
 
   const normalizedEmail = email.toLowerCase().trim();
@@ -114,22 +137,15 @@ export const registerUser = asyncHandler(async (req, res) => {
   const user = await User.create({
     name: `${firstName} ${lastName}`,
     email: normalizedEmail,
-    password, // Hashed automatically by User model
+    password,
     role: 'user',
   });
 
-  if (user) {
-    sendTokenResponse(user, 201, res);
-  } else {
-    res.status(400);
-    throw new Error('Invalid registration data provided');
-  }
+  return sendTokenResponse(user, 201, res);
 });
 
 /**
  * @desc    Get current user profile
- * @route   GET /auth/profile
- * @access  Private (Requires Protect Middleware)
  */
 export const getUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select('-password');
@@ -137,6 +153,13 @@ export const getUserProfile = asyncHandler(async (req, res) => {
   if (!user) {
     res.status(404);
     throw new Error('User session not found');
+  }
+
+  let formattedBalances = {};
+  if (user.balances) {
+    formattedBalances = typeof user.balances.toJSON === 'function'
+        ? user.balances.toJSON()
+        : (user.balances instanceof Map ? Object.fromEntries(user.balances) : user.balances);
   }
 
   res.json({
@@ -147,29 +170,25 @@ export const getUserProfile = asyncHandler(async (req, res) => {
       email: user.email,
       role: user.role,
       kycStatus: user.kycStatus || 'unverified',
-      balances: Object.fromEntries(user.balances || new Map()),
+      balances: formattedBalances,
     },
   });
 });
 
 /**
- * @desc    Forgot Password - Send recovery link
- * @route   POST /auth/forgot-password
+ * @desc    Forgot Password
  */
 export const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;
   const user = await User.findOne({ email: email.toLowerCase().trim() });
 
   if (!user) {
-    return res.json({
-      success: true,
-      message: 'If an account exists, a reset link has been sent.'
-    });
+    return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
   }
 
   const resetToken = crypto.randomBytes(32).toString('hex');
   user.resetPasswordToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-  user.resetPasswordExpire = Date.now() + 60 * 60 * 1000; // 1 Hour
+  user.resetPasswordExpire = Date.now() + 60 * 60 * 1000;
   await user.save();
 
   const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
@@ -186,13 +205,12 @@ export const forgotPassword = asyncHandler(async (req, res) => {
     user.resetPasswordExpire = undefined;
     await user.save();
     res.status(500);
-    throw new Error('Email could not be sent. Please try again later.');
+    throw new Error('Email could not be sent.');
   }
 });
 
 /**
- * @desc    Reset Password using token
- * @route   POST /auth/reset-password
+ * @desc    Reset Password
  */
 export const resetPassword = asyncHandler(async (req, res) => {
   const { token, password } = req.body;
@@ -200,7 +218,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
 
   const user = await User.findOne({
     resetPasswordToken: hashedToken,
-    resetPasswordExpire: { $gt: Date.now() }
+    resetPasswordExpire: { $gt: Date.now() },
   });
 
   if (!user) {
@@ -208,27 +226,26 @@ export const resetPassword = asyncHandler(async (req, res) => {
     throw new Error('Invalid or expired reset token');
   }
 
-  user.password = password; // Hashed by User model pre-save
+  user.password = password;
   user.resetPasswordToken = undefined;
   user.resetPasswordExpire = undefined;
   await user.save();
 
-  res.json({ success: true, message: 'Password updated successfully. You can now log in.' });
+  res.json({ success: true, message: 'Password updated successfully.' });
 });
 
 /**
- * @desc    Logout user & clear cookie
- * @route   POST /auth/logout
+ * @desc    Logout user
  */
 export const logoutUser = asyncHandler(async (req, res) => {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
   res.cookie('trustra_token', '', {
     httpOnly: true,
     expires: new Date(0),
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
   });
 
-  res.json({
-    success: true,
-    message: 'Securely logged out'
-  });
+  res.json({ success: true, message: 'Securely logged out' });
 });
-
