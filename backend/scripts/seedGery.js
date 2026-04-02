@@ -3,26 +3,22 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import User from '../models/User.js';
 
-dotenv.config();
+dotenv.config({ path: process.env.NODE_ENV === 'production' ? './.env.production' : './.env' });
 
 const seedGery = async () => {
   try {
-    console.log("📡 Establishing secure connection for Principal Provisioning...");
     await mongoose.connect(process.env.MONGO_URI);
-    console.log("✅ Secure Database Connection Established");
+    console.log("✅ Connected to MongoDB");
 
     const email = 'gery.maes1@telenet.be';
-    
-    // 1. REVOKE EXISTING ACCESS (Clean start to ensure fresh hashing)
-    await User.deleteOne({ email });
-    console.log(`⚠️ Identity collision detected. Revoking existing access: ${email}`);
 
-    // 2. PROVISION NEW PRINCIPAL
-    // We use .create() because it triggers the pre('save') hook in User.js
+    await User.deleteOne({ email });
+    console.log(`⚠️ Removed existing user: ${email}`);
+
     const gery = await User.create({
       name: 'Gery Maes',
-      email: email,
-      password: 'trustra2026', // This WILL be hashed by User.js pre-save hook
+      email,
+      password: 'trustra2026',  // Will be hashed by pre-save hook
       role: 'user',
       isActive: true,
       kycStatus: 'verified',
@@ -36,16 +32,10 @@ const seedGery = async () => {
       activePlan: 'Sovereign'
     });
 
-    console.log("────────────────────────────────────────────────");
-    console.log(`✅ PRINCIPAL PROVISIONED: ${gery.name}`);
-    console.log(`🔐 Access Key: trustra2026`);
-    console.log(`📈 Strategy: Class V: Sovereign`);
-    console.log(`💰 NAV: €${gery.balances.get('EUR').toLocaleString()}`);
-    console.log("────────────────────────────────────────────────");
-
+    console.log(`✅ PRINCIPAL PROVISIONED: ${gery.name} | Password: trustra2026`);
     process.exit(0);
-  } catch (error) {
-    console.error(`❌ PROVISIONING FAILED: ${error.message}`);
+  } catch (err) {
+    console.error("❌ Seed Failed:", err);
     process.exit(1);
   }
 };

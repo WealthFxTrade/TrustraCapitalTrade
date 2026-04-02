@@ -7,8 +7,8 @@ const AuthContext = createContext();
 const initialState = {
   user: null,
   isAuthenticated: false,
-  initialized: false, 
-  loading: false,     
+  initialized: false,
+  loading: false,
 };
 
 function authReducer(state, action) {
@@ -43,7 +43,7 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const isInitializing = useRef(false);
 
-  // ── 1. INITIAL SECURITY CLEARANCE ──
+  // ── Initialize session
   const initAuth = useCallback(async () => {
     if (isInitializing.current) return;
     isInitializing.current = true;
@@ -55,7 +55,7 @@ export function AuthProvider({ children }) {
       } else {
         dispatch({ type: 'AUTH_LOGOUT' });
       }
-    } catch (err) {
+    } catch {
       dispatch({ type: 'AUTH_LOGOUT' });
     } finally {
       dispatch({ type: 'SET_INITIALIZED' });
@@ -66,35 +66,27 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
-  // ── 2. LOGIN PROTOCOL ──
+  // ── Login
   const login = async (credentials) => {
     dispatch({ type: 'AUTH_START' });
     try {
       const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
-
       if (data?.success) {
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
         return { success: true };
       }
-
-      return {
-        success: false,
-        message: data?.message || 'Protocol Error: Invalid Credentials'
-      };
+      return { success: false, message: data?.message || 'Invalid Credentials' };
     } catch (err) {
       dispatch({ type: 'SET_INITIALIZED' });
-      return {
-        success: false,
-        message: err.response?.data?.message || 'Access Denied: Terminal connection failure'
-      };
+      return { success: false, message: err.response?.data?.message || 'Terminal connection failure' };
     }
   };
 
-  // ── 3. LOGOUT PROTOCOL ──
+  // ── Logout
   const logout = useCallback(async () => {
     try {
       await api.post(API_ENDPOINTS.AUTH.LOGOUT);
-    } catch (err) {
+    } catch {
       console.warn("Session: Local termination enforced.");
     } finally {
       dispatch({ type: 'AUTH_LOGOUT' });
@@ -102,7 +94,7 @@ export function AuthProvider({ children }) {
     }
   }, [navigate]);
 
-  // ── 4. MEMOIZED CONTEXT VALUE ──
+  // ── Context value
   const authValue = useMemo(() => ({
     ...state,
     login,
@@ -119,8 +111,6 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be utilized within an AuthProvider node.");
-  }
+  if (!context) throw new Error("useAuth must be utilized within an AuthProvider node.");
   return context;
 };

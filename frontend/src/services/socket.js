@@ -1,42 +1,34 @@
-import { io } from "socket.io-client";
+// frontend/src/services/socket.js
+import { io } from 'socket.io-client';
 
-let socket = null;
+let socket;
 
-export const connectSocket = (token) => {
-  if (!token) return null;
-  if (socket?.connected) return socket;
+export const connectSocket = () => {
+  if (socket) return socket;
 
-  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
+  // Dynamically determine backend URL
+  const BACKEND_URL =
+    import.meta.env.VITE_SOCKET_URL ||
+    'https://trustracapitaltrade-backend.onrender.com';
 
-  socket = io(SOCKET_URL, {
-    auth: { token },
-    transports: ["websocket"],
-    reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 2000,
-    withCredentials: true
+  socket = io(BACKEND_URL, {
+    transports: ['websocket'],
+    withCredentials: true,
   });
 
-  socket.on("connect", () => {
-    console.log("🟢 Trustra WS connected:", socket.id);
+  socket.on('connect', () => {
+    console.log(`🟢 SOCKET CONNECTED: ${socket.id}`);
   });
 
-  socket.on("disconnect", (reason) => {
-    console.warn("🔴 Trustra WS disconnected:", reason);
-    if (reason === "io server disconnect") socket.connect();
+  socket.on('disconnect', (reason) => {
+    console.warn(`🔴 SOCKET DISCONNECTED: ${reason}`);
   });
 
-  socket.on("connect_error", (err) => {
-    console.error("WS connection error:", err.message);
+  socket.on('error', (err) => {
+    console.error('SOCKET ERROR:', err);
   });
 
   return socket;
 };
 
-export const disconnectSocket = () => {
-  if (socket) {
-    console.log("🔌 Manual WS Disconnect");
-    socket.disconnect();
-    socket = null;
-  }
-};
+export const getSocket = () => socket;

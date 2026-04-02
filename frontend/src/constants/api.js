@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-// ── ENDPOINT MAP ──
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
@@ -9,7 +8,7 @@ export const API_ENDPOINTS = {
     PROFILE: '/auth/profile',
   },
   USER: {
-    BALANCES: '/auth/profile', // Re-routing to profile to get balance object
+    BALANCES: '/auth/profile',
     STATS: '/user/stats',
     HISTORY: '/user/transactions',
     COMPOUND: '/user/compound',
@@ -21,24 +20,24 @@ export const API_ENDPOINTS = {
   }
 };
 
-// ── AXIOS INSTANCE ──
+// Axios instance
 const api = axios.create({
-  // Dynamically uses VITE_API_URL (http://172.20.10.3:10000/api)
-  baseURL: import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api',
-  withCredentials: true,
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:10000/api',
+  withCredentials: true,  // Required for cookies
   timeout: 20000,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json'
-  }
+    'Accept': 'application/json',
+  },
 });
 
-// ── INTERCEPTORS ──
+// Request interceptor for logging
 api.interceptors.request.use(config => {
   if (import.meta.env.DEV) console.log(`🚀 [API]: ${config.method.toUpperCase()} ${config.url}`);
   return config;
 });
 
+// Response interceptor for automatic 401 redirect
 api.interceptors.response.use(
   res => res,
   err => {

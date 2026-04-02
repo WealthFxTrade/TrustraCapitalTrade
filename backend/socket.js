@@ -1,25 +1,30 @@
-// backend/socket.js
-import { Server } from "socket.io";
+// socket.js - WebSocket / Real-time Engine
+import { Server } from 'socket.io';
 
-export const initIO = (httpServer, allowedOrigins) => {
-  const io = new Server(httpServer, {
+let io;
+
+export const initIO = (httpServer, allowedOrigins = []) => {
+  if (io) return io;
+
+  io = new Server(httpServer, {
     cors: {
       origin: allowedOrigins,
-      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true
-    }
+    },
+    transports: ['websocket']
   });
 
-  io.on("connection", (socket) => {
-    console.log("🟢 New client connected:", socket.id);
+  io.on('connection', (socket) => {
+    console.log(`🟢 WS CONNECTED: ${socket.id}`);
 
-    socket.on("disconnect", (reason) => {
-      console.log("🔴 Client disconnected:", socket.id, "Reason:", reason);
+    socket.on('disconnect', (reason) => {
+      console.warn(`🔴 WS DISCONNECTED: ${socket.id} (${reason})`);
     });
 
-    // You can add custom events here, e.g.:
-    // socket.on("join_room", (room) => socket.join(room));
-    // socket.on("message", (data) => io.to(data.room).emit("message", data));
+    socket.on('error', (err) => {
+      console.error('WS ERROR:', err);
+    });
   });
 
   return io;

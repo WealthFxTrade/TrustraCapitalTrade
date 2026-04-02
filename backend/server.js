@@ -22,8 +22,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import planRoutes from './routes/plan.js';
 
 // ── CONFIGURE ENVIRONMENT ──
-dotenv.config({ path: './.env' });
-
+dotenv.config({ path: process.env.NODE_ENV === 'production' ? './.env.production' : './.env' });
 const app = express();
 const httpServer = createServer(app);
 
@@ -31,10 +30,10 @@ const PORT = process.env.PORT || 10000;
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const __dirname = path.resolve();
 
-// ── CLEAN & SAFE ORIGINS ──
+// ── ALLOWED ORIGINS ──
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+  : ['http://localhost:5173'];
 
 const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin);
 
@@ -49,7 +48,7 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ── CORS
+// ── CORS ──
 app.use(cors({
   origin: (origin, callback) => {
     if (isAllowedOrigin(origin)) return callback(null, true);
