@@ -1,4 +1,4 @@
-/* 1. TAILWIND CORE - Moved to the top for proper layering */
+/* 1. TAILWIND CORE */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,30 +11,34 @@
 
   --background: #020408;       /* DEEP BLACK */
   --surface: #0a0c10;          /* TERMINAL GREY */
-  --surface-hover: #1e293b;    
-  
-  --text: #f8fafc;             
-  --text-muted: #94a3b8;       
-  --border: rgba(234, 179, 8, 0.1); 
-  --ring: rgba(234, 179, 8, 0.3);   
+  --surface-hover: #1e293b;
+
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --border: rgba(234, 179, 8, 0.1);
+  --ring: rgba(234, 179, 8, 0.3);
 }
 
-/* 3. GLOBAL RESET - REMOVED LIME GREEN OVERRIDE */
+/* 3. GLOBAL RESET */
 html, body, #root {
   background-color: var(--background) !important;
   color: var(--text) !important;
   min-height: 100vh;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  /* Prevent horizontal scroll on mobile while allowing vertical */
+  overflow-x: hidden; 
+  width: 100%;
 }
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Improve mobile tap response */
+  touch-action: manipulation; 
 }
 
-/* 4. TERMINAL TEXTURE (The Grain Effect) */
+/* 4. TERMINAL TEXTURE */
 .bg-grain {
   background-image: url("https://grainy-gradients.vercel.app");
   filter: contrast(150%) brightness(100%);
@@ -46,7 +50,7 @@ body {
 }
 
 /* 5. CUSTOM GOLD SCROLLBAR */
-::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
   background: var(--primary-dark);
@@ -68,19 +72,59 @@ body {
   color: #000;
 }
 
-button, a, .clickable {
-  cursor: pointer !important;
-  pointer-events: auto !important;
-}
-
-button svg, button span {
-  pointer-events: none;
-}
-
-/* 8. NPROGRESS (Loading Bar) */
+/* 8. NPROGRESS */
 #nprogress .bar {
   background: var(--primary) !important;
   height: 3px !important;
   z-index: 9999 !important;
 }
 
+/* --- NEW RESPONSIVE ADDITIONS --- */
+
+/* 9. THE "INSTITUTIONAL" GRID 
+   Use this class for your Class I-V cards. 
+   It automatically stacks on mobile and expands to 5 columns on desktop. 
+*/
+.tier-auto-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 1.5rem;
+  width: 100%;
+}
+
+/* 10. FLUID TYPOGRAPHY 
+   This ensures your headers don't "break" on small mobile screens.
+*/
+.text-hero {
+  font-size: clamp(2rem, 8vw, 4.5rem);
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.text-stat {
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-family: 'JetBrains Mono', monospace; /* For that terminal look */
+}
+
+/* 11. MOBILE UTILITY OVERRIDES */
+@media (max-width: 640px) {
+  .glass {
+    padding: 1.5rem !important; /* Larger padding for touch targets */
+    margin: 0.5rem;
+  }
+  
+  .hide-on-mobile {
+    display: none;
+  }
+}
+
+/* 12. ANIMATION HELPERS */
+.hover-gold {
+  transition: all 0.3s ease;
+}
+.hover-gold:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 15px var(--ring);
+  transform: translateY(-2px);
+}

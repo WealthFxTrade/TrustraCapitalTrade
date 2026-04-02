@@ -3,21 +3,18 @@ import { io } from "socket.io-client";
 let socket = null;
 
 export const connectSocket = (token) => {
-  // Prevent duplicate connections or connecting without a token
   if (!token) return null;
   if (socket?.connected) return socket;
 
-  // Use your production Render URL as the fallback
-  const SOCKET_URL = import.meta.env.VITE_WS_URL || "https://trustracapitaltrade-backend.onrender.com";
+  const SOCKET_URL = import.meta.env.VITE_SOCKET_URL;
 
   socket = io(SOCKET_URL, {
     auth: { token },
-    transports: ["websocket"], // Required for Render performance
+    transports: ["websocket"],
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 2000,
-    // Add this to ensure CORS/Credentials match your Axios setup
-    withCredentials: true 
+    withCredentials: true
   });
 
   socket.on("connect", () => {
@@ -26,10 +23,7 @@ export const connectSocket = (token) => {
 
   socket.on("disconnect", (reason) => {
     console.warn("🔴 Trustra WS disconnected:", reason);
-    if (reason === "io server disconnect") {
-      // The server forced the disconnection, try reconnecting manually
-      socket.connect();
-    }
+    if (reason === "io server disconnect") socket.connect();
   });
 
   socket.on("connect_error", (err) => {
@@ -46,4 +40,3 @@ export const disconnectSocket = () => {
     socket = null;
   }
 };
-

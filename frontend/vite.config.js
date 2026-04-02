@@ -1,4 +1,4 @@
-// frontend/vite.config.js
+// frontend/vite.config.js - Full Unshortened
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'url';
@@ -15,11 +15,26 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
-    host: true, // Crucial for Network IP access
+    host: true, // Required for Network IP access (172.20.10.x)
     proxy: {
-      // Forward all core API routes to the backend
-      '^/(auth|user|admin|api)': {
-        target: 'http://127.0.0.1:10000',
+      // Forward API calls to the backend terminal
+      '/auth': {
+        target: 'http://localhost:10000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/user': {
+        target: 'http://localhost:10000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/admin': {
+        target: 'http://localhost:10000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/api': {
+        target: 'http://localhost:10000',
         changeOrigin: true,
         secure: false,
       },
@@ -28,8 +43,7 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     chunkSizeWarningLimit: 1000,
-    minify: 'terser', // Higher compression for production
+    minify: 'terser',
     sourcemap: false,
   },
 });
-

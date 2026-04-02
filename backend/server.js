@@ -22,7 +22,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import planRoutes from './routes/plan.js';
 
 // ── CONFIGURE ENVIRONMENT ──
-dotenv.config({ path: './.env' }); // Ensure .env loads in all environments
+dotenv.config({ path: './.env' });
 
 const app = express();
 const httpServer = createServer(app);
@@ -31,7 +31,14 @@ const PORT = process.env.PORT || 10000;
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const __dirname = path.resolve();
 
-// ── SECURITY & PERFORMANCE MIDDLEWARE ──
+// ── CLEAN & SAFE ORIGINS ──
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
+const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin);
+
+// ── SECURITY & PERFORMANCE ──
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   contentSecurityPolicy: false,
@@ -42,50 +49,38 @@ app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ── FULL CORS SUPPORT FROM .ENV ──
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : [
-      'http://localhost:5173',
-      'http://127.0.0.1:5173'
-    ];
-
+// ── CORS
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like Postman)
-    if (!origin) return callback(null, true);
-
-    // Authorize if in whitelist
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-
+    if (isAllowedOrigin(origin)) return callback(null, true);
     console.error("❌ BLOCKED ORIGIN:", origin);
     return callback(new Error('Origin Unauthorized by Governance'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['set-cookie'],
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept'],
+  exposedHeaders: ['set-cookie']
 }));
 
-// ── API ENDPOINT ROUTING ──
+// ── API ROUTES
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/plans', planRoutes);
 
-// ── PRODUCTION SPA HANDLER ──
+// ── PRODUCTION FRONTEND SERVE
 if (NODE_ENV === 'production') {
   const frontendPath = path.resolve(__dirname, '../frontend/dist');
   app.use(express.static(frontendPath));
-
   app.get('*', (req, res, next) => {
     if (req.originalUrl.startsWith('/api')) return next();
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }
 
-// ── GLOBAL ERROR HANDLER ──
+// ── GLOBAL ERROR HANDLER
 app.use((err, req, res, next) => {
+  console.error("🔥 ERROR:", err.message);
   const status = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(status).json({
     success: false,
@@ -94,25 +89,17 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ── TERMINAL BOOT SEQUENCE ──
+// ── TERMINAL BOOT
 const bootTerminal = async () => {
   try {
-    // Connect to MongoDB
     await connectDB();
-
-    // Initialize Socket.IO
     const io = initIO(httpServer, allowedOrigins);
     app.set('io', io);
 
-    // Start HTTP server
     httpServer.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 TERMINAL ONLINE | PORT: ${PORT}`);
-      
-      // Start Quantitative ROI Engine
       initRioEngine(io);
-
-      // Periodic BTC deposits watcher (every 5 minutes)
-      setInterval(() => watchBtcDeposits(io), 5 * 60 * 1000);
+      setInterval(() => watchBtcDeposits(io), 5*60*1000);
     });
   } catch (err) {
     console.error('🔥 CRITICAL SYSTEM FAILURE:', err);

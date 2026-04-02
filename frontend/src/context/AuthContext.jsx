@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { API_ENDPOINTS } from '../constants/api';
@@ -8,8 +7,8 @@ const AuthContext = createContext();
 const initialState = {
   user: null,
   isAuthenticated: false,
-  initialized: false,
-  loading: false,
+  initialized: false, 
+  loading: false,     
 };
 
 function authReducer(state, action) {
@@ -17,20 +16,20 @@ function authReducer(state, action) {
     case 'AUTH_START':
       return { ...state, loading: true };
     case 'AUTH_SUCCESS':
-      return { 
-        ...state, 
-        user: action.payload.user, 
-        isAuthenticated: true, 
-        initialized: true, 
-        loading: false 
+      return {
+        ...state,
+        user: action.payload.user,
+        isAuthenticated: true,
+        initialized: true,
+        loading: false
       };
     case 'AUTH_LOGOUT':
-      return { 
-        ...state, 
-        user: null, 
-        isAuthenticated: false, 
-        initialized: true, 
-        loading: false 
+      return {
+        ...state,
+        user: null,
+        isAuthenticated: false,
+        initialized: true,
+        loading: false
       };
     case 'SET_INITIALIZED':
       return { ...state, initialized: true, loading: false };
@@ -44,80 +43,84 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const isInitializing = useRef(false);
 
-  // ── INITIAL AUTH CHECK ──
+  // ── 1. INITIAL SECURITY CLEARANCE ──
   const initAuth = useCallback(async () => {
-    // Avoid double-initialization
-    if (state.initialized || isInitializing.current) return;
-    
+    if (isInitializing.current) return;
     isInitializing.current = true;
-    dispatch({ type: 'AUTH_START' });
 
     try {
-      // This hits /auth/profile
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
-      
       if (data?.success && data?.user) {
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
       } else {
-        // Server responded but user data was invalid/missing
         dispatch({ type: 'AUTH_LOGOUT' });
       }
     } catch (err) {
-      // Handled 401 (User Not Found) or 500 (Server Error)
-      console.error("Auth System: Session invalid or user not found. Resetting state.");
       dispatch({ type: 'AUTH_LOGOUT' });
     } finally {
-      isInitializing.current = false;
-      // Failsafe: Always set initialized to true to stop any loading spinners
       dispatch({ type: 'SET_INITIALIZED' });
     }
-  }, [state.initialized]);
+  }, []);
 
   useEffect(() => {
     initAuth();
   }, [initAuth]);
 
-  // ── LOGIN ACTION ──
-  const login = async ({ email, password }) => {
+  // ── 2. LOGIN PROTOCOL ──
+  const login = async (credentials) => {
     dispatch({ type: 'AUTH_START' });
     try {
-      const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, { email, password });
+      const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, credentials);
+
       if (data?.success) {
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
         return { success: true };
       }
-      return { success: false, message: data?.message || 'Login failed' };
+
+      return {
+        success: false,
+        message: data?.message || 'Protocol Error: Invalid Credentials'
+      };
     } catch (err) {
-      dispatch({ type: 'AUTH_LOGOUT' });
-      return { 
-        success: false, 
-        message: err.response?.data?.message || 'Invalid Credentials' 
+      dispatch({ type: 'SET_INITIALIZED' });
+      return {
+        success: false,
+        message: err.response?.data?.message || 'Access Denied: Terminal connection failure'
       };
     }
   };
 
-  // ── LOGOUT ACTION ──
+  // ── 3. LOGOUT PROTOCOL ──
   const logout = useCallback(async () => {
     try {
       await api.post(API_ENDPOINTS.AUTH.LOGOUT);
     } catch (err) {
-      console.error("Logout error on server", err);
+      console.warn("Session: Local termination enforced.");
     } finally {
       dispatch({ type: 'AUTH_LOGOUT' });
       navigate('/login', { replace: true });
     }
   }, [navigate]);
 
-  // Memoize value to prevent unnecessary re-renders
-  const value = useMemo(() => ({ 
-    ...state, 
-    login, 
+  // ── 4. MEMOIZED CONTEXT VALUE ──
+  const authValue = useMemo(() => ({
+    ...state,
+    login,
     logout,
-    checkSession: initAuth // Allows manual session refresh if needed
+    refreshSession: initAuth
   }), [state, logout, initAuth]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={authValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-export const useAuth = () => useContext(AuthContext);
-
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be utilized within an AuthProvider node.");
+  }
+  return context;
+};
