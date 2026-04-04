@@ -1,109 +1,113 @@
-// server.js - Trustra Capital Institutional Terminal
+// backend/server.js
 import express from 'express';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
-import path from 'path';
-import { createServer } from 'http';
+import morgan from 'morgan';
 
-// Protocol & Ledger Imports
-import connectDB from './config/db.js';
-import { initIO } from './socket.js';
-import { watchBtcDeposits } from './utils/btcWatcher.js';
-import { initRioEngine } from './utils/rioEngine.js';
-
-// Route Architecture
+// ── ROUTES ──
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import investmentRoutes from './routes/investmentRoutes.js';
+import transactionsRoutes from './routes/transactions.js';
+import depositRoutes from './routes/depositRoutes.js';
+import withdrawalRoutes from './routes/withdrawalRoutes.js';
+import walletRoutes from './routes/walletRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import supportRoutes from './routes/supportRoutes.js';
+import bitcoinRoutes from './routes/bitcoin.js';
+import reviewsRoutes from './routes/reviews.js';
 import planRoutes from './routes/plan.js';
+import marketRoutes from './routes/market.js';
 
-// ── CONFIGURE ENVIRONMENT ──
-dotenv.config({ path: process.env.NODE_ENV === 'production' ? './.env.production' : './.env' });
+// ── MIDDLEWARE ──
+import { errorHandler } from './middleware/errorMiddleware.js';
+
+dotenv.config();
+
 const app = express();
-const httpServer = createServer(app);
-
 const PORT = process.env.PORT || 10000;
-const NODE_ENV = process.env.NODE_ENV || 'production';
-const __dirname = path.resolve();
 
-// ── ALLOWED ORIGINS ──
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
-  : ['http://localhost:5173'];
+// ── CORS CONFIGURATION ──
+const allowedOrigins = [
+  'https://trustra-capital-trade.vercel.app',
+  'https://trustracapitaltrade-backend.onrender.com',
+  'https://www.trustracapitaltrade.online',
+  'https://trustracapitaltrade.online',
+  'http://localhost:5173',
+];
 
-const isAllowedOrigin = (origin) => !origin || allowedOrigins.includes(origin);
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS Error: Origin ${origin} not allowed`));
+      }
+    },
+    credentials: true, // Enable sending cookies
+  })
+);
 
-// ── SECURITY & PERFORMANCE ──
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: false,
-}));
-app.use(compression());
-app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
+// ── GLOBAL MIDDLEWARE ──
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(morgan('dev')); // HTTP request logging
 
-// ── CORS ──
-app.use(cors({
-  origin: (origin, callback) => {
-    if (isAllowedOrigin(origin)) return callback(null, true);
-    console.error("❌ BLOCKED ORIGIN:", origin);
-    return callback(new Error('Origin Unauthorized by Governance'));
-  },
-  credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','Accept'],
-  exposedHeaders: ['set-cookie']
-}));
-
-// ── API ROUTES
-app.use('/api/auth', authRoutes);
-app.use('/api/user', userRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/plans', planRoutes);
-
-// ── PRODUCTION FRONTEND SERVE
-if (NODE_ENV === 'production') {
-  const frontendPath = path.resolve(__dirname, '../frontend/dist');
-  app.use(express.static(frontendPath));
-  app.get('*', (req, res, next) => {
-    if (req.originalUrl.startsWith('/api')) return next();
-    res.sendFile(path.join(frontendPath, 'index.html'));
-  });
-}
-
-// ── GLOBAL ERROR HANDLER
-app.use((err, req, res, next) => {
-  console.error("🔥 ERROR:", err.message);
-  const status = res.statusCode === 200 ? 500 : res.statusCode;
-  res.status(status).json({
-    success: false,
-    message: `Terminal Anomaly: ${err.message}`,
-    protocol: "X-TRUSTRA-ERR-400"
-  });
+// ── HEALTH CHECK ──
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'Server is healthy' });
 });
 
-// ── TERMINAL BOOT
-const bootTerminal = async () => {
-  try {
-    await connectDB();
-    const io = initIO(httpServer, allowedOrigins);
-    app.set('io', io);
+// ── API ROUTES ──
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/investments', investmentRoutes);
+app.use('/api/transactions', transactionsRoutes);
+app.use('/api/deposits', depositRoutes);
+app.use('/api/withdrawals', withdrawalRoutes);
+app.use('/api/wallet', walletRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/bitcoin', bitcoinRoutes);
+app.use('/api/reviews', reviewsRoutes);
+app.use('/api/plans', planRoutes);
+app.use('/api/market', marketRoutes);
 
-    httpServer.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 TERMINAL ONLINE | PORT: ${PORT}`);
-      initRioEngine(io);
-      setInterval(() => watchBtcDeposits(io), 5*60*1000);
+// ── ERROR HANDLING ──
+app.use(errorHandler);
+
+// ── DATABASE CONNECTION ──
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/trustra';
+
+mongoose
+  .connect(MONGO_URI)
+  .then(() => {
+    console.log('✅ MongoDB connected successfully');
+
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on PORT: ${PORT}`);
+      console.log(`Allowed Origins for CORS: ${allowedOrigins.join(', ')}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('⚡ Running in DEVELOPMENT mode');
+      }
     });
-  } catch (err) {
-    console.error('🔥 CRITICAL SYSTEM FAILURE:', err);
+  })
+  .catch((err) => {
+    console.error('❌ MongoDB connection failed:', err.message);
     process.exit(1);
-  }
-};
+  });
 
-bootTerminal();
+// ── HANDLE UNCAUGHT EXCEPTIONS ──
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled Rejection:', reason);
+});

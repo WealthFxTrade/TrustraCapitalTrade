@@ -1,61 +1,54 @@
+// services/addressService.js
+
 import User from '../models/User.js';
-import { deriveAddressFromXpub } from '../utils/bitcoinUtils.js';
+import { deriveBtcAddress } from '../utils/bitcoinUtils.js';
 import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
- * Get or create a unique BTC deposit address for a user.
- * Uses a global counter document to ensure indices never repeat.
+ * Get or create a unique BTC deposit address for a user
+ * @param {string} userId - MongoDB User ID
+ * @param {boolean} fresh - Force generation of a new address
+ * @returns {Promise<string>} BTC address
  */
 export async function getOrCreateBtcDepositAddress(userId, fresh = false) {
-  const xpub = process.env.BITCOIN_XPUB;
-
-  if (!xpub) {
-    throw new ApiError(500, 'Secure Vault Error: BITCOIN_XPUB not configured');
+  // 1️⃣ Ensure BTC_XPUB is configured
+  if (!process.env.BTC_XPUB) {
+    throw new ApiError(500, 'Secure Vault Error: BTC_XPUB not configured');
   }
 
-  // 1. Fetch user data
+  // 2️⃣ Fetch user
   const user = await User.findById(userId);
-  if (!user) throw new ApiError(404, 'User not found in Trustra database');
+  if (!user) throw new ApiError(404, 'User not found');
 
-  // 2. Return existing address if available and no fresh one is requested
+  // 3️⃣ Return existing address if present and not forced to refresh
   if (user.btcAddress && !fresh) {
     return user.btcAddress;
   }
 
   try {
-    /**
-     * 3. GLOBAL ATOMIC UPDATE
-     * We increment the index on the system "Counter" document.
-     * This ensures every user in the entire platform gets a unique index.
-     */
+    // 4️⃣ Atomic counter for index
     const counterDoc = await User.findOneAndUpdate(
       { isCounter: true },
       { $inc: { btcIndexCounter: 1 } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true }
     );
 
-    const newIndex = counterDoc.btcIndexCounter;
+    const index = counterDoc.btcIndexCounter;
 
-    /**
-     * 4. Derivation Logic
-     * Uses the global index to derive a unique bc1q SegWit address.
-     */
-    const newAddress = deriveAddressFromXpub(xpub, newIndex);
+    // 5️⃣ Derive BTC address using corrected utility
+    const { address } = deriveBtcAddress(index);
+    if (!address) throw new Error('BTC derivation failed');
 
-    if (!newAddress) {
-      throw new Error('Derivation returned null address');
-    }
-
-    // 5. Update the specific user with their unique credentials
-    user.btcAddress = newAddress;
-    user.btcIndex = newIndex;
+    // 6️⃣ Save to user
+    user.btcAddress = address;
+    user.btcIndex = index;
     await user.save();
 
-    console.log(`✅ Derived index ${newIndex} for user ${userId}: ${newAddress}`);
-    return newAddress;
+    console.log(`✅ BTC Address assigned → ${address} (index ${index}) for user ${userId}`);
+    return address;
+
   } catch (err) {
-    console.error(`[CRITICAL_ADDRESS_ERROR] ${userId}:`, err.message);
-    throw new ApiError(500, 'Cryptographic Derivation Failed: Check XPUB/ZPUB format');
+    console.error(`[CRITICAL_ADDRESS_ERROR] User: ${userId} |`, err.message);
+    throw new ApiError(500, 'BTC address generation failed');
   }
 }
-

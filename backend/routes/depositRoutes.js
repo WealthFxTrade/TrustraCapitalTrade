@@ -1,12 +1,10 @@
 import express from 'express';
-import { protect, admin } from '../middleware/authMiddleware.js';
-// Add your specific controller imports here, for example:
-// import { getDeposits, createDeposit } from '../controllers/depositController.js';
+import { protect } from '../middleware/authMiddleware.js';
+import { createDeposit } from '../controllers/depositController.js';
 
 const router = express.Router();
 
-// Example of how the routes should look now:
-// router.get('/', protect, getDeposits);
-// router.post('/admin-action', protect, admin, createDeposit);
+// Create a deposit
+router.post('/create', protect, createDeposit);
 
 export default router;

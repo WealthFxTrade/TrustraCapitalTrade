@@ -1,11 +1,16 @@
+// services/financeService.js
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import mongoose from 'mongoose';
+import axios from 'axios';
+
+const ASSET_MAP = { BTC: 'bitcoin', ETH: 'ethereum', USDT: 'tether' };
+let priceCache = { rates: {}, lastUpdated: 0 };
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Apply a financial transaction to a user account
- *
- * Supports: deposit, withdrawal, investment, reinvest, profit
+ * Apply a financial transaction to a user account.
+ * Supports deposit, withdrawal, investment, profit, reinvest.
  *
  * @param {Object} params
  * @param {mongoose.Types.ObjectId} params.userId - Target user
@@ -13,8 +18,10 @@ import mongoose from 'mongoose';
  * @param {number} params.amount - Positive amount
  * @param {string} [params.currency='EUR'] - BTC, ETH, USDT, EUR, ROI
  * @param {string} [params.status='completed'] - pending/completed/rejected
- * @param {string} [params.walletAddress] - Crypto destination
+ * @param {string} [params.walletAddress] - Crypto destination (if applicable)
  * @param {mongoose.Types.ObjectId} [params.referenceId] - Related deposit/investment ID
+ * @param {string} [params.description] - Optional ledger description
+ * @returns {Promise<{user: User, ledgerEntry: Object, transaction: Transaction}>}
  */
 export const applyTransaction = async ({
   userId,
@@ -35,12 +42,13 @@ export const applyTransaction = async ({
   if (!user) throw new Error('User not found');
 
   // 2. Determine signed amount (negative for withdrawals/investments)
-  let signedAmount = ['withdrawal', 'investment'].includes(type) ? -Math.abs(amount) : Math.abs(amount);
+  const signedAmount = ['withdrawal', 'investment'].includes(type)
+    ? -Math.abs(amount)
+    : Math.abs(amount);
 
-  // 3. Update balances map
+  // 3. Update balances
   const prevBalance = user.balances.get(currency) || 0;
   const newBalance = prevBalance + signedAmount;
-
   if (newBalance < 0) throw new Error(`Insufficient ${currency} balance`);
 
   user.balances.set(currency, newBalance);
@@ -55,7 +63,6 @@ export const applyTransaction = async ({
     description: description || type,
     referenceId
   };
-
   user.ledger.push(ledgerEntry);
 
   user.markModified('balances');
@@ -63,7 +70,7 @@ export const applyTransaction = async ({
   await user.save();
 
   // 5. Record in Transaction collection
-  const tx = await Transaction.create({
+  const transaction = await Transaction.create({
     user: user._id,
     type,
     amount,
@@ -75,28 +82,27 @@ export const applyTransaction = async ({
     referenceId
   });
 
-  return { user, ledgerEntry, transaction: tx };
+  return { user, ledgerEntry, transaction };
 };
 
 /**
- * Convert crypto to EUR using live CoinGecko rates
+ * Get live crypto to EUR exchange rates from CoinGecko
  */
-import axios from 'axios';
-
-const ASSET_MAP = { BTC: 'bitcoin', ETH: 'ethereum', USDT: 'tether' };
-let priceCache = { rates: {}, lastUpdated: 0 };
-const CACHE_TTL = 5 * 60 * 1000; // 5 min
-
 export const getExchangeRates = async () => {
   const now = Date.now();
-  if (priceCache.lastUpdated && now - priceCache.lastUpdated < CACHE_TTL) return priceCache.rates;
+  if (priceCache.lastUpdated && now - priceCache.lastUpdated < CACHE_TTL) {
+    return priceCache.rates;
+  }
 
   try {
     const ids = Object.values(ASSET_MAP).join(',');
-    const { data } = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
-      params: { ids, vs_currencies: 'eur' },
-      timeout: 8000
-    });
+    const { data } = await axios.get(
+      'https://api.coingecko.com/api/v3/simple/price',
+      {
+        params: { ids, vs_currencies: 'eur' },
+        timeout: 8000
+      }
+    );
 
     const rates = {
       BTC: data.bitcoin.eur,
@@ -112,6 +118,9 @@ export const getExchangeRates = async () => {
   }
 };
 
+/**
+ * Convert crypto amount to EUR
+ */
 export const convertToEur = async (asset, amount) => {
   const rates = await getExchangeRates();
   return parseFloat(((rates[asset] || 0) * amount).toFixed(2));

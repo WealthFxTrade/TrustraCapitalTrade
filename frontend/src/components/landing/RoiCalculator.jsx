@@ -1,17 +1,10 @@
 // src/components/landing/RoiCalculator.jsx
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  TrendingUp,
-  ShieldCheck,
-  BarChart3,
-  AlertTriangle,
-  ArrowRight,
-  Zap
-} from 'lucide-react';
+import { TrendingUp, AlertTriangle, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-// ── SYNCED STRATEGY TIERS (Matched with Landing.jsx) ──
+// ── STRATEGY TIERS ──
 const TIERS = [
   { id: 'starter', name: 'Tier I: Entry', yieldMin: 6, yieldMax: 9, min: 100, max: 1000, color: 'text-emerald-500/70' },
   { id: 'basic', name: 'Tier II: Core', yieldMin: 9, yieldMax: 12, min: 1000, max: 5000, color: 'text-emerald-500/80' },
@@ -25,17 +18,15 @@ export default function RoiCalculator() {
   const [investment, setInvestment] = useState(5000);
   const [duration, setDuration] = useState(12);
 
-  // Auto-detect Tier based on Investment Slider
+  // Auto-detect Tier based on Investment
   const activeTier = useMemo(() => {
     return TIERS.find(t => investment >= t.min && investment < t.max) || TIERS[TIERS.length - 1];
   }, [investment]);
 
   // Alpha Projection Calculation
   const projection = useMemo(() => {
-    // We use the median of the range for the simulation (e.g., 12-16% -> 14%)
     const avgAnnualRate = (activeTier.yieldMin + activeTier.yieldMax) / 2 / 100;
     const monthlyRate = avgAnnualRate / 12;
-    
     const futureValue = investment * Math.pow(1 + monthlyRate, duration);
     const totalProfit = futureValue - investment;
     const monthlyGain = totalProfit / duration;
@@ -49,16 +40,12 @@ export default function RoiCalculator() {
   }, [investment, duration, activeTier]);
 
   const formatEUR = (val) =>
-    new Intl.NumberFormat('de-DE', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 0
-    }).format(val);
+    new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0 }).format(val);
 
   return (
     <div className="w-full bg-[#0a0c10] border border-white/5 rounded-[2.5rem] md:rounded-[3.5rem] overflow-hidden shadow-2xl">
       <div className="grid grid-cols-1 lg:grid-cols-2">
-        
+
         {/* INPUT SIDE */}
         <div className="p-8 md:p-12 space-y-10 border-b lg:border-b-0 lg:border-r border-white/5 bg-white/[0.01]">
           <header className="space-y-2">
@@ -67,7 +54,7 @@ export default function RoiCalculator() {
           </header>
 
           <div className="space-y-10">
-            {/* Principal Slider */}
+            {/* Investment Slider */}
             <div className="space-y-5">
               <div className="flex justify-between items-end">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Capital Entry</label>
@@ -92,7 +79,9 @@ export default function RoiCalculator() {
             <div className="space-y-5">
               <div className="flex justify-between items-end">
                 <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Maturity Horizon</label>
-                <span className="text-3xl font-black text-white tracking-tighter">{duration} <span className="text-xs text-gray-600 uppercase">Months</span></span>
+                <span className="text-3xl font-black text-white tracking-tighter">
+                  {duration} <span className="text-xs text-gray-600 uppercase">Months</span>
+                </span>
               </div>
               <input
                 type="range"
@@ -106,7 +95,7 @@ export default function RoiCalculator() {
             </div>
           </div>
 
-          {/* Synced Tier Badge */}
+          {/* Detected Tier & Yield */}
           <div className="p-6 bg-black/40 border border-white/5 rounded-2xl flex items-center justify-between">
             <div>
               <span className="block text-[8px] font-black uppercase tracking-widest text-gray-600 mb-1">Detected Tier</span>
@@ -149,7 +138,7 @@ export default function RoiCalculator() {
             </div>
           </div>
 
-          <button 
+          <button
             onClick={() => navigate('/register', { state: { plan: activeTier.id } })}
             className="w-full mt-12 py-5 bg-white text-black font-black uppercase tracking-widest rounded-2xl hover:bg-emerald-500 transition-all flex items-center justify-center gap-3 group shadow-2xl"
           >
@@ -158,7 +147,7 @@ export default function RoiCalculator() {
         </div>
       </div>
 
-      {/* DISCLAMER */}
+      {/* DISCLAIMER */}
       <div className="px-8 py-6 bg-black/60 border-t border-white/5">
         <div className="flex gap-4 items-start">
           <AlertTriangle size={16} className="text-yellow-600 shrink-0 mt-0.5" />
@@ -170,4 +159,3 @@ export default function RoiCalculator() {
     </div>
   );
 }
-

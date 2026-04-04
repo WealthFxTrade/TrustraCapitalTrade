@@ -1,3 +1,4 @@
+// controllers/depositController.js
 import { applyTransaction, convertToEur } from '../services/financeService.js';
 import Deposit from '../models/Deposit.js';
 import AuditLog from '../models/AuditLog.js';
@@ -9,9 +10,7 @@ export const createDeposit = async (req, res, next) => {
     const { amount, currency = 'BTC', txHash } = req.body;
     const userId = req.user._id;
 
-    if (!amount || Number(amount) <= 0) {
-      throw new ApiError(400, 'A valid positive amount is required');
-    }
+    if (!amount || amount <= 0) throw new ApiError(400, 'A valid positive amount is required');
 
     // Prevent duplicate transaction hash
     if (txHash) {
@@ -19,15 +18,14 @@ export const createDeposit = async (req, res, next) => {
       if (existing) throw new ApiError(400, 'This transaction hash has already been submitted');
     }
 
-    // Get deposit address for crypto
+    // Generate deposit address
     const depositAddress = await getOrCreateBtcDepositAddress(userId);
-
     if (!depositAddress) throw new ApiError(500, 'Failed to generate deposit address');
 
-    // Convert crypto amount to EUR for record
+    // Convert to EUR for ledger
     const amountEUR = currency === 'EUR' ? amount : await convertToEur(currency, amount);
 
-    // Apply transaction (does NOT credit the balance yet if you want pending logic)
+    // Apply pending transaction
     const { transaction } = await applyTransaction({
       userId,
       type: 'deposit',
@@ -36,10 +34,10 @@ export const createDeposit = async (req, res, next) => {
       status: 'pending',
       walletAddress: depositAddress,
       referenceId: null,
-      description: 'User deposit request'
+      description: 'User deposit request',
     });
 
-    // Store in Deposit collection for admin confirmation
+    // Save deposit for admin confirmation
     const deposit = await Deposit.create({
       user: userId,
       currency,
@@ -48,7 +46,7 @@ export const createDeposit = async (req, res, next) => {
       address: depositAddress,
       txHash: txHash || null,
       status: 'pending',
-      method: 'crypto'
+      method: 'crypto',
     });
 
     // Audit log
@@ -56,14 +54,25 @@ export const createDeposit = async (req, res, next) => {
       admin: null,
       action: 'deposit_initiated',
       target: userId,
-      details: { amount, currency, txHash, depositId: deposit._id }
+      details: { amount, currency, txHash, depositId: deposit._id },
     });
+
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      io.to(userId.toString()).emit('balanceUpdate', {
+        balances: Object.fromEntries(req.user.balances),
+        message: 'Deposit request submitted – awaiting confirmation',
+        deposit,
+        transaction,
+      });
+    }
 
     res.status(201).json({
       success: true,
       message: 'Deposit request created – awaiting confirmation',
       deposit,
-      transaction
+      transaction,
     });
   } catch (err) {
     next(err);

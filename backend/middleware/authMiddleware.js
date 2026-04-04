@@ -1,52 +1,55 @@
-import jwt from 'jsonwebtoken';
+// middleware/authMiddleware.js
 import asyncHandler from 'express-async-handler';
+import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { ApiError } from './errorMiddleware.js';
 
-const protect = asyncHandler(async (req, res, next) => {
+/**
+ * @desc Authenticate user via JWT cookie and attach user object to req
+ */
+export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  if (req.cookies?.trustra_token) {
-    token = req.cookies.trustra_token;
-  } else if (req.headers.authorization?.startsWith('Bearer ')) {
+  // 1. Check Authorization header first, fallback to cookie
+  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     token = req.headers.authorization.split(' ')[1];
+  } else if (req.cookies.trustra_token) {
+    token = req.cookies.trustra_token;
   }
 
   if (!token) {
-    console.warn(`[AUTH] No token → (${req.method}) ${req.originalUrl}`);
-    res.status(401);
-    throw new Error('Not authorized - No token provided');
+    throw new ApiError(401, 'Not authorized, token missing');
   }
 
   try {
+    // 2. Verify JWT
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded.id || decoded.userId || decoded._id;
+    
+    // 3. Attach user to req (excluding password)
+    req.user = await User.findById(decoded.id).select('-password');
 
-    if (!userId) {
-      res.status(401);
-      throw new Error('Not authorized - Invalid token payload');
+    if (!req.user) {
+      throw new ApiError(401, 'User not found');
     }
 
-    const user = await User.findById(userId).select('-password').lean();
-
-    if (!user) {
-      res.status(401);
-      throw new Error('Not authorized - User not found');
-    }
-
-    req.user = user;
     next();
   } catch (error) {
-    res.status(401);
-    throw new Error('Not authorized - Invalid session');
+    console.error('[AUTH ERROR]', error.message);
+    throw new ApiError(401, 'Not authorized, token failed');
   }
 });
 
-const admin = (req, res, next) => {
-  if (req.user && (req.user.role === 'admin' || req.user.role === 'superadmin')) {
-    return next();
+/**
+ * @desc Admin-only access middleware
+ */
+export const admin = (req, res, next) => {
+  if (!req.user) {
+    throw new ApiError(401, 'Not authorized');
   }
-  res.status(403);
-  throw new Error('Access denied - Administrative privileges required');
-};
 
-export { protect, admin };
+  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    throw new ApiError(403, 'Admin access only');
+  }
+
+  next();
+};
