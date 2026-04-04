@@ -1,64 +1,51 @@
-// backend/routes/authRoutes.js
+// routes/authRoutes.js
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import {
   loginUser,
   registerUser,
   getUserProfile,
   logoutUser,
   forgotPassword,
-  resetPassword
+  resetPassword,
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-/**
- * @route   GET /api/auth/health
- * @desc    Check if Auth Service is operational
- * @access  Public
- */
-router.get('/health', (req, res) => res.json({ status: 'Auth System Online' }));
+// ── RATE LIMITERS ──
+const loginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Too many login attempts. Please try again later.' },
+});
 
-/**
- * @route   POST /api/auth/register
- * @desc    Register a new user
- * @access  Public
- */
-router.post('/register', registerUser);
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: { success: false, message: 'Too many password reset requests. Please try again later.' },
+});
 
-/**
- * @route   POST /api/auth/login
- * @desc    Authenticate user & get token
- * @access  Public
- */
-router.post('/login', loginUser);
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'Too many registration attempts. Please try again later.' },
+});
 
-/**
- * @route   POST /api/auth/forgot-password
- * @desc    Request password reset email
- * @access  Public
- */
-router.post('/forgot-password', forgotPassword);
+// ── HEALTH CHECK ──
+router.get('/health', (req, res) => {
+  res.json({ status: 'Auth System Online', timestamp: new Date().toISOString() });
+});
 
-/**
- * @route   POST /api/auth/reset-password
- * @desc    Reset password using token
- * @access  Public
- */
+// ── PUBLIC AUTH ENDPOINTS ──
+router.post('/register', registerLimiter, registerUser);
+router.post('/signup', registerLimiter, registerUser);
+router.post('/login', loginLimiter, loginUser);
+router.post('/forgot-password', forgotPasswordLimiter, forgotPassword);
 router.post('/reset-password', resetPassword);
 
-/**
- * @route   GET /api/auth/profile
- * @desc    Get user profile data
- * @access  Private
- */
+// ── PROTECTED ENDPOINTS ──
 router.get('/profile', protect, getUserProfile);
-
-/**
- * @route   POST /api/auth/logout
- * @desc    Logout user / clear cookie
- * @access  Private
- */
 router.post('/logout', protect, logoutUser);
 
 export default router;
