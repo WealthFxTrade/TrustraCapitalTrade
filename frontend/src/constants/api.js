@@ -1,21 +1,22 @@
-// src/constants/api.js
 import axios from 'axios';
 
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
-    SIGNUP: '/auth/signup',
     LOGOUT: '/auth/logout',
     PROFILE: '/auth/profile',
     FORGOT_PASSWORD: '/auth/forgot-password',
     RESET_PASSWORD: '/auth/reset-password',
   },
   USER: {
-    BALANCES: '/auth/profile',
     STATS: '/user/stats',
     HISTORY: '/user/transactions',
-    COMPOUND: '/user/compound',
+  },
+  INVESTMENTS: {
+    PLANS: '/investments',
+    SUBSCRIBE: '/investments/subscribe',
+    CURRENT: '/investments/current',
   },
   ADMIN: {
     USERS: '/admin/users',
@@ -24,56 +25,58 @@ export const API_ENDPOINTS = {
   }
 };
 
-// Axios instance
+// Auto-detect if we are on Localhost, Network IP, or Production
+const getBaseURL = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  const { hostname } = window.location;
+  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:10000/api';
+  // If accessing via 172.20.10.3, point to the backend on that same IP
+  return `http://${hostname}:10000/api`;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:10000/api',
+  baseURL: getBaseURL(),
   withCredentials: true,
-  timeout: 20000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
 });
 
-// Request interceptor
 api.interceptors.request.use(
   (config) => {
-    if (import.meta.env.DEV) {
-      console.log(`🚀 [API ${config.method.toUpperCase()}]: ${config.url}`);
+    // Fallback: Attach token from localStorage if cookie is blocked by browser security
+    const token = localStorage.getItem('trustra_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
+    if (import.meta.env.DEV) console.log(`🚀 [API Request]: ${config.url}`);
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor
 api.interceptors.response.use(
   (response) => {
-    if (import.meta.env.DEV) {
-      console.log(`✅ [API Response]: ${response.config.url}`, response.data);
+    // If login is successful, save the token to localStorage as a fallback for the cookie
+    if (response.config.url.includes('/auth/login') && response.data.token) {
+      localStorage.setItem('trustra_token', response.data.token);
     }
     return response;
   },
   (error) => {
-    if (import.meta.env.DEV) {
-      console.error(`❌ [API Error]: ${error.config?.url}`, error.response?.data || error.message);
-    }
-
     const status = error.response?.status;
-
-    // Redirect to login on 401 (except for auth routes)
     if (status === 401) {
-      const isAuthRoute = window.location.pathname.includes('/auth') || 
-                          window.location.pathname.includes('/login');
-      if (!isAuthRoute) {
-        window.location.replace('/auth/login?session=expired');
+      const isAuthPage = ['/login', '/register', '/signup'].includes(window.location.pathname);
+      if (!isAuthPage) {
+        localStorage.removeItem('trustra_token'); // Clear stale token
+        window.location.replace('/login?session=expired');
       }
     }
-
     return Promise.reject(error);
   }
 );
 
 export default api;
+

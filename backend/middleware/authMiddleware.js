@@ -1,20 +1,22 @@
-// middleware/authMiddleware.js
+// backend/middleware/authMiddleware.js
 import asyncHandler from 'express-async-handler';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { ApiError } from './errorMiddleware.js';
 
 /**
- * @desc Authenticate user via JWT cookie and attach user object to req
+ * Protect routes: verifies JWT in cookies or Authorization header
  */
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  // 1. Check Authorization header first, fallback to cookie
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
-  } else if (req.cookies.trustra_token) {
+  // 1️⃣ Check cookies first (Web)
+  if (req.cookies?.trustra_token) {
     token = req.cookies.trustra_token;
+  }
+  // 2️⃣ Fallback: Authorization header (Mobile/Postman)
+  else if (req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
   if (!token) {
@@ -22,34 +24,30 @@ export const protect = asyncHandler(async (req, res, next) => {
   }
 
   try {
-    // 2. Verify JWT
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // 3. Attach user to req (excluding password)
-    req.user = await User.findById(decoded.id).select('-password');
+    const userId = decoded.id || decoded._id;
 
-    if (!req.user) {
-      throw new ApiError(401, 'User not found');
+    const user = await User.findById(userId).select('-password');
+
+    if (!user) {
+      throw new ApiError(401, 'User no longer exists');
     }
 
+    req.user = user;
     next();
   } catch (error) {
-    console.error('[AUTH ERROR]', error.message);
-    throw new ApiError(401, 'Not authorized, token failed');
+    console.error('[AUTH ERROR] Token failed:', error.message);
+    throw new ApiError(401, 'Not authorized, session expired');
   }
 });
 
 /**
- * @desc Admin-only access middleware
+ * Admin-only middleware
  */
 export const admin = (req, res, next) => {
-  if (!req.user) {
-    throw new ApiError(401, 'Not authorized');
-  }
-
-  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+  if (!req.user) throw new ApiError(401, 'Not authorized');
+  if (!['admin', 'superadmin'].includes(req.user.role)) {
     throw new ApiError(403, 'Admin access only');
   }
-
   next();
 };

@@ -1,14 +1,10 @@
-// utils/sendTokenResponse.js
+// backend/utils/sendTokenResponse.js
 import crypto from 'crypto';
-import ApiError from './ApiError.js';
+import { ApiError } from '../middleware/errorMiddleware.js';
 import generateToken from './generateToken.js';
 
 /**
- * Create token and send response with cookie
- * @param {object} user - Mongoose user document
- * @param {number} statusCode - HTTP status code
- * @param {object} res - Express response object
- * @param {object} options - Optional session tracking options
+ * Create token, set cookie, and send response
  */
 const sendTokenResponse = async (user, statusCode, res, options = {}) => {
   try {
@@ -26,15 +22,16 @@ const sendTokenResponse = async (user, statusCode, res, options = {}) => {
       }
     }
 
+    // ✅ Cookie options
     const isProduction = process.env.NODE_ENV === 'production';
     const cookieOptions = {
       httpOnly: true,
       sameSite: isProduction ? 'none' : 'lax',
       secure: isProduction,
       expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+      path: '/',
     };
 
-    // Set HTTP-only cookie
     res.cookie('trustra_token', token, cookieOptions);
 
     // Optional session tracking
@@ -42,12 +39,14 @@ const sendTokenResponse = async (user, statusCode, res, options = {}) => {
       const sessionDuration = options.sessionDurationMs || 30 * 24 * 60 * 60 * 1000;
       const expiresAt = new Date(Date.now() + sessionDuration);
       const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
       user.sessions.push({
         token: hashedToken,
         userAgent: options.userAgent,
         ipAddress: options.ipAddress,
         expiresAt,
       });
+
       await user.save();
     }
 
@@ -64,10 +63,10 @@ const sendTokenResponse = async (user, statusCode, res, options = {}) => {
         balances: formattedBalances,
         activePlan: user.activePlan || 'Class III: Prime',
       },
-      token,
+      token, // optional: include for frontend JS
     });
   } catch (err) {
-    console.error('[AUTH ERROR] Response failure:', err.message);
+    console.error('[AUTH ERROR] sendTokenResponse failed:', err.message);
     throw new ApiError(500, 'Authentication failed. Please try again.');
   }
 };
