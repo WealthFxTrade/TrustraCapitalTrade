@@ -1,28 +1,42 @@
 import express from 'express';
-import {
-  getUserBalances,
-  getRecentTransactions,
-  getDepositAddress,
-  compoundYield,
-  syncLedger,
-  requestWithdrawal,
-  getWithdrawalHistory
-} from '../controllers/userController.js';
-import { protect } from '../middleware/authMiddleware.js';
-
 const router = express.Router();
+import { protect } from '../middleware/authMiddleware.js';
+import {
+  getUserStats,
+  getLedger,
+  compoundYield,
+  requestWithdrawal,
+  getUserProfile,
+  updateUserProfile,
+  getDepositAddress
+} from '../controllers/userController.js';
 
-// Apply protection to all user actions
+/**
+ * PROTECT ALL ROUTES BELOW
+ * Every endpoint in this file requires a valid 'trustra_token'
+ */
 router.use(protect);
 
-router.get('/balances', getUserBalances);
-router.get('/transactions/recent', getRecentTransactions);
-router.get('/deposit-address', getDepositAddress);
-router.get('/withdrawals', getWithdrawalHistory);
+// Dashboard Metrics (Balances & Stats)
+router.get('/stats', getUserStats);
 
-router.post('/compound', compoundYield);
-router.post('/sync-ledger', syncLedger);
+// Audit Ledger (Transaction History)
+router.get('/transactions', getLedger);
+
+// Vault Services (Deposits & Withdrawals)
+router.get('/deposit-address', getDepositAddress);
 router.post('/withdraw', requestWithdrawal);
 
-export default router;
+// Strategic Reinvestment (Yield Management)
+router.post('/compound', compoundYield);
 
+/**
+ * PROFILE MANAGEMENT
+ * .get() fetches the verified user data
+ * .put() updates profile information
+ */
+router.route('/profile')
+  .get(getUserProfile)
+  .put(updateUserProfile);
+
+export default router;

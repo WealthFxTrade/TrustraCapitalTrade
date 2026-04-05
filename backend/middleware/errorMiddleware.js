@@ -1,6 +1,3 @@
-// middleware/errorMiddleware.js
-
-// 404 Not Found handler
 export const notFound = (req, res, next) => {
   res.status(404).json({
     success: false,
@@ -8,10 +5,8 @@ export const notFound = (req, res, next) => {
   });
 };
 
-// General error handler
 export const errorHandler = (err, req, res, next) => {
-  console.error(err); // Log the error for debugging
-
+  console.error(err);
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
 
@@ -22,7 +17,6 @@ export const errorHandler = (err, req, res, next) => {
   });
 };
 
-// Custom API error class
 export class ApiError extends Error {
   constructor(statusCode, message) {
     super(message);

@@ -1,4 +1,3 @@
-// src/context/AuthContext.jsx
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { API_ENDPOINTS } from '../constants/api';
@@ -33,11 +32,7 @@ function authReducer(state, action) {
         loading: false,
       };
     case 'AUTH_ERROR':
-      return {
-        ...state,
-        loading: false,
-        initialized: true,
-      };
+      return { ...state, loading: false, initialized: true };
     case 'SET_INITIALIZED':
       return { ...state, initialized: true, loading: false };
     default:
@@ -50,10 +45,16 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const isInitializing = useRef(false);
 
-  // Initialize auth session
   const initAuth = useCallback(async () => {
     if (isInitializing.current) return;
     isInitializing.current = true;
+
+    const token = localStorage.getItem('trustra_token');
+    if (!token) {
+      dispatch({ type: 'SET_INITIALIZED' });
+      isInitializing.current = false;
+      return;
+    }
 
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
@@ -63,7 +64,6 @@ export function AuthProvider({ children }) {
         dispatch({ type: 'AUTH_LOGOUT' });
       }
     } catch (error) {
-      console.log('No active session');
       dispatch({ type: 'AUTH_LOGOUT' });
     } finally {
       dispatch({ type: 'SET_INITIALIZED' });
@@ -75,116 +75,44 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
-  // Login
   const login = async (credentials) => {
     dispatch({ type: 'AUTH_START' });
-
     try {
       const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, {
         email: credentials.email.trim(),
         password: credentials.password,
       });
-
-      if (data?.success && data?.user) {
+      if (data?.success) {
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
-        return { success: true, user: data.user };
+        return { success: true };
       }
-
-      dispatch({ type: 'AUTH_ERROR' });
-      return { success: false, message: data?.message || 'Login failed' };
+      return { success: false, message: data?.message };
     } catch (error) {
       dispatch({ type: 'AUTH_ERROR' });
-      const message = error.response?.data?.message || error.message || 'Connection failed';
-      return { success: false, message };
+      return { success: false, message: error.response?.data?.message || 'Login failed' };
     }
   };
 
-  // Signup
-  const signup = async (userData) => {
-    dispatch({ type: 'AUTH_START' });
-
-    try {
-      const { data } = await api.post(API_ENDPOINTS.AUTH.SIGNUP, {
-        name: userData.name,
-        email: userData.email.trim(),
-        password: userData.password,
-        activePlan: userData.activePlan,
-      });
-
-      if (data?.success && data?.user) {
-        dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
-        return { success: true, user: data.user };
-      }
-
-      dispatch({ type: 'AUTH_ERROR' });
-      return { success: false, message: data?.message || 'Registration failed' };
-    } catch (error) {
-      dispatch({ type: 'AUTH_ERROR' });
-      const message = error.response?.data?.message || error.message || 'Registration failed';
-      return { success: false, message };
-    }
-  };
-
-  // Forgot Password
-  const forgotPassword = async (email) => {
-    try {
-      const { data } = await api.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, {
-        email: email.trim(),
-      });
-      return { success: true, message: data?.message || 'Recovery email sent' };
-    } catch (error) {
-      const message = error.response?.data?.message || 'Failed to send recovery email';
-      return { success: false, message };
-    }
-  };
-
-  // Reset Password
-  const resetPassword = async (token, password) => {
-    try {
-      const { data } = await api.post(API_ENDPOINTS.AUTH.RESET_PASSWORD, {
-        token,
-        password,
-      });
-      return { success: true, message: data?.message || 'Password reset successful' };
-    } catch (error) {
-      const message = error.response?.data?.message || 'Password reset failed';
-      return { success: false, message };
-    }
-  };
-
-  // Logout
   const logout = useCallback(async () => {
     try {
       await api.post(API_ENDPOINTS.AUTH.LOGOUT);
-    } catch (error) {
-      console.warn('Logout API failed, clearing local session');
+    } catch (err) {
+      console.warn("Server-side session clear skipped");
     } finally {
+      localStorage.removeItem('trustra_token');
       dispatch({ type: 'AUTH_LOGOUT' });
-      navigate('/auth/login', { replace: true });
+      navigate('/login', { replace: true });
     }
   }, [navigate]);
 
   const authValue = useMemo(() => ({
     ...state,
     login,
-    signup,
     logout,
-    forgotPassword,
-    resetPassword,
-    refreshSession: initAuth,
+    refreshSession: initAuth
   }), [state, logout, initAuth]);
 
-  return (
-    <AuthContext.Provider value={authValue}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>;
 }
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
+export const useAuth = () => useContext(AuthContext);

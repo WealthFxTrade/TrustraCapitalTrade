@@ -1,5 +1,4 @@
 // src/pages/Admin/index.js
-export { default as AdminDashboard } from './AdminDashboard';
 export { default as AdminOverview } from './AdminOverview';
 export { default as AdminUserTable } from './AdminUserTable';
 export { default as UserIdentityDetail } from './UserIdentityDetail';

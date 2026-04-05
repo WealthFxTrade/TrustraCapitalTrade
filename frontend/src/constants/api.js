@@ -1,77 +1,84 @@
 import axios from 'axios';
 
+/**
+ * Trustra Network Gateway
+ * Automatically switches between Local Node (10000) and Render Cloud.
+ */
+const getBaseURL = () => {
+  const { hostname, protocol } = window.location;
+
+  // PRODUCTION URLS
+  const productionHosts = [
+    'trustra-capital-trade.vercel.app',
+    'trustracapitaltrade.online',
+    'www.trustracapitaltrade.online'
+  ];
+
+  if (productionHosts.includes(hostname)) {
+    // Corrected to match your actual Render service name
+    return 'https://trustracapitaltrade-backend.onrender.com/api';
+  }
+
+  // LOCAL DEVELOPMENT (Localhost, 127.0.0.1, or LAN IP 172.20.10.x)
+  return `${protocol}//${hostname}:10000/api`;
+};
+
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
     LOGOUT: '/auth/logout',
-    PROFILE: '/auth/profile',
-    FORGOT_PASSWORD: '/auth/forgot-password',
-    RESET_PASSWORD: '/auth/reset-password',
+    PROFILE: '/auth/profile', 
   },
   USER: {
-    STATS: '/user/stats',
-    HISTORY: '/user/transactions',
-  },
-  INVESTMENTS: {
-    PLANS: '/investments',
-    SUBSCRIBE: '/investments/subscribe',
-    CURRENT: '/investments/current',
+    STATS: '/users/stats',
+    TRANSACTIONS: '/users/transactions',
+    COMPOUND: '/users/compound',
+    WITHDRAW: '/users/withdraw',
+    DEPOSIT_ADDRESS: '/users/deposit-address',
+    PROFILE: '/users/profile',
   },
   ADMIN: {
     USERS: '/admin/users',
-    WITHDRAWALS: '/admin/withdrawals',
     HEALTH: '/admin/health',
   }
-};
-
-// Auto-detect if we are on Localhost, Network IP, or Production
-const getBaseURL = () => {
-  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
-  const { hostname } = window.location;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:10000/api';
-  // If accessing via 172.20.10.3, point to the backend on that same IP
-  return `http://${hostname}:10000/api`;
 };
 
 const api = axios.create({
   baseURL: getBaseURL(),
   withCredentials: true,
-  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
   },
 });
 
-api.interceptors.request.use(
-  (config) => {
-    // Fallback: Attach token from localStorage if cookie is blocked by browser security
-    const token = localStorage.getItem('trustra_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    if (import.meta.env.DEV) console.log(`🚀 [API Request]: ${config.url}`);
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+// REQUEST INTERCEPTOR: Inject Bearer Token
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('trustra_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
 
+// RESPONSE INTERCEPTOR: Token Persistence & 401 Handling
 api.interceptors.response.use(
   (response) => {
-    // If login is successful, save the token to localStorage as a fallback for the cookie
-    if (response.config.url.includes('/auth/login') && response.data.token) {
+    // If the backend sends a fresh token, update storage
+    if (response.data?.token) {
       localStorage.setItem('trustra_token', response.data.token);
     }
     return response;
   },
   (error) => {
-    const status = error.response?.status;
-    if (status === 401) {
-      const isAuthPage = ['/login', '/register', '/signup'].includes(window.location.pathname);
-      if (!isAuthPage) {
-        localStorage.removeItem('trustra_token'); // Clear stale token
-        window.location.replace('/login?session=expired');
+    // Handle Session Expiration
+    if (error.response?.status === 401) {
+      const publicPaths = ['/login', '/register', '/', '/auth/reset-password'];
+      if (!publicPaths.includes(window.location.pathname)) {
+        localStorage.removeItem('trustra_token');
+        // Let AuthContext or ProtectedRoutes handle the redirect
       }
     }
     return Promise.reject(error);
@@ -79,4 +86,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-

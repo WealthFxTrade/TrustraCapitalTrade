@@ -1,233 +1,179 @@
-/**
- * Trustra Capital Trade - User Controller
- * PRODUCTION READY - High Precision & Real-time Ledger Sync
- */
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
-import Withdrawal from '../models/Withdrawal.js';
 import Transaction from '../models/Transaction.js';
-import * as bitcoin from 'bitcoinjs-lib';
-import * as ecc from 'tiny-secp256k1';
-import { BIP32Factory } from 'bip32';
-
-const bip32 = BIP32Factory(ecc);
 
 /**
- * @desc    Get current user balances formatted for the Dashboard
- * @route   GET /user/balances
+ * @desc    Get dashboard metrics (Stats & Balances)
+ * @route   GET /api/users/stats
  */
-export const getUserBalances = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).select('balances');
+export const getUserStats = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-  if (!user) {
-    res.status(404);
-    throw new Error('User node not found');
-  }
-
-  const balancesObj = Object.fromEntries(user.balances || new Map());
+  // Handle Mongoose Map to Object conversion for the frontend
+  const balances = user.balances instanceof Map
+    ? Object.fromEntries(user.balances)
+    : user.balances;
 
   res.json({
     success: true,
-    balances: {
-      EUR: balancesObj.EUR || 0,
-      ROI: balancesObj.ROI || 0,
-      INVESTED: balancesObj.INVESTED || 0,
-      BTC: balancesObj.BTC || 0,
-      USDT: balancesObj.USDT || 0
+    stats: {
+      balances,
+      activePlan: user.activePlan || 'Class III: Prime',
+      kycStatus: user.kycStatus || 'unverified',
+      totalDeposits: user.totalDeposits || 0
     }
   });
 });
 
 /**
- * @desc    Fetch Recent Activity (Transactions)
- * @route   GET /user/transactions/recent
+ * @desc    Get Transaction Ledger (Audit History)
+ * @route   GET /api/users/transactions
  */
-export const getRecentTransactions = asyncHandler(async (req, res) => {
+export const getLedger = asyncHandler(async (req, res) => {
   const transactions = await Transaction.find({ user: req.user._id })
     .sort({ createdAt: -1 })
-    .limit(15);
-  
-  res.json(transactions || []);
+    .limit(50);
+
+  res.json({ success: true, transactions });
 });
 
 /**
- * @desc    Compound Yield - Reinvests ROI into the Main Principal (EUR)
- * @route   POST /user/compound
+ * @desc    Strategic Yield Reinvestment (Compound)
+ * @route   POST /api/users/compound
  */
 export const compoundYield = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-
-  if (!user) {
-    res.status(404);
-    throw new Error('User data unavailable');
-  }
-
   const currentROI = user.balances.get('ROI') || 0;
-  const currentEUR = user.balances.get('EUR') || 0;
 
   if (currentROI < 10) {
-    res.status(400);
-    throw new Error('Minimum €10.00 required for reinvestment');
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Minimum €10.00 required for reinvestment.' 
+    });
   }
 
-  // Strategic Rebalance: Move ROI to Principal
+  const currentEUR = user.balances.get('EUR') || 0;
   user.balances.set('EUR', currentEUR + currentROI);
   user.balances.set('ROI', 0);
-
-  user.markModified('balances');
   await user.save();
 
-  // Create audit trail for the compound action
   await Transaction.create({
     user: user._id,
     type: 'reinvest',
     amount: currentROI,
-    signedAmount: currentROI,
     currency: 'EUR',
     status: 'completed',
-    description: 'Internal Yield Reinvestment'
+    description: 'Yield Maturity: ROI Reinvestment to Principal',
+    method: 'internal'
   });
+
+  res.json({ success: true, message: 'Reinvestment finalized.' });
+});
+
+/**
+ * @desc    Process Withdrawal Request
+ * @route   POST /api/users/withdraw
+ */
+export const requestWithdrawal = asyncHandler(async (req, res) => {
+  const { amount, address, currency } = req.body;
+  const user = await User.findById(req.user._id);
+  
+  const balanceKey = currency || 'EUR';
+  const currentBalance = user.balances.get(balanceKey) || 0;
+
+  if (currentBalance < amount) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Insufficient vaulted liquidity.' 
+    });
+  }
+
+  // Deduct from balance immediately to prevent double spending
+  user.balances.set(balanceKey, currentBalance - amount);
+  await user.save();
+
+  const tx = await Transaction.create({
+    user: user._id,
+    type: 'withdrawal',
+    amount,
+    currency: balanceKey,
+    walletAddress: address,
+    status: 'pending',
+    description: `Withdrawal request to ${address.slice(0, 8)}...`,
+    method: 'crypto'
+  });
+
+  res.json({ success: true, transaction: tx });
+});
+
+/**
+ * @desc    Get Institutional Deposit Address
+ * @route   GET /api/users/deposit-address
+ */
+export const getDepositAddress = asyncHandler(async (req, res) => {
+  // Ensure we capture 'asset' from req.query (e.g. ?asset=BTC)
+  const { asset } = req.query;
+  
+  const vaultMap = {
+    USDT: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e', // Institutional ERC20
+    BTC: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+    ETH: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e'
+  };
+
+  const selectedAsset = asset?.toUpperCase() || 'USDT';
+  const finalAddress = vaultMap[selectedAsset] || vaultMap.USDT;
 
   res.json({
     success: true,
-    message: 'Yield successfully compounded',
-    balances: Object.fromEntries(user.balances)
+    address: finalAddress,
+    asset: selectedAsset,
+    // Add logic here if you ever need specific MEMO IDs for coins like XRP/XLM
+    memo: null 
   });
 });
 
 /**
- * @desc    Sync Ledger - Force updates production valuation
- * @route   POST /user/sync-ledger
+ * @desc    Get User Profile
+ * @route   GET /api/users/profile
  */
-export const syncLedger = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
-
+export const getUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id).select('-password');
   if (!user) {
+    res.status(404);
+    throw new Error('User profile not found');
+  }
+  res.json({ success: true, user });
+});
+
+/**
+ * @desc    Update User Profile
+ * @route   PUT /api/users/profile
+ */
+export const updateUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  
+  if (user) {
+    user.name = req.body.name || user.name;
+    user.phone = req.body.phone || user.phone;
+    
+    if (req.body.password) {
+      user.password = req.body.password;
+    }
+
+    const updatedUser = await user.save();
+    
+    res.json({ 
+      success: true, 
+      user: {
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        phone: updatedUser.phone
+      }
+    });
+  } else {
     res.status(404);
     throw new Error('User not found');
   }
-
-  // Institutional Portfolio Synchronization
-  user.balances.set('EUR', 125550);
-  user.balances.set('ROI', 8750.42);
-  user.balances.set('INVESTED', 116800);
-  user.balances.set('BTC', 0.45);
-  user.balances.set('USDT', 5000);
-
-  user.markModified('balances');
-  await user.save();
-
-  res.json({
-    success: true,
-    message: 'Node synchronized to €125,550 valuation',
-    balances: Object.fromEntries(user.balances)
-  });
 });
-
-/**
- * @desc    Generate Unique BTC Wallet (Deterministic)
- * @route   GET /user/deposit-address
- */
-export const getDepositAddress = asyncHandler(async (req, res) => {
-  const { asset } = req.query;
-  const user = await User.findById(req.user._id);
-
-  if (!asset) {
-    res.status(400);
-    throw new Error('Asset selection required');
-  }
-
-  if (asset.toUpperCase() === 'BTC') {
-    let existingAddress = user.balances.get('BTC_ADDRESS');
-    if (existingAddress) {
-      return res.json({ success: true, asset: 'BTC', address: existingAddress });
-    }
-
-    const xpub = process.env.BTC_XPUB;
-    if (!xpub) throw new Error('BTC Infrastructure offline (Missing xPub)');
-
-    // Deterministic index derivation
-    const derivationIndex = parseInt(user._id.toString().slice(-6), 16) % 2147483647;
-    const node = bip32.fromBase58(xpub);
-    const child = node.derivePath(`0/${derivationIndex}`);
-
-    const { address } = bitcoin.payments.p2wpkh({
-      pubkey: child.publicKey,
-      network: bitcoin.networks.bitcoin,
-    });
-
-    user.balances.set('BTC_ADDRESS', address);
-    user.markModified('balances');
-    await user.save();
-
-    return res.json({ success: true, asset: 'BTC', address });
-  }
-
-  // Fallback ETH/USDT Institutional Hot Wallet
-  res.json({
-    success: true,
-    asset: asset.toUpperCase(),
-    address: '0x9830440e9257f33afc29c8e3f35a7681920379d4',
-    memo: `TRUSTRA-${user._id.toString().slice(-6).toUpperCase()}`
-  });
-});
-
-/**
- * @desc    Create Withdrawal Request
- * @route   POST /user/withdraw
- */
-export const requestWithdrawal = asyncHandler(async (req, res) => {
-  const { amount, asset, walletType, address, network } = req.body;
-  const user = await User.findById(req.user._id);
-
-  const availableBalance = user.balances.get(walletType) || 0;
-
-  if (availableBalance < Number(amount)) {
-    res.status(400);
-    throw new Error('Insufficient liquidity in selected node');
-  }
-
-  const withdrawal = await Withdrawal.create({
-    user: user._id,
-    amount: Number(amount),
-    asset,
-    walletType,
-    address,
-    network,
-    status: 'pending'
-  });
-
-  // Deduct from balance immediately to prevent double-spending
-  user.balances.set(walletType, availableBalance - Number(amount));
-  user.markModified('balances');
-  await user.save();
-
-  // Log as pending transaction
-  await Transaction.create({
-    user: user._id,
-    type: 'withdrawal',
-    amount: Number(amount),
-    signedAmount: -Math.abs(Number(amount)),
-    currency: 'EUR',
-    status: 'pending',
-    description: `Withdrawal via ${asset} (${network})`
-  });
-
-  res.status(201).json({ 
-    success: true, 
-    message: 'Withdrawal queued for audit', 
-    withdrawal 
-  });
-});
-
-/**
- * @desc    Get Withdrawal History
- * @route   GET /user/withdrawals
- */
-export const getWithdrawalHistory = asyncHandler(async (req, res) => {
-  const withdrawals = await Withdrawal.find({ user: req.user._id })
-    .sort({ createdAt: -1 });
-
-  res.json({ success: true, withdrawals });
-});
-

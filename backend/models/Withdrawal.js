@@ -3,83 +3,31 @@ import mongoose from 'mongoose';
 
 const withdrawalSchema = new mongoose.Schema(
   {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: [true, 'Withdrawal must belong to a user'],
-      index: true,
-    },
-    amount: {
-      type: Number,
-      required: [true, 'Amount is required'],
-      min: [50, 'Minimum redemption threshold is €50.00'], // Updated to match business logic
-    },
-    // The asset requested (BTC, ETH, etc.)
-    asset: {
-      type: String,
-      required: [true, 'Target asset is required'],
-      uppercase: true,
-      trim: true,
-      default: 'BTC',
-    },
-    // CRITICAL: Which internal pool the money is coming from
-    walletType: {
-      type: String,
-      required: [true, 'Source liquidity pool is required'],
-      enum: ['EUR', 'ROI'],
-      default: 'EUR',
-      uppercase: true,
-    },
-    address: {
-      type: String,
-      required: [true, 'Withdrawal destination address is required'],
-      trim: true,
-    },
-    network: {
-      type: String,
-      required: [false, 'Network protocol'], // Made optional as some assets are mainnet-only
-      trim: true,
-      default: 'Mainnet',
-    },
-    status: {
-      type: String,
-      enum: ['pending', 'processing', 'completed', 'cancelled', 'rejected'],
-      default: 'pending',
-      index: true,
-    },
-    transactionHash: {
-      type: String,
-      trim: true,
-      sparse: true,
-    },
-    fee: {
-      type: Number,
-      default: 0,
-    },
-    processedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      default: null,
-    },
-    rejectionReason: {
-      type: String,
-      trim: true,
-      maxlength: 200,
-      default: null,
-    },
-    // Redundant but kept for legacy compatibility with your controller
-    currency: {
-      type: String,
-      default: 'EUR',
-      uppercase: true,
-    },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    amount: { type: Number, required: true, min: [50, 'Minimum withdrawal €50'] },
+    asset: { type: String, required: true, uppercase: true, trim: true, default: 'BTC' },
+    walletType: { type: String, required: true, enum: ['EUR', 'ROI'], default: 'EUR', uppercase: true },
+    address: { type: String, required: true, trim: true },
+    network: { type: String, trim: true, default: 'Mainnet' },
+    status: { type: String, enum: ['pending', 'processing', 'completed', 'cancelled', 'rejected'], default: 'pending', index: true },
+    transactionHash: { type: String, trim: true, sparse: true },
+    fee: { type: Number, default: 0, min: 0 },
+    processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    rejectionReason: { type: String, trim: true, maxlength: 200, default: null },
+    currency: { type: String, default: 'EUR', uppercase: true },
+    netAmount: { type: Number },
+    signedAmount: { type: Number },
   },
-  {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
-  }
+  { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
+
+// Auto-compute signedAmount and netAmount
+withdrawalSchema.pre('validate', function (next) {
+  this.netAmount = this.amount - (this.fee || 0);
+  this.signedAmount = -Math.abs(this.netAmount); // Always negative
+  if (this.netAmount < 0) this.invalidate('netAmount', 'Net amount cannot be negative');
+  next();
+});
 
 // Indexes
 withdrawalSchema.index({ user: 1, createdAt: -1 });

@@ -1,24 +1,25 @@
 import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { motion } from 'framer-motion';
-import { ShieldAlert, Loader2 } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 
 /**
  * TRUSTRA CAPITAL | SECURITY GATEKEEPER
  * Manages encrypted access to the Capital Terminal and Governance Command.
- * * @param {boolean} adminOnly - Restricts node access to administrative accounts.
+ * @param {boolean} adminOnly - Restricts node access to administrative accounts.
  */
 export default function ProtectedRoute({ children, adminOnly = false }) {
   const { isAuthenticated, user, initialized } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // ── 1. PROTOCOL INITIALIZATION (SPLASH) ──
   // Prevents "Unauthorized" false-positives during session handshake.
   if (!initialized) {
     return (
       <div className="min-h-screen bg-[#020408] flex flex-col items-center justify-center gap-6">
-        <motion.div 
+        <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
           className="relative flex items-center justify-center"
@@ -44,7 +45,7 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
   if (adminOnly && user?.role !== 'admin') {
     return (
       <div className="min-h-screen bg-[#020408] flex items-center justify-center p-6">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           className="max-w-md w-full bg-[#0a0c10] border border-white/5 p-10 rounded-[2.5rem] shadow-2xl text-center"
@@ -59,8 +60,8 @@ export default function ProtectedRoute({ children, adminOnly = false }) {
             Identity validated but protocol access denied. Your current credentials do not hold 
             administrative governance permissions for this sector.
           </p>
-          <button 
-            onClick={() => window.history.back()}
+          <button
+            onClick={() => navigate('/dashboard')}
             className="w-full py-4 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-white hover:bg-white/10 transition-all active:scale-95"
           >
             Return to Authorized Zone

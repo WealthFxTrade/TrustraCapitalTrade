@@ -4,8 +4,11 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 // Navigation Guards
-import ProtectedRoute from './components/auth/ProtectedRoute'; // Verified path
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminRoute from './components/routing/AdminRoute';
+
+// Layouts
+import MainLayout from './components/layout/MainLayout';
 
 // Public Pages
 import LandingPage from './components/landing/Landing';
@@ -23,7 +26,6 @@ import Ledger from './pages/Dashboard/Ledger';
 
 // Admin Pages
 import {
-  AdminDashboard,
   AdminOverview,
   AdminUserTable,
   UserIdentityDetail,
@@ -37,6 +39,7 @@ import {
 function App() {
   return (
     <>
+      {/* Global Notification System */}
       <Toaster
         position="top-right"
         toastOptions={{
@@ -52,70 +55,54 @@ function App() {
       />
 
       <Routes>
-        {/* ====================== PUBLIC PROTOCOLS ====================== */}
-        {/* These routes MUST remain outside of any ProtectedRoute wrappers */}
+        {/* ====================== PUBLIC ROUTES ====================== */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* ====================== SECURE CLIENT TERMINAL ====================== */}
-        <Route 
-          path="/dashboard" 
+        {/* ====================== PROTECTED UNIFIED LAYOUT ====================== */}
+        {/* Both User and Admin routes live inside this Route group. 
+            MainLayout will automatically detect the user's role 
+            and swap the Sidebar/Theme dynamically.
+        */}
+        <Route
           element={
             <ProtectedRoute>
-              <UserDashboard />
+              <MainLayout />
             </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/dashboard/deposit" 
-          element={
-            <ProtectedRoute>
-              <Deposit />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/dashboard/withdrawal" 
-          element={
-            <ProtectedRoute>
-              <Withdrawal />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/dashboard/profile" 
-          element={
-            <ProtectedRoute>
-              <UserProfile />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/dashboard/ledger" 
-          element={
-            <ProtectedRoute>
-              <Ledger />
-            </ProtectedRoute>
-          } 
-        />
+          }
+        >
+          {/* --- User Space --- */}
+          <Route path="/dashboard" element={<UserDashboard />} />
+          <Route path="/dashboard/deposit" element={<Deposit />} />
+          <Route path="/dashboard/withdrawal" element={<Withdrawal />} />
+          <Route path="/dashboard/profile" element={<UserProfile />} />
+          <Route path="/dashboard/ledger" element={<Ledger />} />
 
-        {/* ====================== ADMINISTRATIVE GOVERNANCE ====================== */}
-        <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>}>
-          <Route index element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="dashboard" element={<AdminOverview />} />
-          <Route path="users" element={<AdminUserTable />} />
-          <Route path="users/:id" element={<UserIdentityDetail />} />
-          <Route path="withdrawals" element={<WithdrawalRequestsTable />} />
-          <Route path="deposits" element={<DepositRequestsTable />} />
-          <Route path="kyc" element={<KycVerificationQueue />} />
-          <Route path="settings" element={<AdminSettings />} />
-          <Route path="health" element={<SystemHealth />} />
+          {/* --- Admin Space (Double Layer Protection) --- */}
+          {/* Admin Index Redirect */}
+          <Route 
+            path="/admin" 
+            element={
+              <AdminRoute>
+                <Navigate to="/admin/dashboard" replace />
+              </AdminRoute>
+            } 
+          />
+          
+          <Route path="/admin/dashboard" element={<AdminRoute><AdminOverview /></AdminRoute>} />
+          <Route path="/admin/users" element={<AdminRoute><AdminUserTable /></AdminRoute>} />
+          <Route path="/admin/users/:id" element={<AdminRoute><UserIdentityDetail /></AdminRoute>} />
+          <Route path="/admin/withdrawals" element={<AdminRoute><WithdrawalRequestsTable /></AdminRoute>} />
+          <Route path="/admin/deposits" element={<AdminRoute><DepositRequestsTable /></AdminRoute>} />
+          <Route path="/admin/kyc" element={<AdminRoute><KycVerificationQueue /></AdminRoute>} />
+          <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
+          <Route path="/admin/health" element={<AdminRoute><SystemHealth /></AdminRoute>} />
         </Route>
 
-        {/* ====================== CATCH-ALL REDIRECT ====================== */}
+        {/* ====================== FALLBACK ====================== */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
