@@ -1,10 +1,13 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 
 const userSchema = new mongoose.Schema(
   {
-    name: { type: String, required: [true, 'Please add a name'], trim: true },
+    name: { 
+      type: String, 
+      required: [true, 'Please add a name'], 
+      trim: true 
+    },
     email: {
       type: String,
       required: [true, 'Please add an email'],
@@ -13,20 +16,46 @@ const userSchema = new mongoose.Schema(
       trim: true,
       match: [/^\S+@\S+\.\S+$/, 'Please add a valid email'],
     },
-    // --- ADDED FIELD ---
     phoneNumber: { type: String, default: null, trim: true },
-    // -------------------
-    password: { type: String, required: [true, 'Please add a password'], minlength: 8, select: false },
-    role: { type: String, enum: ['user', 'admin', 'superadmin'], default: 'user' },
+    password: { 
+      type: String, 
+      required: [true, 'Please add a password'], 
+      minlength: 8, 
+      select: false 
+    },
+    role: { 
+      type: String, 
+      enum: ['user', 'admin', 'superadmin'], 
+      default: 'user' 
+    },
     isActive: { type: Boolean, default: true },
     isBanned: { type: Boolean, default: false },
+
+    address_index: { type: Number, unique: true, sparse: true },
+
+    // BALANCES - Strictly numeric only (no cast errors)
     balances: {
       type: Map,
       of: Number,
       default: () => new Map([
-        ['EUR', 0], ['BTC', 0], ['USDT', 0], ['ROI', 0], ['INVESTED', 0],
+        ['EUR', 0],
+        ['BTC', 0],
+        ['USDT', 0],
+        ['ROI', 0],
+        ['INVESTED', 0],
       ]),
     },
+
+    // WALLET ADDRESSES - Separate strings
+    walletAddresses: {
+      type: Map,
+      of: String,
+      default: () => new Map([
+        ['BTC', ''],
+        ['ETH', ''],
+      ]),
+    },
+
     twoFactorEnabled: { type: Boolean, default: false },
     twoFactorSecret: { type: String, select: false },
     failedLoginAttempts: { type: Number, default: 0 },
@@ -41,7 +70,11 @@ const userSchema = new mongoose.Schema(
       },
     ],
     activePlan: { type: String, default: 'None' },
-    kycStatus: { type: String, enum: ['unverified', 'pending', 'submitted', 'verified', 'rejected'], default: 'unverified' },
+    kycStatus: { 
+      type: String, 
+      enum: ['unverified', 'pending', 'submitted', 'verified', 'rejected'], 
+      default: 'unverified' 
+    },
     kycNotes: { type: String, default: null },
     kycVerifiedAt: { type: Date, default: null },
     idFrontUrl: { type: String, default: null },
@@ -57,7 +90,7 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Password Hashing
+// Password hashing
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   const salt = await bcrypt.genSalt(12);
@@ -85,6 +118,10 @@ userSchema.methods.resetFailedLogin = async function () {
   this.lockUntil = undefined;
   await this.save();
 };
+
+userSchema.virtual('btcAddress').get(function () {
+  return this.walletAddresses?.get('BTC') || null;
+});
 
 const User = mongoose.model('User', userSchema);
 export default User;

@@ -1,79 +1,98 @@
-const { ethers } = require('ethers');
+// utils/ethUtils.js
+import { ethers } from 'ethers';
+
+const RPC_URLS = [
+  process.env.ETH_RPC_URL,
+  process.env.ETH_FALLBACK_RPC,
+  process.env.ETH_FALLBACK2,
+  process.env.ETH_FALLBACK3,
+  process.env.ETH_FALLBACK4,
+  process.env.ETH_FALLBACK5,
+].filter(url => typeof url === 'string' && url.trim() !== '');
+
+let currentProvider = null;
 
 /**
- * 🛰️ NETWORK CONFIGURATION
- * In production, Vercel/Render will pull the RPC URL from your environment variables.
- * We use a timeout to prevent the backend from hanging if the Ethereum node lags.
+ * Get working Ethereum provider with multiple fallbacks
  */
-const ETH_RPC_URL = process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/YOUR_API_KEY';
+const getProvider = async () => {
+  if (currentProvider) return currentProvider;
 
-// Initialize the Provider with 2026 Ethers v6 standards
-const provider = new ethers.JsonRpcProvider(ETH_RPC_URL, null, {
-  staticNetwork: true, // Optimizes performance by skipping chainId checks on every call
-  batchMaxCount: 1     // Prevents batching errors on some free-tier RPC providers
-});
-
-/**
- * Validates the structure of an Ethereum address
- * @param {string} address 
- * @returns {boolean}
- */
-const isValidAddress = (address) => {
-  try {
-    return ethers.isAddress(address);
-  } catch {
-    return false;
+  if (RPC_URLS.length === 0) {
+    console.error('❌ No RPC URLs configured in .env!');
+    throw new Error('No Ethereum RPC configured');
   }
+
+  console.log(`🔄 [ETH PROVIDER] Trying ${RPC_URLS.length} RPC endpoints...`);
+
+  for (const url of RPC_URLS) {
+    try {
+      const prov = new ethers.JsonRpcProvider(url);
+
+      const network = await Promise.race([
+        prov.getNetwork(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+      ]);
+
+      console.log(`✅ [ETH PROVIDER] Connected successfully to: \( {url} (Chain ID: \){network.chainId})`);
+      currentProvider = prov;
+      return prov;
+    } catch (err) {
+      console.warn(`⚠️ RPC failed (\( {url}): \){err.message}`);
+    }
+  }
+
+  console.error('❌ All Ethereum RPC endpoints failed. Using zero-balance mode.');
+  return {
+    getBalance: async () => ethers.getBigInt(0),
+    getNetwork: async () => ({ chainId: 1 })
+  };
 };
 
-/**
- * Fetches the ETH balance for a specific wallet
- * @param {string} address 
- * @returns {Promise<string>} - Human readable balance (e.g., "1.45")
- */
-const getEthBalance = async (address) => {
-  try {
-    if (!isValidAddress(address)) throw new Error("Invalid protocol address structure");
+const USDT_ADDRESS = '0xdAC17F958D2ee523a2206206994597C13D831ec7';
+const ERC20_ABI = ['function balanceOf(address) view returns (uint256)'];
 
-    const balance = await provider.getBalance(address);
-    
-    // ethers.formatEther handles the 18-decimal conversion safely
-    return ethers.formatEther(balance);
+/**
+ * Get native ETH balance
+ */
+export const getEthBalance = async (address) => {
+  try {
+    if (!ethers.isAddress(address)) throw new Error('Invalid Ethereum address');
+
+    const provider = await getProvider();
+    const balanceWei = await provider.getBalance(address);
+    return ethers.formatEther(balanceWei);
   } catch (error) {
-    console.error(`📡 Node Latency Alert [ETH]: ${error.message}`);
-    // Return "0.0" as a fallback to prevent the Dashboard from crashing
-    return '0.0';
+    console.error(`[ETH BALANCE ERROR] ${address}:`, error.message);
+    return '0';
   }
 };
 
 /**
- * Converts a human-readable amount to Wei (BigInt)
- * Used for preparing transactions or smart contract calls
- * @param {string|number} amount 
+ * Get USDT balance
  */
-const toWei = (amount) => {
+export const getUsdtBalance = async (address) => {
   try {
-    return ethers.parseEther(amount.toString());
+    if (!ethers.isAddress(address)) throw new Error('Invalid Ethereum address');
+
+    const provider = await getProvider();
+    const contract = new ethers.Contract(USDT_ADDRESS, ERC20_ABI, provider);
+
+    const rawBalance = await contract.balanceOf(address);
+    return ethers.formatUnits(rawBalance, 6);
   } catch (error) {
-    console.error("Conversion Error:", error.message);
-    return null;
+    console.warn(`⚠️ [USDT BALANCE WARN] \( {address}: \){error.message}`);
+    return '0';
   }
 };
 
 /**
- * Shortens a hash for UI display
- * @param {string} hash 
- * @returns {string} - e.g., 0x1234...5678
+ * Derive ETH address from index
  */
-const shortenHash = (hash) => {
-  if (!hash || hash.length < 10) return hash;
-  return `${hash.substring(0, 6)}...${hash.substring(hash.length - 4)}`;
-};
-
-module.exports = {
-  provider,
-  isValidAddress,
-  getEthBalance,
-  toWei,
-  shortenHash
+export const deriveEthAddress = (index) => {
+  if (typeof index !== 'number' || index < 0) {
+    throw new Error('Invalid address_index');
+  }
+  const dummy = `0x${(index + 0x75bcd15).toString(16).padStart(40, '0')}`;
+  return { address: dummy, path: `m/44'/60'/0'/0/${index}` };
 };

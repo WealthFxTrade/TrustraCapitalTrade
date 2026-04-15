@@ -1,64 +1,121 @@
+// middleware/authMiddleware.js
 import asyncHandler from 'express-async-handler';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { ApiError } from './errorMiddleware.js';
 
 /**
- * PROTECT: Main authentication middleware
- * Supports both Cookie-based and Header-based JWT extraction
+ * =========================================
+ * PROTECT MIDDLEWARE - Production Grade
+ * =========================================
+ * Validates JWT token from cookie (preferred) or Authorization header
  */
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  // 1. Check Cookies (Primary for Web Browser / Production)
-  if (req.cookies && req.cookies.trustra_token) {
+  // ── TOKEN EXTRACTION ──
+  // Priority: Cookie → Authorization Bearer header
+  if (req.cookies?.trustra_token) {
     token = req.cookies.trustra_token;
-  }
-  // 2. Check Authorization Header (Primary for Mobile / Dev testing)
-  else if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+  } else if (req.headers.authorization?.startsWith('Bearer ')) {
     token = req.headers.authorization.split(' ')[1];
   }
 
   if (!token) {
-    console.error('[AUTH] No valid token found in cookies or headers');
-    throw new ApiError(401, 'Not authorized, secure token missing');
+    throw new ApiError(401, 'Authentication required. Please log in.');
   }
 
-  try {
-    // Verify Token against JWT_SECRET
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  let decoded;
 
-    // Fetch user and attach to Request object (exclude sensitive password)
-    const user = await User.findById(decoded.id).select('-password');
-    
-    if (!user) {
-      console.error(`[AUTH] User ID ${decoded.id} not found in database`);
-      throw new ApiError(401, 'User account no longer exists');
+  // ── JWT VERIFICATION ──
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    console.error(`[AUTH] JWT verification failed: ${err.message}`);
+
+    // Clear cookie on token issues to prevent stuck sessions
+    if (err.name === 'TokenExpiredError' || err.name === 'JsonWebTokenError') {
+      res.clearCookie('trustra_token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        path: '/'
+      });
     }
 
-    // Set the user on the request for subsequent controllers
-    req.user = user;
-    next();
-  } catch (error) {
-    console.error('[AUTH ERROR]:', error.message);
-    // Standardize error message for frontend interceptors
-    throw new ApiError(401, 'Not authorized, session expired');
+    const message = err.name === 'TokenExpiredError' 
+      ? 'Session expired. Please log in again.' 
+      : 'Invalid authentication token.';
+
+    throw new ApiError(401, message);
   }
+
+  // ── USER VALIDATION ──
+  const user = await User.findById(decoded.id)
+    .select('-password -twoFactorSecret -sessions') // Don't expose sensitive fields
+    .lean(); // Use lean for better performance
+
+  if (!user) {
+    console.warn(`[AUTH] User not found for token ID: ${decoded.id}`);
+
+    // Clear invalid session cookie
+    res.clearCookie('trustra_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/'
+    });
+
+    throw new ApiError(401, 'Session invalid. Please log in again.');
+  }
+
+  // ── CHECK ACCOUNT STATUS ──
+  if (!user.isActive) {
+    throw new ApiError(403, 'Account is deactivated');
+  }
+
+  if (user.isBanned) {
+    throw new ApiError(403, 'Account is banned');
+  }
+
+  // ── ATTACH USER TO REQUEST ──
+  req.user = user;
+  next();
 });
 
 /**
- * ADMIN: Authorization middleware
- * Restricts access to specific administrative roles
+ * =========================================
+ * ADMIN MIDDLEWARE
+ * =========================================
+ * Restricts access to admin and superadmin roles
  */
 export const admin = (req, res, next) => {
   if (!req.user) {
-    throw new ApiError(401, 'Not authorized, login required');
+    throw new ApiError(401, 'Authentication required');
   }
 
-  // Check for admin or superadmin roles
-  if (!['admin', 'superadmin'].includes(req.user.role)) {
-    throw new ApiError(403, 'Access denied: Administrative privileges required');
+  const authorizedRoles = ['admin', 'superadmin'];
+
+  if (!authorizedRoles.includes(req.user.role)) {
+    throw new ApiError(403, 'Admin access required');
   }
-  
+
+  next();
+};
+
+/**
+ * =========================================
+ * OPTIONAL: SUPER ADMIN ONLY
+ * =========================================
+ */
+export const superAdmin = (req, res, next) => {
+  if (!req.user) {
+    throw new ApiError(401, 'Authentication required');
+  }
+
+  if (req.user.role !== 'superadmin') {
+    throw new ApiError(403, 'Super Admin access required');
+  }
+
   next();
 };

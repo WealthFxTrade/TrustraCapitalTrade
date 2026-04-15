@@ -1,5 +1,4 @@
-// src/pages/Dashboard/Dashboard.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Deposit from './Deposit.jsx';
 import Withdrawal from './Withdrawal.jsx';
 import Invest from './Invest.jsx';
@@ -8,140 +7,184 @@ import Profile from './Profile.jsx';
 import api, { API_ENDPOINTS } from '../../constants/api';
 import { useAuth } from '../../context/AuthContext.jsx';
 import toast from 'react-hot-toast';
+import { Loader2, RefreshCw } from 'lucide-react';
 
 export default function Dashboard() {
   const { user, refreshSession } = useAuth();
   const [activeTab, setActiveTab] = useState('Invest');
-  
-  // Updated keys to match Backend Mongoose Map (EUR, ROI)
+  const isSyncing = useRef(false); // Use ref to track sync state without triggering re-renders
+
+  // Core Financial State
   const [balances, setBalances] = useState({ EUR: 0, ROI: 0, BTC: 0 });
   const [transactions, setTransactions] = useState([]);
-  const [adminStats, setAdminStats] = useState({});
+  const [adminStats, setAdminStats] = useState({
+    totalUsers: 0,
+    totalAUM: 0,
+    health: 'Operational'
+  });
   const [pendingKYCs, setPendingKYCs] = useState([]);
-  const [loadingBalances, setLoadingBalances] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // ------------------- Fetch User Balances -------------------
-  const fetchBalances = async () => {
-    setLoadingBalances(true);
+  /**
+   * Universal Sync: Fetches balances, stats, and transactions
+   */
+  const syncNodeData = useCallback(async () => {
+    if (isSyncing.current) return;
+    isSyncing.current = true;
+    setLoading(true);
+
     try {
-      // API_ENDPOINTS.USER.STATS is now '/users/stats' (plural)
       const res = await api.get(API_ENDPOINTS.USER.STATS);
-      
       if (res.data.success) {
-        // FIX: Access .stats instead of .data.data
-        // FIX: Provide a default object to prevent .toLocaleString() crashes
         const statsData = res.data.stats || {};
-        setBalances(statsData.balances || { EUR: 0, ROI: 0, BTC: 0 });
         
-        // Ledger data is handled by stats or a separate ledger call
-        if (statsData.transactions) setTransactions(statsData.transactions);
+        setBalances({
+          EUR: Number(statsData.balances?.EUR || 0),
+          ROI: Number(statsData.balances?.ROI || 0),
+          BTC: Number(statsData.balances?.BTC || 0),
+        });
+
+        if (statsData.transactions) {
+          setTransactions(statsData.transactions);
+        }
       }
     } catch (err) {
-      console.error("Dashboard Fetch Error:", err);
-      toast.error(err.response?.data?.message || 'Failed to sync with Vault node');
+      console.error("Dashboard Sync Error:", err);
+      // Only toast on manual refreshes to avoid spamming the user
+      if (!isSyncing.current) toast.error('Ledger connection interrupted');
     } finally {
-      setLoadingBalances(false);
+      setLoading(false);
+      isSyncing.current = false;
     }
-  };
+  }, []); // Removed 'loading' dependency to break the loop
 
-  // ------------------- Fetch Admin Stats -------------------
-  const fetchAdminData = async () => {
+  /**
+   * Admin-Only Metrics Fetch
+   */
+  const fetchAdminData = useCallback(async () => {
     if (user?.role !== 'admin') return;
     try {
       const [statsRes, kycRes] = await Promise.all([
         api.get(API_ENDPOINTS.ADMIN.HEALTH),
         api.get(`${API_ENDPOINTS.ADMIN.USERS}?kyc=pending`),
       ]);
-      // Note: Admin controllers usually return .data or .stats
-      if (statsRes.data.success) setAdminStats(statsRes.data.data || statsRes.data.stats || {});
-      if (kycRes.data.success) setPendingKYCs(kycRes.data.users || []);
-    } catch (err) {
-      toast.error('Institutional Admin Data offline');
-    }
-  };
 
+      if (statsRes.data.success) {
+        setAdminStats(statsRes.data.data || statsRes.data.stats || {});
+      }
+      if (kycRes.data.success) {
+        setPendingKYCs(kycRes.data.users || []);
+      }
+    } catch (err) {
+      console.error("Admin Fetch Error:", err);
+    }
+  }, [user?.role]);
+
+  // Handle Mounting and Auto-Sync (Every 30 seconds)
   useEffect(() => {
     if (user) {
-      fetchBalances();
-      fetchAdminData();
-    }
-  }, [user]);
+      syncNodeData();
+      if (user.role === 'admin') fetchAdminData();
 
-  // ------------------- Tab Content -------------------
-  const renderTab = () => {
+      const interval = setInterval(() => {
+        syncNodeData();
+        if (user.role === 'admin') fetchAdminData();
+      }, 30000); // 30 second heartbeat
+
+      return () => clearInterval(interval);
+    }
+  }, [user, syncNodeData, fetchAdminData]);
+
+  const renderTabContent = () => {
     switch (activeTab) {
       case 'Invest':
-        return <Invest balances={balances} refreshBalances={fetchBalances} />;
+        return <Invest balances={balances} refreshBalances={syncNodeData} />;
       case 'Ledger':
-        return <Ledger transactions={transactions} refreshBalances={fetchBalances} />;
+        return <Ledger transactions={transactions} refreshBalances={syncNodeData} />;
       case 'Deposit':
-        return <Deposit refreshBalances={fetchBalances} />;
+        return <Deposit refreshBalances={syncNodeData} />;
       case 'Withdraw':
-        return <Withdrawal balances={balances} refreshBalances={fetchBalances} />;
+        return <Withdrawal balances={balances} refreshBalances={syncNodeData} />;
       case 'Profile':
         return <Profile refreshSession={refreshSession} />;
       case 'AdminStats':
-        return user?.role === 'admin' ? (
-          <div className="grid gap-4">
-            <div className="p-6 bg-white/5 border border-white/10 rounded-2xl">
-              <h3 className="font-black uppercase text-[10px] text-emerald-500 mb-4 tracking-widest">Global Vault Metrics</h3>
-              <div className="space-y-2 text-sm">
-                <p className="flex justify-between">Total Users: <span className="font-bold">{adminStats.totalUsers || 0}</span></p>
-                <p className="flex justify-between">Total AUM: <span className="font-bold text-emerald-400">€{adminStats.totalAUM?.toLocaleString() || 0}</span></p>
-                <p className="flex justify-between">Pending Withdrawals: <span className="font-bold text-amber-400">€{adminStats.pendingWithdrawals?.toLocaleString() || 0}</span></p>
-                <p className="flex justify-between">Health Status: <span className="font-bold text-blue-400">{adminStats.health || 'Operational'}</span></p>
-              </div>
-            </div>
-            <div className="p-6 bg-white/5 border border-white/10 rounded-2xl">
-              <h3 className="font-black uppercase text-[10px] text-amber-500 mb-4 tracking-widest">Pending KYC Requests</h3>
-              {pendingKYCs.length === 0 ? (
-                <p className="text-gray-500 text-sm">Clear queue.</p>
-              ) : (
-                <ul className="space-y-3">
-                  {pendingKYCs.map((k) => (
-                    <li key={k._id} className="text-xs bg-white/5 p-3 rounded-lg flex justify-between items-center">
-                      <span>{k.name} ({k.email})</span>
-                      <span className="text-amber-500 font-bold uppercase">{k.kycStatus}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        ) : <p className="text-rose-500 font-bold">Access Denied</p>;
+        return user?.role === 'admin' ? renderAdminView() : null;
       default:
         return null;
     }
   };
 
-  return (
-    <div className="min-h-screen bg-[#020408] text-white p-6 lg:p-10">
-      <header className="flex items-center justify-between mb-10">
-        <div>
-          <h1 className="text-3xl font-black italic uppercase tracking-tighter">Vault <span className="text-emerald-500">Dashboard</span></h1>
-          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Identity: {user?.fullName || user?.name || 'Institutional Client'}</p>
+  const renderAdminView = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="p-8 bg-white/5 border border-white/10 rounded-[2rem]">
+        <h3 className="font-black uppercase text-[10px] text-emerald-500 mb-6 tracking-[0.2em]">Global Vault Metrics</h3>
+        <div className="space-y-4 text-sm font-medium">
+          <div className="flex justify-between border-b border-white/5 pb-2">
+            <span className="text-gray-500 uppercase text-[10px]">Total Users</span>
+            <span className="font-black italic">{adminStats.totalUsers || 0}</span>
+          </div>
+          <div className="flex justify-between border-b border-white/5 pb-2">
+            <span className="text-gray-500 uppercase text-[10px]">Total AUM</span>
+            <span className="font-black italic text-emerald-400">€{adminStats.totalAUM?.toLocaleString('de-DE') || 0}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-gray-500 uppercase text-[10px]">Health</span>
+            <span className="font-black italic text-blue-400">{adminStats.health || 'Operational'}</span>
+          </div>
         </div>
+      </div>
+      <div className="p-8 bg-white/5 border border-white/10 rounded-[2rem]">
+        <h3 className="font-black uppercase text-[10px] text-amber-500 mb-6 tracking-[0.2em]">KYC Queue</h3>
+        {pendingKYCs.length === 0 ? (
+          <p className="text-gray-500 text-xs italic">All identities verified.</p>
+        ) : (
+          <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+            {pendingKYCs.map((k) => (
+              <div key={k._id} className="text-[10px] bg-white/5 p-4 rounded-xl flex justify-between items-center border border-white/5">
+                <span className="font-bold">{k.name} <span className="text-gray-500 lowercase ml-1">({k.email})</span></span>
+                <span className="text-amber-500 font-black uppercase tracking-tighter">Pending Review</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#020408] text-white p-6 lg:p-12 selection:bg-emerald-500 selection:text-black">
+      <header className="flex flex-col md:flex-row md:items-center justify-between mb-12 gap-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <h1 className="text-4xl font-black italic uppercase tracking-tighter">Vault <span className="text-emerald-500">Dashboard</span></h1>
+          </div>
+          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.3em]">
+            Institutional Node: <span className="text-white italic ml-2">{user?.fullName || user?.name || 'Anonymous Client'}</span>
+          </p>
+        </div>
+
         <button
-          onClick={fetchBalances}
-          disabled={loadingBalances}
-          className="px-6 py-2 bg-emerald-500 text-black rounded-xl hover:bg-emerald-400 font-black text-xs uppercase transition-all disabled:opacity-50"
+          onClick={syncNodeData}
+          disabled={loading}
+          className="group flex items-center gap-3 px-8 py-4 bg-emerald-500 text-black rounded-2xl hover:bg-emerald-400 font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50"
         >
-          {loadingBalances ? 'Syncing...' : 'Sync Node'}
+          {loading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw className="group-hover:rotate-180 transition-transform duration-500" size={16} />}
+          {loading ? 'Syncing...' : 'Sync Vault Node'}
         </button>
       </header>
 
-      {/* Navigation Tabs */}
-      <nav className="flex gap-2 mb-10 overflow-x-auto pb-2 no-scrollbar">
+      <nav className="flex gap-2 mb-12 overflow-x-auto pb-4 no-scrollbar">
         {['Invest', 'Ledger', 'Deposit', 'Withdraw', 'Profile']
           .concat(user?.role === 'admin' ? ['AdminStats'] : [])
           .map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all whitespace-nowrap ${
-                activeTab === tab 
-                ? 'bg-emerald-500 text-black shadow-[0_0_20px_rgba(16,185,129,0.2)]' 
-                : 'bg-white/5 text-gray-400 hover:bg-white/10 border border-white/5'
+              className={`px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all whitespace-nowrap border ${
+                activeTab === tab
+                ? 'bg-emerald-500 text-black border-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.15)]'
+                : 'bg-white/5 text-gray-400 border-white/5 hover:bg-white/10'
               }`}
             >
               {tab}
@@ -149,26 +192,32 @@ export default function Dashboard() {
           ))}
       </nav>
 
-      {/* Dynamic Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div className="p-8 bg-[#0a0c10] border border-white/5 rounded-[2rem]">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Available principal</p>
-          <p className="text-3xl font-black italic">€{(balances.EUR || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+        <div className="p-10 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] relative overflow-hidden group">
+          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-4">Total Principal</p>
+          <p className="text-4xl font-black italic tracking-tighter">€{(balances.EUR || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+          <div className="absolute -bottom-4 -right-4 h-24 w-24 bg-white/[0.02] rounded-full group-hover:scale-150 transition-transform duration-700" />
         </div>
-        <div className="p-8 bg-[#0a0c10] border border-white/5 rounded-[2rem]">
-          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.2em] mb-2">Accrued Yield (ROI)</p>
-          <p className="text-3xl font-black italic text-emerald-400">€{(balances.ROI || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+        
+        <div className="p-10 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] relative overflow-hidden group">
+          <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.25em] mb-4">Accrued ROI</p>
+          <p className="text-4xl font-black italic text-emerald-400 tracking-tighter">€{(balances.ROI || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+          <div className="absolute -bottom-4 -right-4 h-24 w-24 bg-emerald-500/[0.02] rounded-full group-hover:scale-150 transition-transform duration-700" />
         </div>
-        <div className="p-8 bg-[#0a0c10] border border-white/5 rounded-[2rem]">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Reserve Node</p>
-          <p className="text-3xl font-black italic">{(balances.BTC || 0)} <span className="text-xs text-gray-600">BTC</span></p>
+        
+        <div className="p-10 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] relative overflow-hidden group">
+          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-4">Reserve Assets</p>
+          <p className="text-4xl font-black italic tracking-tighter">
+            {(balances.BTC || 0).toLocaleString('de-DE', { minimumFractionDigits: 4 })}
+            <span className="text-xs text-gray-600 ml-3 uppercase">BTC</span>
+          </p>
+          <div className="absolute -bottom-4 -right-4 h-24 w-24 bg-white/[0.02] rounded-full group-hover:scale-150 transition-transform duration-700" />
         </div>
       </div>
 
-      {/* Viewport Render */}
-      <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-8 min-h-[400px]">
-        {renderTab()}
-      </div>
+      <main className="bg-[#0a0c10] border border-white/5 rounded-[3rem] p-8 lg:p-12 min-h-[500px] shadow-2xl">
+        {renderTabContent()}
+      </main>
     </div>
   );
 }

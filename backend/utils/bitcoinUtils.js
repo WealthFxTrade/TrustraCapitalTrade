@@ -1,57 +1,42 @@
 import * as bitcoin from 'bitcoinjs-lib';
 import { BIP32Factory } from 'bip32';
 import * as ecc from 'tiny-secp256k1';
-import axios from 'axios';
 
 const bip32 = BIP32Factory(ecc);
-const MEMPOOL_API = 'https://mempool.space/api';
-const NETWORK = bitcoin.networks.bitcoin;
 
 /**
- * 🔑 DERIVATION ENGINE
- * Generates a unique Native SegWit (bc1...) address for a user from xpub
+ * Derive BTC address from XPUB
  */
-export function deriveBtcAddress(index = 0) {
-  if (!process.env.BTC_XPUB) throw new Error('BTC_XPUB is missing');
+export const deriveBtcAddress = (index = 0) => {
+  // ✅ ALWAYS read env at runtime (NOT import time)
+  const XPUB = process.env.BTC_XPUB || process.env.BITCOIN_XPUB;
+
+  if (!XPUB) {
+    throw new Error("BTC_XPUB / BITCOIN_XPUB is missing in environment variables");
+  }
+
+  const network =
+    process.env.BITCOIN_NETWORK === 'testnet'
+      ? bitcoin.networks.testnet
+      : bitcoin.networks.bitcoin;
 
   try {
-    const node = bip32.fromBase58(process.env.BTC_XPUB, NETWORK);
+    const node = bip32.fromBase58(XPUB, network);
+
     const child = node.derive(0).derive(index);
+
     const { address } = bitcoin.payments.p2wpkh({
       pubkey: child.publicKey,
-      network: NETWORK
+      network
     });
+
+    if (!address) {
+      throw new Error("Failed to derive BTC address - address returned undefined");
+    }
+
     return { address };
-  } catch (err) {
-    console.error('[BTC DERIVE ERROR]', err);
-    throw new Error(`Address derivation failed: ${err.message}`);
+  } catch (error) {
+    console.error(`[DERIVATION_ERROR] Index ${index}:`, error.message);
+    throw new Error(`BTC address derivation failed: ${error.message}`);
   }
-}
-
-/**
- * Get balance of a BTC address (confirmed + unconfirmed)
- */
-export async function getBtcBalance(address) {
-  if (!address) return 0;
-  try {
-    const res = await axios.get(`${MEMPOOL_API}/address/${address}`);
-    const { chain_stats, mempool_stats } = res.data;
-    const confirmed = chain_stats.funded_txo_sum - chain_stats.spent_txo_sum;
-    const mempool = mempool_stats.funded_txo_sum - mempool_stats.spent_txo_sum;
-    return (confirmed + mempool) / 100000000;
-  } catch (err) {
-    console.error(`[BLOCKCHAIN SYNC ERROR] Address: ${address} | ${err.message}`);
-    return 0;
-  }
-}
-
-/**
- * Get platform hot wallet address
- */
-export function getHotWalletAddress() {
-  try {
-    return deriveBtcAddress(0).address;
-  } catch {
-    return process.env.BTC_WALLET_ADDRESS;
-  }
-}
+};

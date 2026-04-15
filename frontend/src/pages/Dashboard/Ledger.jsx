@@ -1,214 +1,199 @@
 // src/pages/Dashboard/Ledger.jsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  LayoutDashboard, History, CheckCircle2, Clock, XCircle, 
-  Loader2, ShieldCheck, LogOut, RefreshCw
+import React, { useState } from 'react';
+import { 
+  CheckCircle2, 
+  Clock, 
+  XCircle, 
+  RefreshCw, 
+  Search,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import api, { API_ENDPOINTS } from '../../constants/api';
-import { useAuth } from '../../context/AuthContext';
-import toast from 'react-hot-toast';
 
-export default function Ledger() {
-  const { logout, isAuthenticated, initialized } = useAuth();
-  const navigate = useNavigate();                                     
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function Ledger({ transactions = [], refreshBalances }) {
+  const [filter, setFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  /**
-   * Fetch Fresh Transaction Logs from the Backend
-   */
-  const fetchLedger = useCallback(async (showLoader = true) => {          
-    if (showLoader) setLoading(true);                                     
-    else setIsRefreshing(true);
-
-    try {                                                       
-      // Hits the /api/users/transactions endpoint
-      const res = await api.get(API_ENDPOINTS.USER.TRANSACTIONS);
-
-      // Robust check for data structure: supports both flat arrays or { transactions: [] }
-      const data = Array.isArray(res.data) 
-        ? res.data 
-        : (res.data?.transactions || []);
-        
-      setTransactions(data);
-    } catch (err) {
-      console.error("Ledger Sync Error:", err);
-      toast.error('Audit Log Sync Failed');
-    } finally {                                                              
-      setLoading(false);
-      setIsRefreshing(false);                                              
-    }
-  }, []);
-
-  useEffect(() => {
-    if (initialized) {
-      if (!isAuthenticated) {
-        navigate('/login');
-      } else {
-        fetchLedger();                                                  
-      }
-    }
-  }, [initialized, isAuthenticated, navigate, fetchLedger]);
-
-  /**
-   * Formats numbers based on the asset class (Fiat vs Crypto)
-   */
-  const formatCurrency = (amount, currency = 'EUR') => {
-    const isBTC = currency.toUpperCase() === 'BTC';
-    return new Intl.NumberFormat('de-DE', {                                   
-      style: 'currency',
-      currency: isBTC ? 'BTC' : 'EUR',
-      minimumFractionDigits: isBTC ? 8 : 2     
-    }).format(amount || 0);
+  // Manual trigger for refresh from the parent
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshBalances();
+    setIsRefreshing(false);
   };
 
   /**
-   * Generates themed status badges for the audit table
+   * Safe Currency Formatter
+   * Prevents Intl errors with non-ISO codes like BTC
    */
-  const getStatusBadge = (status) => {                                     
-    const s = (status || 'pending').toLowerCase();                        
-    const baseClass = "flex items-center gap-2 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border";
-    
+  const formatValue = (amount, currency = 'EUR') => {
+    const isBTC = currency?.toUpperCase() === 'BTC';
+    const formatter = new Intl.NumberFormat('de-DE', {
+      minimumFractionDigits: isBTC ? 8 : 2,
+      maximumFractionDigits: isBTC ? 8 : 2,
+    });
+    return isBTC ? `${formatter.format(amount)} BTC` : `€${formatter.format(amount)}`;
+  };
+
+  /**
+   * Themed Status Badges
+   */
+  const getStatusBadge = (status) => {
+    const s = (status || 'pending').toLowerCase();
+    const baseClass = "flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border";
+
     switch(s) {
       case 'completed':
       case 'confirmed':
-      case 'success':                                                                       
+      case 'success':
         return (
-          <span className={`${baseClass} bg-emerald-500/10 border-emerald-500/30 text-emerald-400`}>
-            <CheckCircle2 size={12} /> Confirmed
+          <span className={`${baseClass} bg-emerald-500/10 border-emerald-500/20 text-emerald-400`}>
+            <CheckCircle2 size={10} /> Confirmed
           </span>
-        );                                                                    
+        );
       case 'pending':
       case 'processing':
         return (
-          <span className={`${baseClass} bg-amber-500/10 border-amber-500/30 text-amber-400`}>
-            <Clock size={12} className="animate-pulse" /> Pending
+          <span className={`${baseClass} bg-amber-500/10 border-amber-500/20 text-amber-400`}>
+            <Clock size={10} className="animate-pulse" /> Pending
           </span>
-        );                                                                       
+        );
       default:
         return (
-          <span className={`${baseClass} bg-rose-500/10 border-rose-500/30 text-rose-400`}>
-            <XCircle size={12} /> Failed
+          <span className={`${baseClass} bg-rose-500/10 border-rose-500/20 text-rose-400`}>
+            <XCircle size={10} /> Failed
           </span>
-        );            
+        );
     }
   };
 
-  if (!initialized || loading) {
-    return (
-      <div className="min-h-screen bg-[#020408] flex items-center justify-center">
-        <Loader2 className="animate-spin text-emerald-500" size={48} />
-      </div>                                                              
-    );
-  }                                                                    
-  
-  return (
-    <div className="flex min-h-screen bg-[#020408] text-white overflow-hidden">
-      
-      {/* Sidebar Navigation */}
-      <aside className="hidden lg:flex w-80 bg-[#0a0c10] border-r border-white/5 p-8 flex-col h-screen">
-        <div className="flex items-center gap-3 mb-16 cursor-pointer" onClick={() => navigate('/dashboard')}>                                          
-          <ShieldCheck className="text-emerald-500" size={32} />
-          <h1 className="text-2xl font-black tracking-tighter uppercase italic">Trustra</h1>
-        </div>
-        <nav className="flex-1 space-y-2">                                      
-          <button 
-            onClick={() => navigate('/dashboard')} 
-            className="flex items-center gap-4 px-6 py-4 rounded-2xl text-gray-400 hover:bg-white/5 hover:text-white transition-all w-full text-left"
-          >
-            <LayoutDashboard size={18} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Portfolio</span>
-          </button>
-          <button className="flex items-center gap-4 px-6 py-4 rounded-2xl bg-emerald-600 text-black shadow-lg w-full text-left">                       
-            <History size={18} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Audit History</span>
-          </button>
-        </nav>
-        <button onClick={logout} className="mt-auto flex items-center gap-4 px-6 py-4 text-gray-500 hover:text-rose-400 transition-all">
-          <LogOut size={20} />
-          <span className="text-[10px] font-black uppercase tracking-widest">End Session</span>
-        </button>
-      </aside>
+  /**
+   * Transaction Type Icons
+   */
+  const getTypeIcon = (type) => {
+    const t = type?.toLowerCase();
+    if (t === 'deposit') return <ArrowDownLeft className="text-emerald-500" size={14} />;
+    if (t === 'withdrawal') return <ArrowUpRight className="text-rose-500" size={14} />;
+    return <Zap className="text-blue-500" size={14} />; // Compounding/Internal
+  };
 
-      {/* Main Audit Content */}
-      <main className="flex-1 overflow-y-auto h-screen p-6 lg:p-12 space-y-8">
-        <header className="flex justify-between items-center">                  
-          <div>
-            <h2 className="text-2xl font-black tracking-tighter uppercase italic">Ledger Audit</h2>
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">Institutional Node Transaction History</p>                        
-          </div>
-          <button                                                                                 
-            onClick={() => fetchLedger(false)}
-            className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-black transition-all"
-          >                                                                                       
-            <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} /> Refresh Logs
-          </button>
-        </header>                                                     
-        
-        <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>                                                                                 
-                <tr className="border-b border-white/5 text-[10px] font-black text-gray-500 uppercase tracking-widest">
-                  <th className="px-8 py-6">Date & Timestamp</th>                        
-                  <th className="px-8 py-6">Description</th>
-                  <th className="px-8 py-6 text-right">Amount (Net)</th>
-                  <th className="px-8 py-6 text-center">Status</th>                    
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                <AnimatePresence>
-                  {transactions.length > 0 ? (                                                               
-                    transactions.map((tx) => (                                                                
-                      <motion.tr
-                        key={tx._id}                                                                          
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="hover:bg-white/[0.02] transition-all group"
-                      >
-                        <td className="px-8 py-6 whitespace-nowrap">
-                          <p className="text-xs font-black text-white italic">
-                            {new Date(tx.createdAt).toLocaleDateString('de-DE')}
-                          </p>
-                          <p className="text-[9px] text-gray-500 font-mono mt-1">                                                                                                                                                 
-                            {new Date(tx.createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                          </p>
-                        </td>
-                        <td className="px-8 py-6">
-                          <p className="text-xs font-black text-white uppercase group-hover:text-emerald-500 transition-colors">
-                            {tx.description || tx.type}                                                                         
-                          </p>
-                          <p className="text-[9px] text-gray-500 font-mono mt-1 uppercase tracking-tighter">
-                            Ref: {tx.txHash || tx._id?.toString().slice(-12)}                                                                                                                                                                       
-                          </p>                                                                                
-                        </td>
-                        <td className={`px-8 py-6 text-right font-black italic text-sm ${tx.signedAmount >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {tx.signedAmount >= 0 ? '+' : ''}{formatCurrency(tx.amount, tx.currency || 'EUR')}
-                        </td>
-                        <td className="px-8 py-6 flex justify-center">                          
-                          {getStatusBadge(tx.status)}                                                                         
-                        </td>
-                      </motion.tr>
-                    ))                                                                                  
-                  ) : (
-                    <tr>
-                      <td colSpan="4" className="px-8 py-20 text-center">
-                        <div className="flex flex-col items-center gap-4 opacity-20">
-                          <History size={48} />
-                          <p className="text-[10px] font-black uppercase tracking-[0.3em]">No node activity found</p>
+  // Filter Logic
+  const filteredTransactions = transactions.filter(tx => 
+    filter === 'all' ? true : tx.type?.toLowerCase() === filter
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Ledger Toolbar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex gap-2 p-1 bg-white/5 border border-white/5 rounded-xl w-fit">
+          {['all', 'deposit', 'withdrawal', 'compound'].map((t) => (
+            <button
+              key={t}
+              onClick={() => setFilter(t)}
+              className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                filter === t ? 'bg-emerald-500 text-black' : 'text-gray-500 hover:text-white'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={handleManualRefresh}
+          disabled={isRefreshing}
+          className="flex items-center gap-2 px-6 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+          Sync Audit Log
+        </button>
+      </div>
+
+      {/* Audit Table */}
+      <div className="bg-[#020408]/50 border border-white/5 rounded-3xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-white/5 text-[10px] font-black text-gray-600 uppercase tracking-[0.2em]">
+                <th className="px-8 py-5">Timestamp</th>
+                <th className="px-8 py-5">Event Type</th>
+                <th className="px-8 py-5 text-right">Net Value</th>
+                <th className="px-8 py-5 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.03]">
+              <AnimatePresence mode="popLayout">
+                {filteredTransactions.length > 0 ? (
+                  filteredTransactions.map((tx, idx) => (
+                    <motion.tr
+                      key={tx._id || idx}
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="hover:bg-white/[0.02] transition-colors group"
+                    >
+                      <td className="px-8 py-5 whitespace-nowrap">
+                        <p className="text-xs font-bold text-gray-300">
+                          {new Date(tx.createdAt).toLocaleDateString('de-DE')}
+                        </p>
+                        <p className="text-[9px] text-gray-600 font-mono mt-0.5">
+                          {new Date(tx.createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 bg-white/5 rounded-lg group-hover:bg-white/10 transition-colors">
+                            {getTypeIcon(tx.type)}
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-white italic">
+                              {tx.type || 'Transaction'}
+                            </p>
+                            <p className="text-[9px] text-gray-600 truncate max-w-[150px]">
+                              {tx.description || 'Internal Node Transfer'}
+                            </p>
+                          </div>
                         </div>
                       </td>
-                    </tr>
-                  )}
-                </AnimatePresence>
-              </tbody>
-            </table>
-          </div>                                                                             
+                      <td className="px-8 py-5 text-right">
+                        <p className={`text-sm font-black italic ${tx.type === 'withdrawal' ? 'text-rose-500' : 'text-emerald-500'}`}>
+                          {tx.type === 'withdrawal' ? '-' : '+'}
+                          {formatValue(tx.amount, tx.currency || 'EUR')}
+                        </p>
+                      </td>
+                      <td className="px-8 py-5">
+                        <div className="flex justify-center">
+                          {getStatusBadge(tx.status)}
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="px-8 py-24 text-center">
+                      <Search className="mx-auto text-gray-800 mb-4" size={32} />
+                      <p className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em]">
+                        No Ledger Entries Found
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </AnimatePresence>
+            </tbody>
+          </table>
         </div>
-      </main>
+      </div>
+
+      {/* Footer Info */}
+      <div className="flex items-center gap-2 px-4 py-3 bg-blue-500/5 border border-blue-500/10 rounded-2xl">
+        <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+        <p className="text-[9px] font-black uppercase tracking-widest text-blue-400">
+          Immutable Audit Log: All transactions are cryptographically signed by the Vault Node.
+        </p>
+      </div>
     </div>
   );
 }
+

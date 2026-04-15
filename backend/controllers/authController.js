@@ -1,204 +1,216 @@
 import asyncHandler from 'express-async-handler';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import User from '../models/User.js';
 import { ApiError } from '../middleware/errorMiddleware.js';
+import { deriveBtcAddress } from '../utils/bitcoinUtils.js';
 
 /**
- * @desc    Generate JWT Token
- * @param   {string} userId
- * @returns {string} token
+ * ── TOKEN GENERATION ──
+ * Includes 'version' to support session revocation
  */
-const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: '7d',
-  });
+const generateToken = (user) => {
+    return jwt.sign(
+        {
+            id: user._id,
+            version: user.tokenVersion || 0
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+    );
 };
 
-/**
- * @desc    Register a new user
- * @route   POST /api/auth/register
- * @access  Public
- */
+// @desc    Register a new user with unique BTC vault
+// @route   POST /api/auth/register
 export const registerUser = asyncHandler(async (req, res) => {
-  const { name, email, password } = req.body;
+    const { name, email, password } = req.body;
 
-  if (!name || !email || !password) {
-    throw new ApiError(400, 'All fields are required');
-  }
+    if (!name || !email || !password) {
+        throw new ApiError(400, 'All fields are required');
+    }
 
-  const existingUser = await User.findOne({ email });
-  if (existingUser) {
-    throw new ApiError(400, 'User already exists');
-  }
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+        throw new ApiError(400, 'User identity already exists in ledger');
+    }
 
-  // Pre-save hook in User.js handles password hashing
-  const user = await User.create({
-    name,
-    email,
-    password,
-    balances: new Map([
-      ['EUR', 0],
-      ['BTC', 0],
-      ['USDT', 0],
-      ['ROI', 0],
-      ['INVESTED', 0],
-    ]),
-  });
+    // Find next available HD wallet index
+    const lastUser = await User.findOne().sort({ address_index: -1 });
+    const nextIndex = lastUser && lastUser.address_index !== undefined ? lastUser.address_index + 1 : 0;
 
-  const token = generateToken(user._id);
+    // Derive unique institutional address
+    const { address } = deriveBtcAddress(nextIndex);
 
-  res.cookie('trustra_token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
+    const user = await User.create({
+        name,
+        email,
+        password,
+        address_index: nextIndex,
+        tokenVersion: 0,
+        balances: new Map([
+            ['EUR', 0],
+            ['BTC', 0],
+            ['ROI', 0],
+            ['BTC_ADDRESS', address]
+        ]),
+    });
 
-  res.status(201).json({
-    success: true,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    },
-    token,
-  });
+    const token = generateToken(user);
+
+    res.cookie('trustra_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+    });
+
+    res.status(201).json({
+        success: true,
+        user: { id: user._id, name: user.name, email: user.email, btcAddress: address },
+        token,
+    });
 });
 
-/**
- * @desc    Authenticate user & get token
- * @route   POST /api/auth/login
- * @access  Public
- */
+// @desc    Authenticate user & issue versioned token
+// @route   POST /api/auth/login
 export const loginUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
+    const { email, password } = req.body;
 
-  if (!email || !password) {
-    throw new ApiError(400, 'Email and password are required');
-  }
+    const user = await User.findOne({ email }).select('+password');
+    if (!user || !(await user.matchPassword(password))) {
+        throw new ApiError(401, 'Invalid credentials');
+    }
 
-  // Select '+password' because it is hidden by default in the Schema
-  const user = await User.findOne({ email }).select('+password');
+    const token = generateToken(user);
 
-  if (!user) {
-    throw new ApiError(401, 'Invalid credentials');
-  }
+    res.cookie('trustra_token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+    });
 
-  // Check if account is locked
-  if (user.isLocked && user.isLocked()) {
-    throw new ApiError(403, 'Account temporarily locked. Please try again later.');
-  }
-
-  const isMatch = await user.matchPassword(password);
-
-  if (!isMatch) {
-    if (user.incrementFailedLogin) await user.incrementFailedLogin();
-    throw new ApiError(401, 'Invalid credentials');
-  }
-
-  // Success: Reset failed attempts
-  if (user.resetFailedLogin) await user.resetFailedLogin();
-
-  const token = generateToken(user._id);
-
-  res.cookie('trustra_token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
-
-  res.json({
-    success: true,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      balances: Object.fromEntries(user.balances || new Map()),
-    },
-    token,
-  });
+    res.json({
+        success: true,
+        user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            balances: Object.fromEntries(user.balances),
+        },
+        token,
+    });
 });
 
-/**
- * @desc    Get user profile
- * @route   GET /api/auth/profile
- * @access  Private
- */
+// @desc    Check & Refresh Session Validity
+// @route   POST /api/auth/refresh
+export const refreshSession = asyncHandler(async (req, res) => {
+    const user = await User.findById(req.user._id);
+    if (!user) throw new ApiError(401, 'Session revoked');
+
+    const token = generateToken(user);
+    res.json({ success: true, token });
+});
+
+// @desc    Get user profile data
+// @route   GET /api/auth/profile
 export const getUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id);
+    if (!user) throw new ApiError(404, 'Profile not found');
 
-  if (!user) {
-    throw new ApiError(404, 'User not found');
-  }
-
-  res.json({
-    success: true,
-    user: {
-      id: user._id,
-      fullName: user.name,
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-      role: user.role,
-      kycStatus: user.kycStatus,
-      balances: Object.fromEntries(user.balances || new Map()),
-    },
-  });
+    res.json({
+        success: true,
+        user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            balances: Object.fromEntries(user.balances),
+            kycStatus: user.kycStatus
+        },
+    });
 });
 
-/**
- * @desc    Update Identity Node (Profile Settings)
- * @route   PUT /api/auth/update-profile
- * @access  Private
- */
+// @desc    Update Identity Node Information
+// @route   PUT /api/auth/update-profile
 export const updateUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id);
+    if (!user) throw new ApiError(404, 'Identity Node not found');
 
-  if (!user) {
-    throw new ApiError(404, 'Identity Node not found');
-  }
+    if (req.body.name) user.name = req.body.name;
+    if (req.body.password) {
+        user.password = req.body.password;
+        // Increment version to logout other devices on password change
+        user.tokenVersion = (user.tokenVersion || 0) + 1;
+    }
 
-  // Map 'fullName' from frontend to 'name' in DB Schema
-  if (req.body.fullName) user.name = req.body.fullName;
-  
-  // Ensure phoneNumber is updated (requires the field in models/User.js)
-  if (req.body.phoneNumber) user.phoneNumber = req.body.phoneNumber;
+    const updatedUser = await user.save();
+    const token = generateToken(updatedUser);
 
-  // Handle Security Protocol (Password) Updates
-  if (req.body.newPassword) {
-    user.password = req.body.newPassword;
-  }
-
-  const updatedUser = await user.save();
-
-  res.json({
-    success: true,
-    message: 'Identity Node synchronized successfully',
-    user: {
-      id: updatedUser._id,
-      fullName: updatedUser.name,
-      email: updatedUser.email,
-      phoneNumber: updatedUser.phoneNumber,
-      role: updatedUser.role,
-      balances: Object.fromEntries(updatedUser.balances || new Map()),
-    },
-  });
+    res.json({
+        success: true,
+        message: 'Identity Node synchronized',
+        token,
+        user: { id: updatedUser._id, name: updatedUser.name }
+    });
 });
 
-/**
- * @desc    Logout user / clear cookie
- * @route   POST /api/auth/logout
- * @access  Public
- */
+// @desc    Forgot Password - Generate Token
+// @route   POST /api/auth/forgot-password
+export const forgotPassword = asyncHandler(async (req, res) => {
+    const user = await User.findOne({ email: req.body.email });
+
+    if (!user) {
+        throw new ApiError(404, 'No user found with that email');
+    }
+
+    const resetToken = user.getResetPasswordToken(); // Ensure this method exists in User model
+    await user.save({ validateBeforeSave: false });
+
+    // In a real app, send this via email. For now, returning in response.
+    res.json({
+        success: true,
+        message: 'Reset token generated',
+        resetToken 
+    });
+});
+
+// @desc    Reset Password
+// @route   PUT /api/auth/reset-password/:resettoken
+export const resetPassword = asyncHandler(async (req, res) => {
+    const resetPasswordToken = crypto
+        .createHash('sha256')
+        .update(req.params.resettoken)
+        .digest('hex');
+
+    const user = await User.findOne({
+        resetPasswordToken,
+        resetPasswordExpire: { $gt: Date.now() },
+    });
+
+    if (!user) {
+        throw new ApiError(400, 'Invalid or expired token');
+    }
+
+    user.password = req.body.password;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+
+    await user.save();
+
+    const token = generateToken(user);
+    res.json({ success: true, message: 'Password updated', token });
+});
+
+// @desc    Revoke session and clear cookies
+// @route   POST /api/auth/logout
 export const logoutUser = asyncHandler(async (req, res) => {
-  res.cookie('trustra_token', '', {
-    httpOnly: true,
-    expires: new Date(0),
-    path: '/',
-  });
-  res.json({ success: true, message: 'Logged out successfully' });
+    res.cookie('trustra_token', '', {
+        httpOnly: true,
+        expires: new Date(0),
+        path: '/',
+    });
+    res.json({ success: true, message: 'Identity Node disconnected' });
 });

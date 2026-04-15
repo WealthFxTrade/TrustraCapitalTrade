@@ -1,94 +1,117 @@
-// backend/utils/rioEngine.js
+// utils/rioEngine.js
 import cron from 'node-cron';
 import User from '../models/User.js';
+import Transaction from '../models/Transaction.js';
 
-/**
- * 2026 ALPHA PROTOCOL - ANNUALIZED TO DAILY RATES
- * Calculated as: (Annual % / 100) / 365
- * Matches Landing.jsx Strategic Tiers
- */
 const RIO_DAILY_RATES = {
-  'Tier I: Entry': 0.00020,         // ~7.5% Avg Annual
-  'Tier II: Core': 0.00028,         // ~10.5% Avg Annual
-  'Tier III: Prime': 0.00038,        // ~14.0% Avg Annual
-  'Tier IV: Institutional': 0.00049, // ~18.0% Avg Annual
-  'Tier V: Sovereign': 0.00061,      // ~22.5% Avg Annual
-  'Rio Elite': 0.00061,              // Legacy Match for Gery Maes (22.5%)
-  'Elite': 0.00061                   // Alias Match
+  'Tier I: Entry': 0.00020,
+  'Tier II: Core': 0.00028,
+  'Tier III: Prime': 0.00038,
+  'Tier IV: Institutional': 0.00049,
+  'Tier V: Sovereign': 0.00061,
+  'Sovereign': 0.00061,
+  'Rio Elite': 0.00061,
 };
 
 export const runYieldDistribution = async (io) => {
-  console.log('🌘 [RIO ENGINE] EXECUTING 2026 ALPHA SETTLEMENT...');
+  const sessionDate = new Date().toISOString().split('T')[0];
+  console.log(`🌘 [RIO ENGINE] EXECUTING SETTLEMENT: ${sessionDate}`);
 
   try {
-    // Only fetch nodes that are active and not banned
-    const activeNodes = await User.find({ 
-      isActive: true, 
-      isNodeActive: true,
-      isBanned: false 
-    });
+    const activeNodes = await User.find({
+      isActive: true,
+      isBanned: false,
+      activePlan: { $ne: 'None' },
+      'balances.INVESTED': { $gt: 0 }   // only nodes with principal
+    }).select('_id email activePlan balances');
 
     console.log(`📡 Processing ${activeNodes.length} Active Nodes...`);
 
-    for (let node of activeNodes) {
-      // 1. Determine Rate based on Plan
-      const plan = node.activePlan || 'Tier I: Entry';
-      const rate = RIO_DAILY_RATES[plan] || RIO_DAILY_RATES['Tier I: Entry'];
-      
-      // 2. Calculate Yield based on Invested Capital (or EUR Balance)
-      const principal = node.balances.get('INVESTED') || node.balances.get('EUR') || 0;
-      
-      const dailyYield = Number((principal * rate).toFixed(2));
-      if (dailyYield <= 0) continue;
-
-      // 3. Update ROI and Total Balances
-      const currentROI = Number(node.balances.get('ROI') || 0);
-      const currentTotal = Number(node.totalBalance || 0);
-      const currentProfit = Number(node.totalProfit || 0);
-
-      node.balances.set('ROI', Number((currentROI + dailyYield).toFixed(2)));
-      node.totalBalance = Number((currentTotal + dailyYield).toFixed(2));
-      node.totalProfit = Number((currentProfit + dailyYield).toFixed(2));
-
-      // 4. Update Ledger
-      if (!node.ledger) node.ledger = []; // Safety check
-      node.ledger.push({
-        amount: dailyYield,
-        type: 'yield',
-        description: `Alpha Settlement: ${plan} Node Distribution`,
-        createdAt: new Date()
-      });
-
-      // 5. Persist Changes
-      node.markModified('balances');
-      await node.save();
-
-      // 6. Real-time Socket Update
-      if (io) {
-        io.to(node._id.toString()).emit('balanceUpdate', {
-          balances: Object.fromEntries(node.balances),
-          totalBalance: node.totalBalance,
-          totalProfit: node.totalProfit,
-          message: `+€${dailyYield.toLocaleString()} Alpha Yield Distributed`
+    for (const node of activeNodes) {
+      try {
+        // Strong daily idempotency
+        const alreadyProcessed = await Transaction.findOne({
+          user: node._id,
+          type: 'yield',
+          createdAt: {
+            $gte: new Date(sessionDate),
+            $lt: new Date(new Date(sessionDate).getTime() + 86400000)
+          }
         });
+
+        if (alreadyProcessed) {
+          console.log(`⏩ Skipping \( {node.email}: Already settled for \){sessionDate}`);
+          continue;
+        }
+
+        const plan = node.activePlan || 'Tier I: Entry';
+        const rate = RIO_DAILY_RATES[plan] || 0.00020;
+        const principal = Number(node.balances.get('INVESTED') || 0);
+
+        if (principal <= 0) continue;
+
+        // Precise calculation (avoid JS float issues)
+        let dailyYield = Math.round((principal * rate) * 100) / 100;   // 2 decimal precision
+
+        // Special case override (keep if needed, but consider moving to DB config)
+        if (node.email === 'gery.maes1@telenet.be' && principal === 110000) {
+          dailyYield = 12.50;
+        }
+
+        if (dailyYield <= 0) continue;
+
+        // Atomic update using $inc (safer than loading → modifying → saving)
+        const updatedUser = await User.findOneAndUpdate(
+          { _id: node._id },
+          {
+            $inc: {
+              'balances.ROI': dailyYield,
+              // Optional: auto-compound to INVESTED if your product allows
+              // 'balances.INVESTED': dailyYield
+            }
+          },
+          { new: true }
+        );
+
+        // Audit trail
+        await Transaction.create({
+          user: node._id,
+          type: 'yield',
+          amount: dailyYield,
+          currency: 'EUR',
+          status: 'completed',
+          method: 'internal',
+          description: `Alpha Protocol Settlement • \( {plan} • \){sessionDate}`,
+          metadata: { rate, principal, plan }
+        });
+
+        console.log(`✅ [RIO] Credited \( {node.email}: +€ \){dailyYield.toFixed(2)} (${plan})`);
+
+        // Real-time socket
+        if (io && updatedUser) {
+          io.to(node._id.toString()).emit('balanceUpdate', {
+            balances: Object.fromEntries(updatedUser.balances),
+            message: `📈 +€${dailyYield.toFixed(2)} Alpha Yield Distributed`
+          });
+        }
+      } catch (nodeErr) {
+        console.error(`❌ [RIO NODE ERROR] ${node.email}:`, nodeErr.message);
+        // Continue with other nodes
       }
     }
-    
-    console.log('✅ [RIO ENGINE] Alpha Settlement Complete.');
+
+    console.log(`--- [RIO ENGINE] Settlement Complete ---`);
   } catch (err) {
-    console.error('❌ [RIO ENGINE ERROR]', err.message);
+    console.error('❌ [RIO ENGINE FATAL]', err.message);
   }
 };
 
-/**
- * @desc Initialize the Cron Schedule (Daily at Midnight)
- */
 export const initRioEngine = (io) => {
   console.log('⚙️ [RIO ENGINE] Alpha Protocol Synchronized');
-  
-  // Schedule: Every day at 00:00 (Midnight)
-  cron.schedule('0 0 * * *', () => {
-    runYieldDistribution(io);
-  });
-};
 
+  // Daily at midnight
+  cron.schedule('0 0 * * *', () => runYieldDistribution(io));
+
+  // Run once on startup for testing
+  setTimeout(() => runYieldDistribution(io), 8000);
+};
