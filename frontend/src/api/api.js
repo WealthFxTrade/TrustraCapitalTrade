@@ -1,10 +1,20 @@
 // frontend/src/api/api.js
 import axios from 'axios';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:10000';
+const isDev = import.meta.env.DEV;
 
-console.log(`[API] Using Vite Proxy (baseURL = /api)`);
-console.log(`[Socket] URL: ${SOCKET_URL}`);
+// Production: Use full backend URL from env variable
+// Development: Use Vite proxy (relative /api)
+const API_BASE_URL = isDev 
+  ? '/api' 
+  : (import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api');
+
+const SOCKET_URL = isDev 
+  ? 'http://localhost:10000' 
+  : (import.meta.env.VITE_SOCKET_URL || 'https://trustracapitaltrade-backend.onrender.com');
+
+console.log(`[API] Environment: ${isDev ? 'DEVELOPMENT (Proxy)' : 'PRODUCTION'}`);
+console.log(`[API] Base URL: ${API_BASE_URL}`);
 
 export const API_ENDPOINTS = {
   AUTH: {
@@ -28,7 +38,7 @@ export const API_ENDPOINTS = {
 };
 
 const api = axios.create({
-  baseURL: '/api',                    // ← This is the key (proxied)
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -36,14 +46,19 @@ const api = axios.create({
   timeout: 15000,
 });
 
-// Attach token
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('trustra_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+// Request Interceptor - Add Bearer Token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('trustra_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-// Handle token & logout on 401
+// Response Interceptor
 api.interceptors.response.use(
   (response) => {
     if (response.data?.token) {
