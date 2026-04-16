@@ -1,28 +1,17 @@
+// frontend/src/api/api.js
 import axios from 'axios';
 
-const getBaseURL = () => {
-  const { hostname, protocol } = window.location;
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:10000';
 
-  // Production URLs
-  if (
-    hostname === 'trustra-capital-trade.vercel.app' ||
-    hostname === 'trustracapitaltrade.online' ||
-    hostname === 'www.trustracapitaltrade.online'
-  ) {
-    return 'https://trustra-capital-trade-backend.onrender.com/api';
-  }
+console.log(`[API] Using Vite Proxy (baseURL = /api)`);
+console.log(`[Socket] URL: ${SOCKET_URL}`);
 
-  // Local Development
-  return `${protocol}//${hostname}:10000/api`;
-};
-
-// THIS IS THE MISSING EXPORT CAUSING YOUR ERROR
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
     LOGOUT: '/auth/logout',
-    PROFILE: '/auth/profile', 
+    PROFILE: '/auth/profile',
   },
   USER: {
     STATS: '/users/stats',
@@ -35,27 +24,26 @@ export const API_ENDPOINTS = {
   ADMIN: {
     USERS: '/admin/users',
     HEALTH: '/admin/health',
-  }
+  },
 };
 
 const api = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: '/api',                    // ← This is the key (proxied)
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 15000,
 });
 
-// Interceptor for Authentication
+// Attach token
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('trustra_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Interceptor for Token Management
+// Handle token & logout on 401
 api.interceptors.response.use(
   (response) => {
     if (response.data?.token) {
@@ -65,13 +53,11 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      const publicPaths = ['/login', '/register', '/', '/auth/reset-password'];
-      if (!publicPaths.includes(window.location.pathname)) {
-        localStorage.removeItem('trustra_token');
-      }
+      localStorage.removeItem('trustra_token');
     }
     return Promise.reject(error);
   }
 );
 
 export default api;
+export { SOCKET_URL };
