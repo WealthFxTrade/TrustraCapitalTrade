@@ -12,7 +12,7 @@ import { Loader2, RefreshCw } from 'lucide-react';
 export default function Dashboard() {
   const { user, refreshSession } = useAuth();
   const [activeTab, setActiveTab] = useState('Invest');
-  const isSyncing = useRef(false); // Use ref to track sync state without triggering re-renders
+  const isSyncing = useRef(false);
 
   // Core Financial State
   const [balances, setBalances] = useState({ EUR: 0, ROI: 0, BTC: 0 });
@@ -27,6 +27,7 @@ export default function Dashboard() {
 
   /**
    * Universal Sync: Fetches balances, stats, and transactions
+   * Final version - optimized for flattened backend response
    */
   const syncNodeData = useCallback(async () => {
     if (isSyncing.current) return;
@@ -35,28 +36,42 @@ export default function Dashboard() {
 
     try {
       const res = await api.get(API_ENDPOINTS.USER.STATS);
-      if (res.data.success) {
-        const statsData = res.data.stats || {};
-        
+      
+      if (res.data?.success) {
+        const data = res.data;
+
+        // Direct mapping from new flat fields returned by backend
         setBalances({
-          EUR: Number(statsData.balances?.EUR || 0),
-          ROI: Number(statsData.balances?.ROI || 0),
-          BTC: Number(statsData.balances?.BTC || 0),
+          EUR: Number(data.availableBalance || data.principal || 0),
+          ROI: Number(data.accruedROI || 0),
+          BTC: Number(data.btcBalance || 0),
         });
 
-        if (statsData.transactions) {
-          setTransactions(statsData.transactions);
+        // Update transactions
+        if (Array.isArray(data.transactions)) {
+          setTransactions(data.transactions);
         }
+
+        console.log('✅ Dashboard synced - Flat data received:', {
+          principal: data.principal,
+          availableBalance: data.availableBalance,
+          accruedROI: data.accruedROI,
+          btcBalance: data.btcBalance,
+          fullResponseKeys: Object.keys(data)
+        });
+      } else {
+        console.warn('⚠️ Unexpected stats response:', res.data);
       }
     } catch (err) {
-      console.error("Dashboard Sync Error:", err);
-      // Only toast on manual refreshes to avoid spamming the user
-      if (!isSyncing.current) toast.error('Ledger connection interrupted');
+      console.error("❌ Dashboard Sync Error:", err.response?.data || err.message);
+      if (document.visibilityState === 'visible') {
+        toast.error('Failed to sync vault data');
+      }
     } finally {
       setLoading(false);
       isSyncing.current = false;
     }
-  }, []); // Removed 'loading' dependency to break the loop
+  }, []);
 
   /**
    * Admin-Only Metrics Fetch
@@ -80,7 +95,7 @@ export default function Dashboard() {
     }
   }, [user?.role]);
 
-  // Handle Mounting and Auto-Sync (Every 30 seconds)
+  // Auto-sync on mount and every 30 seconds
   useEffect(() => {
     if (user) {
       syncNodeData();
@@ -89,7 +104,7 @@ export default function Dashboard() {
       const interval = setInterval(() => {
         syncNodeData();
         if (user.role === 'admin') fetchAdminData();
-      }, 30000); // 30 second heartbeat
+      }, 30000);
 
       return () => clearInterval(interval);
     }
@@ -192,19 +207,24 @@ export default function Dashboard() {
           ))}
       </nav>
 
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
         <div className="p-10 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] relative overflow-hidden group">
           <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-4">Total Principal</p>
-          <p className="text-4xl font-black italic tracking-tighter">€{(balances.EUR || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+          <p className="text-4xl font-black italic tracking-tighter">
+            €{(balances.EUR || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+          </p>
           <div className="absolute -bottom-4 -right-4 h-24 w-24 bg-white/[0.02] rounded-full group-hover:scale-150 transition-transform duration-700" />
         </div>
-        
+
         <div className="p-10 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] relative overflow-hidden group">
           <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.25em] mb-4">Accrued ROI</p>
-          <p className="text-4xl font-black italic text-emerald-400 tracking-tighter">€{(balances.ROI || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+          <p className="text-4xl font-black italic text-emerald-400 tracking-tighter">
+            €{(balances.ROI || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+          </p>
           <div className="absolute -bottom-4 -right-4 h-24 w-24 bg-emerald-500/[0.02] rounded-full group-hover:scale-150 transition-transform duration-700" />
         </div>
-        
+
         <div className="p-10 bg-[#0a0c10] border border-white/5 rounded-[2.5rem] relative overflow-hidden group">
           <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.25em] mb-4">Reserve Assets</p>
           <p className="text-4xl font-black italic tracking-tighter">

@@ -15,9 +15,9 @@ export const getUserStats = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'User identity not found' });
   }
 
-  // Convert Mongoose Maps to standard Objects for frontend consumption
-  const balances = Object.fromEntries(user.balances);
-  const walletAddresses = Object.fromEntries(user.walletAddresses);
+  // Convert Mongoose Maps to plain JavaScript objects for frontend
+  const balances = Object.fromEntries(user.balances || new Map());
+  const walletAddresses = Object.fromEntries(user.walletAddresses || new Map());
 
   // Fetch 10 most recent transactions
   const transactions = await Transaction.find({ user: req.user._id })
@@ -26,16 +26,21 @@ export const getUserStats = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-    stats: {
-      balances,
-      walletAddresses,
-      transactions,
-      activePlan: user.activePlan || 'Sovereign',
-      kycStatus: user.kycStatus || 'verified',
-      totalBalance: balances.EUR || 0,
-      accruedROI: balances.ROI || 0,
-      btcAddress: user.btcAddress // Provided by virtual getter in User.js
-    }
+
+    // === FLAT CORE FIELDS (Recommended for frontend) ===
+    principal: Number(balances.INVESTED || 0),        // Total Principal / Institutional Principal
+    availableBalance: Number(balances.EUR || 0),      // Liquid / Reserve EUR
+    accruedROI: Number(balances.ROI || 0),
+    btcBalance: Number(balances.BTC || 0),
+
+    // Full objects kept for flexibility in other UI sections
+    balances,
+    walletAddresses,
+    transactions,
+
+    activePlan: user.activePlan || 'Sovereign',
+    kycStatus: user.kycStatus || 'verified',
+    btcAddress: user.btcAddress || null,
   });
 });
 
@@ -73,12 +78,11 @@ export const getDepositAddress = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Unsupported asset type' });
   }
 
-  // ── FIX: Access walletAddresses Map (String) NOT balances (Number) ──
   let address = user.walletAddresses.get(selectedAsset);
 
-  // ── PROVISION ONLY IF MISSING OR EMPTY ──
+  // Provision address only if missing or empty
   if (!address || address === '') {
-    console.log(`📡 Generating unique ${selectedAsset} vault for ${user.email}`);
+    console.log(`📡 Generating unique \( {selectedAsset} vault for \){user.email}`);
 
     try {
       if (user.address_index === undefined) {
@@ -94,22 +98,20 @@ export const getDepositAddress = asyncHandler(async (req, res) => {
         address = derived.address;
       }
 
-      // ── FIX: Save to walletAddresses Map to avoid Cast to Number error ──
+      // Save the new address
       user.walletAddresses.set(selectedAsset, address);
-
-      // Sync ETH and USDT maps automatically
       if (selectedAsset === 'ETH') user.walletAddresses.set('USDT', address);
       if (selectedAsset === 'USDT') user.walletAddresses.set('ETH', address);
 
       user.markModified('walletAddresses');
       await user.save();
 
-      console.log(`✅ ${selectedAsset} vault provisioned: ${address}`);
+      console.log(`✅ \( {selectedAsset} vault provisioned: \){address}`);
     } catch (err) {
       console.error('[ADDRESS PROVISION ERROR]', err.message);
-      return res.status(500).json({ 
-        success: false, 
-        message: `Provisioning failed: ${err.message}` 
+      return res.status(500).json({
+        success: false,
+        message: `Provisioning failed: ${err.message}`
       });
     }
   }
@@ -158,10 +160,10 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
   user.balances.set(sourceWallet, currentBalance - withdrawalAmount);
   await user.save();
 
-  res.status(201).json({ 
-    success: true, 
-    message: 'Withdrawal queued for audit', 
-    transaction: tx 
+  res.status(201).json({
+    success: true,
+    message: 'Withdrawal queued for audit',
+    transaction: tx
   });
 });
 
@@ -178,10 +180,11 @@ export const compoundYield = asyncHandler(async (req, res) => {
   }
 
   const currentEUR = Number(user.balances.get('EUR') || 0);
-  
-  // Move ROI to Principal
+
+  // Move ROI to Available Balance (EUR)
   user.balances.set('EUR', currentEUR + currentROI);
   user.balances.set('ROI', 0);
+
   await user.save();
 
   await Transaction.create({
@@ -203,9 +206,11 @@ export const compoundYield = asyncHandler(async (req, res) => {
  */
 export const getUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select('-password');
+
   if (!user) {
     return res.status(404).json({ success: false, message: 'Profile not found' });
   }
+
   res.json({ success: true, user });
 });
 
@@ -230,4 +235,3 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
   const updatedUser = await user.save();
   res.status(200).json({ success: true, user: updatedUser });
 });
-
