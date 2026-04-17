@@ -1,3 +1,4 @@
+// backend/controllers/userController.js
 import asyncHandler from 'express-async-handler';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
@@ -26,27 +27,27 @@ export const getUserStats = asyncHandler(async (req, res) => {
 
   res.status(200).json({
     success: true,
-
-    // === FLAT CORE FIELDS (Recommended for frontend) ===
-    principal: Number(balances.INVESTED || 0),        // Total Principal / Institutional Principal
-    availableBalance: Number(balances.EUR || 0),      // Liquid / Reserve EUR
-    accruedROI: Number(balances.ROI || 0),
+    // === SYNCED CORE FIELDS (Mapped for Frontend) ===
+    principal: Number(balances.INVESTED || 0),
+    availableBalance: Number(balances.EUR || 0),
+    accruedROI: Number(balances.TOTAL_PROFIT || 0), // ROI mapping
     btcBalance: Number(balances.BTC || 0),
-
-    // Full objects kept for flexibility in other UI sections
+    ethBalance: Number(balances.ETH || 0),
+    
+    // Full objects for flexibility
     balances,
     walletAddresses,
     transactions,
 
-    activePlan: user.activePlan || 'Sovereign',
-    kycStatus: user.kycStatus || 'verified',
-    btcAddress: user.btcAddress || null,
+    activePlan: user.activePlan || 'None',
+    kycStatus: user.kycStatus || 'unverified',
+    btcAddress: user.walletAddresses?.get('BTC') || null,
   });
 });
 
 /**
  * @desc    Get Full Transaction Ledger
- * @route   GET /api/users/ledger
+ * @route   GET /api/users/transactions
  */
 export const getLedger = asyncHandler(async (req, res) => {
   const transactions = await Transaction.find({ user: req.user._id })
@@ -60,16 +61,12 @@ export const getLedger = asyncHandler(async (req, res) => {
 });
 
 /**
- * @desc    Get Institutional Deposit Address (Unique to User)
- * @route   GET /api/users/deposit-address
+ * @desc    Get Institutional Deposit Address
+ * @route   GET /api/users/deposit-address?asset=BTC|ETH|USDT
  */
 export const getDepositAddress = asyncHandler(async (req, res) => {
-  const userId = req.user?._id;
-  const user = await User.findById(userId);
-
-  if (!user) {
-    return res.status(404).json({ success: false, message: 'User not found' });
-  }
+  const user = await User.findById(req.user._id);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
   const allowedAssets = ['BTC', 'ETH', 'USDT'];
   const selectedAsset = (req.query.asset || 'BTC').toUpperCase();
@@ -80,39 +77,31 @@ export const getDepositAddress = asyncHandler(async (req, res) => {
 
   let address = user.walletAddresses.get(selectedAsset);
 
-  // Provision address only if missing or empty
+  // Provision address only if missing
   if (!address || address === '') {
-    console.log(`📡 Generating unique \( {selectedAsset} vault for \){user.email}`);
-
     try {
-      if (user.address_index === undefined) {
-        throw new Error('User has no assigned wallet index for HD derivation');
-      }
+      if (user.address_index === undefined) throw new Error('No derivation index');
 
       if (selectedAsset === 'BTC') {
         const derived = deriveBtcAddress(user.address_index);
         address = derived.address;
       } else {
-        // ETH and USDT share the same EVM derivation path
         const derived = deriveEthAddress(user.address_index);
         address = derived.address;
       }
 
-      // Save the new address
       user.walletAddresses.set(selectedAsset, address);
-      if (selectedAsset === 'ETH') user.walletAddresses.set('USDT', address);
-      if (selectedAsset === 'USDT') user.walletAddresses.set('ETH', address);
+      // EVM compatibility sync
+      if (['ETH', 'USDT'].includes(selectedAsset)) {
+        user.walletAddresses.set('ETH', address);
+        user.walletAddresses.set('USDT', address);
+      }
 
       user.markModified('walletAddresses');
       await user.save();
-
-      console.log(`✅ \( {selectedAsset} vault provisioned: \){address}`);
     } catch (err) {
       console.error('[ADDRESS PROVISION ERROR]', err.message);
-      return res.status(500).json({
-        success: false,
-        message: `Provisioning failed: ${err.message}`
-      });
+      return res.status(500).json({ success: false, message: 'Provisioning failed' });
     }
   }
 
@@ -120,9 +109,51 @@ export const getDepositAddress = asyncHandler(async (req, res) => {
     success: true,
     address,
     asset: selectedAsset,
-    network: selectedAsset === 'BTC' ? 'Bitcoin' : 'Ethereum (ERC-20)',
-    deterministic: true
+    network: selectedAsset === 'BTC' ? 'Bitcoin (Native)' : 'Ethereum (ERC-20)'
   });
+});
+
+/**
+ * @desc    Compound Accrued ROI into Principal
+ * @route   POST /api/users/compound
+ */
+export const compoundYield = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+  const accruedROI = Number(user.balances.get('TOTAL_PROFIT') || 0);
+
+  if (accruedROI < 10) {
+    return res.status(400).json({ 
+      success: false, 
+      message: 'Minimum compounding amount is €10.00' 
+    });
+  }
+
+  // Atomic Update: TOTAL_PROFIT -> INVESTED
+  user.balances.set('TOTAL_PROFIT', 0);
+  const currentInvested = Number(user.balances.get('INVESTED') || 0);
+  user.balances.set('INVESTED', currentInvested + accruedROI);
+  
+  user.markModified('balances');
+  await user.save();
+
+  await Transaction.create({
+    user: user._id,
+    type: 'yield',
+    amount: accruedROI,
+    currency: 'EUR',
+    status: 'completed',
+    description: `Compound: €${accruedROI.toFixed(2)} moved to principal`
+  });
+
+  const io = req.app.get('io');
+  if (io) {
+    io.to(user._id.toString()).emit('balanceUpdate', {
+      balances: Object.fromEntries(user.balances),
+      message: `✨ Compounding Complete: +€${accruedROI.toFixed(2)}`
+    });
+  }
+
+  res.status(200).json({ success: true, message: 'ROI successfully compounded' });
 });
 
 /**
@@ -133,85 +164,40 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
   const { amount, address, asset, walletType } = req.body;
   const user = await User.findById(req.user._id);
 
-  const sourceWallet = walletType === 'ROI' ? 'ROI' : 'EUR';
-  const currentBalance = Number(user.balances.get(sourceWallet) || 0);
-  const withdrawalAmount = Number(amount);
+  const sourceKey = walletType === 'ROI' ? 'TOTAL_PROFIT' : 'EUR';
+  const currentBalance = Number(user.balances.get(sourceKey) || 0);
+  const withdrawAmount = Number(amount);
 
-  if (isNaN(withdrawalAmount) || withdrawalAmount < 50) {
-    return res.status(400).json({ success: false, message: 'Minimum withdrawal is €50.00' });
+  if (withdrawAmount < 50) {
+    return res.status(400).json({ success: false, message: 'Minimum €50.00' });
   }
-
-  if (currentBalance < withdrawalAmount) {
-    return res.status(400).json({ success: false, message: 'Insufficient vault funds' });
+  if (currentBalance < withdrawAmount) {
+    return res.status(400).json({ success: false, message: 'Insufficient funds' });
   }
 
   const tx = await Transaction.create({
     user: user._id,
     type: 'withdrawal',
-    amount: withdrawalAmount,
+    amount: withdrawAmount,
     currency: 'EUR',
     walletAddress: address,
     status: 'pending',
-    description: `Liquidation to ${asset}`,
-    method: asset === 'SEPA' ? 'bank' : 'crypto'
+    description: `Liquidation to ${asset}`
   });
 
-  // Deduct from balance
-  user.balances.set(sourceWallet, currentBalance - withdrawalAmount);
+  user.balances.set(sourceKey, currentBalance - withdrawAmount);
   await user.save();
 
-  res.status(201).json({
-    success: true,
-    message: 'Withdrawal queued for audit',
-    transaction: tx
-  });
+  res.status(201).json({ success: true, message: 'Withdrawal queued for audit', transaction: tx });
 });
 
 /**
- * @desc    Strategic Yield Reinvestment (Compound)
- * @route   POST /api/users/compound
- */
-export const compoundYield = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id);
-  const currentROI = Number(user.balances.get('ROI') || 0);
-
-  if (currentROI < 10) {
-    return res.status(400).json({ success: false, message: 'Minimum €10.00 required for compounding.' });
-  }
-
-  const currentEUR = Number(user.balances.get('EUR') || 0);
-
-  // Move ROI to Available Balance (EUR)
-  user.balances.set('EUR', currentEUR + currentROI);
-  user.balances.set('ROI', 0);
-
-  await user.save();
-
-  await Transaction.create({
-    user: user._id,
-    type: 'compound',
-    amount: currentROI,
-    currency: 'EUR',
-    status: 'completed',
-    description: 'Yield Maturity: ROI compounded to Principal',
-    method: 'internal'
-  });
-
-  res.status(200).json({ success: true, message: 'ROI compounded successfully' });
-});
-
-/**
- * @desc    Get User Profile
+ * @desc    Get Current User Profile
  * @route   GET /api/users/profile
  */
 export const getUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).select('-password');
-
-  if (!user) {
-    return res.status(404).json({ success: false, message: 'Profile not found' });
-  }
-
-  res.json({ success: true, user });
+  res.status(200).json({ success: true, user });
 });
 
 /**
@@ -221,17 +207,20 @@ export const getUserProfile = asyncHandler(async (req, res) => {
 export const updateUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
 
-  if (!user) {
-    return res.status(404).json({ success: false, message: 'Identity not found' });
+  if (user) {
+    user.name = req.body.name || user.name;
+    user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
+    if (req.body.password) user.password = req.body.password;
+    if (req.body.avatar) user.avatar = req.body.avatar;
+
+    const updatedUser = await user.save();
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated',
+      user: { _id: updatedUser._id, name: updatedUser.name, email: updatedUser.email }
+    });
+  } else {
+    res.status(404).json({ success: false, message: 'User not found' });
   }
-
-  user.name = req.body.name || user.name;
-  user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
-
-  if (req.body.password) {
-    user.password = req.body.password;
-  }
-
-  const updatedUser = await user.save();
-  res.status(200).json({ success: true, user: updatedUser });
 });
+

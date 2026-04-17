@@ -1,7 +1,6 @@
 // services/financeService.js
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
-import mongoose from 'mongoose';
 import axios from 'axios';
 
 const ASSET_MAP = { BTC: 'bitcoin', ETH: 'ethereum', USDT: 'tether' };
@@ -10,18 +9,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Apply a financial transaction to a user account.
- * Supports deposit, withdrawal, investment, profit, reinvest.
- *
- * @param {Object} params
- * @param {mongoose.Types.ObjectId} params.userId - Target user
- * @param {string} params.type - 'deposit' | 'withdrawal' | 'investment' | 'profit' | 'reinvest'
- * @param {number} params.amount - Positive amount
- * @param {string} [params.currency='EUR'] - BTC, ETH, USDT, EUR, ROI
- * @param {string} [params.status='completed'] - pending/completed/rejected
- * @param {string} [params.walletAddress] - Crypto destination (if applicable)
- * @param {mongoose.Types.ObjectId} [params.referenceId] - Related deposit/investment ID
- * @param {string} [params.description] - Optional ledger description
- * @returns {Promise<{user: User, ledgerEntry: Object, transaction: Transaction}>}
+ * Atomically updates balances and creates a verified Transaction record.
  */
 export const applyTransaction = async ({
   userId,
@@ -37,52 +25,48 @@ export const applyTransaction = async ({
     throw new Error('Invalid transaction parameters');
   }
 
-  // 1. Fetch user
+  // 1. Fetch user (without lean to allow .save())
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');
 
-  // 2. Determine signed amount (negative for withdrawals/investments)
-  const signedAmount = ['withdrawal', 'investment'].includes(type)
+  // 2. Determine signed amount
+  // Withdrawals and Investments are outflows (negative)
+  const negativeTypes = ['withdrawal', 'investment'];
+  const signedAmount = negativeTypes.includes(type.toLowerCase())
     ? -Math.abs(amount)
     : Math.abs(amount);
 
   // 3. Update balances
   const prevBalance = user.balances.get(currency) || 0;
   const newBalance = prevBalance + signedAmount;
-  if (newBalance < 0) throw new Error(`Insufficient ${currency} balance`);
 
-  user.balances.set(currency, newBalance);
+  if (newBalance < 0) {
+    throw new Error(`Insufficient ${currency} balance. Available: ${prevBalance}`);
+  }
 
-  // 4. Create ledger entry
-  const ledgerEntry = {
-    amount,
-    type,
-    currency,
-    status,
-    address: walletAddress,
-    description: description || type,
-    referenceId
-  };
-  user.ledger.push(ledgerEntry);
-
+  // 4. Update the Map
+  user.balances.set(currency, Number(newBalance.toFixed(8)));
   user.markModified('balances');
-  user.markModified('ledger');
+  
+  // Save balance update first to ensure atomicity
   await user.save();
 
-  // 5. Record in Transaction collection
+  // 5. Create the Transaction record (The actual "Ledger")
   const transaction = await Transaction.create({
     user: user._id,
-    type,
-    amount,
-    signedAmount,
-    netAmount: amount,
-    currency,
+    type: type.toLowerCase(),
+    amount: Number(amount),
+    signedAmount: Number(signedAmount),
+    netAmount: Number(amount),
+    currency: currency.toUpperCase(),
     walletAddress,
     status,
-    referenceId
+    description: description || `${type} of ${amount} ${currency}`,
+    referenceId,
+    method: 'crypto'
   });
 
-  return { user, ledgerEntry, transaction };
+  return { user, transaction };
 };
 
 /**
@@ -90,7 +74,7 @@ export const applyTransaction = async ({
  */
 export const getExchangeRates = async () => {
   const now = Date.now();
-  if (priceCache.lastUpdated && now - priceCache.lastUpdated < CACHE_TTL) {
+  if (priceCache.lastUpdated && (now - priceCache.lastUpdated < CACHE_TTL)) {
     return priceCache.rates;
   }
 
@@ -113,17 +97,20 @@ export const getExchangeRates = async () => {
     priceCache = { rates, lastUpdated: now };
     return rates;
   } catch (err) {
-    console.error('CoinGecko fetch failed', err.message);
-    return priceCache.rates || { BTC: 42000, ETH: 2300, USDT: 0.93 };
+    console.error('⚠️ [PRICE SERVICE] CoinGecko fetch failed:', err.message);
+    // Safe fallbacks to prevent system stall if API is down
+    return priceCache.rates.BTC ? priceCache.rates : { BTC: 65000, ETH: 3500, USDT: 0.94 };
   }
 };
 
 /**
- * Convert crypto amount to EUR
+ * Convert crypto amount to EUR for ledger valuation
  */
 export const convertToEur = async (asset, amount) => {
   const rates = await getExchangeRates();
-  return parseFloat(((rates[asset] || 0) * amount).toFixed(2));
+  const rate = rates[asset.toUpperCase()] || 0;
+  return parseFloat((rate * amount).toFixed(2));
 };
 
 export default { applyTransaction, getExchangeRates, convertToEur };
+

@@ -3,10 +3,10 @@ import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
   {
-    name: { 
-      type: String, 
-      required: [true, 'Please add a name'], 
-      trim: true 
+    name: {
+      type: String,
+      required: [true, 'Please add a name'],
+      trim: true
     },
     email: {
       type: String,
@@ -17,36 +17,35 @@ const userSchema = new mongoose.Schema(
       match: [/^\S+@\S+\.\S+$/, 'Please add a valid email'],
     },
     phoneNumber: { type: String, default: null, trim: true },
-    password: { 
-      type: String, 
-      required: [true, 'Please add a password'], 
-      minlength: 8, 
-      select: false 
+    password: {
+      type: String,
+      required: [true, 'Please add a password'],
+      minlength: 8,
+      select: false
     },
-    role: { 
-      type: String, 
-      enum: ['user', 'admin', 'superadmin'], 
-      default: 'user' 
+    role: {
+      type: String,
+      enum: ['user', 'admin', 'superadmin'],
+      default: 'user'
     },
     isActive: { type: Boolean, default: true },
     isBanned: { type: Boolean, default: false },
-
-    address_index: { type: Number, unique: true, sparse: true },
-
-    // BALANCES - Strictly numeric only (no cast errors)
+    address_index: { type: Number, unique: true, sparse: true },      
+    
+    // 🛡️ SYNCED BALANCES - Matches Watchers & ROI Engine
     balances: {
       type: Map,
       of: Number,
       default: () => new Map([
         ['EUR', 0],
         ['BTC', 0],
+        ['ETH', 0],       // Added to match ethWatcher
         ['USDT', 0],
-        ['ROI', 0],
-        ['INVESTED', 0],
+        ['INVESTED', 0],   // Principal for RioEngine
+        ['TOTAL_PROFIT', 0] // Synced with RioEngine logic
       ]),
     },
 
-    // WALLET ADDRESSES - Separate strings
     walletAddresses: {
       type: Map,
       of: String,
@@ -54,8 +53,7 @@ const userSchema = new mongoose.Schema(
         ['BTC', ''],
         ['ETH', ''],
       ]),
-    },
-
+    },                                                                
     twoFactorEnabled: { type: Boolean, default: false },
     twoFactorSecret: { type: String, select: false },
     failedLoginAttempts: { type: Number, default: 0 },
@@ -70,10 +68,10 @@ const userSchema = new mongoose.Schema(
       },
     ],
     activePlan: { type: String, default: 'None' },
-    kycStatus: { 
-      type: String, 
-      enum: ['unverified', 'pending', 'submitted', 'verified', 'rejected'], 
-      default: 'unverified' 
+    kycStatus: {
+      type: String,
+      enum: ['unverified', 'pending', 'submitted', 'verified', 'rejected'],
+      default: 'unverified'
     },
     kycNotes: { type: String, default: null },
     kycVerifiedAt: { type: Date, default: null },
@@ -102,26 +100,15 @@ userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-userSchema.methods.incrementFailedLogin = async function () {
-  const LOCK_THRESHOLD = 5;
-  const LOCK_TIME = 30 * 60 * 1000;
-  this.failedLoginAttempts += 1;
-  if (this.failedLoginAttempts >= LOCK_THRESHOLD) {
-    this.lockUntil = Date.now() + LOCK_TIME;
-    this.failedLoginAttempts = 0;
-  }
-  await this.save();
-};
-
-userSchema.methods.resetFailedLogin = async function () {
-  this.failedLoginAttempts = 0;
-  this.lockUntil = undefined;
-  await this.save();
-};
-
+// Virtuals for easier access in logic
 userSchema.virtual('btcAddress').get(function () {
   return this.walletAddresses?.get('BTC') || null;
 });
 
+userSchema.virtual('ethAddress').get(function () {
+  return this.walletAddresses?.get('ETH') || null;
+});
+
 const User = mongoose.model('User', userSchema);
 export default User;
+

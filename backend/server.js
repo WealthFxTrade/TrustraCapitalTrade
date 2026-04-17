@@ -1,5 +1,5 @@
 // backend/server.js
-import './env.js'; // MUST BE FIRST - loads environment variables
+import './env.js'; // MUST BE FIRST
 
 import express from 'express';
 import mongoose from 'mongoose';
@@ -26,13 +26,11 @@ import { watchBtcDeposits } from './utils/btcWatcher.js';
 import { watchEthDeposits } from './utils/ethWatcher.js';
 import { initRioEngine } from './utils/rioEngine.js';
 
-// ES Module __dirname fix
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
-
 const PORT = process.env.PORT || 10000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PROD = NODE_ENV === 'production';
@@ -50,65 +48,39 @@ const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-  'http://172.20.10.2:5173',
-  'http://172.20.10.3:5173',
 ];
 
-const corsOptions = {
+app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    console.warn(`❌ CORS blocked origin: ${origin}`);
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With'],
-  maxAge: 86400,
-};
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+}));
 
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
-
-// Global Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-
-if (IS_PROD) {
-  app.use(morgan('combined'));
-} else {
-  app.use(morgan('dev'));
-}
+app.use(morgan(IS_PROD ? 'combined' : 'dev'));
 
 // Socket.IO Setup
 const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins,
-    credentials: true,
-  },
-  transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  cors: { origin: allowedOrigins, credentials: true },
+  transports: ['websocket', 'polling']
 });
 
 io.on('connection', (socket) => {
-  console.log(`🔌 Socket connected: ${socket.id}`);
-
   socket.on('join', (userId) => {
     if (userId) {
       socket.join(userId.toString());
-      console.log(`👤 User ${userId} joined private room`);
+      console.log(`👤 User ${userId} connected`);
     }
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`🔌 Socket disconnected: ${socket.id}`);
   });
 });
 
-app.set('io', io); // Make io available in routes if needed
+app.set('io', io);
 
 // Routes
 app.use('/auth', authRoutes);
@@ -118,86 +90,74 @@ app.use('/api/investments', investmentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', apiRoutes);
 
-// Health Check
+// Enhanced Health Check for Production
 app.get('/health', (req, res) => {
+  const dbStatus = mongoose.connection.readyState === 1 ? 'Connected ✅' : 'Disconnected ❌';
   res.status(200).json({
-    success: true,
-    message: 'Trustra Capital Backend is healthy ✅',
-    environment: NODE_ENV,
-    uptime: process.uptime(),
+    status: 'active',
+    database: dbStatus,
+    uptime: `${Math.floor(process.uptime())}s`,
     timestamp: new Date().toISOString(),
   });
 });
 
-// Production: Serve Frontend SPA
+// Production SPA Serving
 if (IS_PROD) {
   const frontendPath = path.join(__dirname, '../frontend/dist');
   app.use(express.static(frontendPath));
-
   app.get('*', (req, res, next) => {
-    if (req.url.startsWith('/api') || req.url.startsWith('/auth')) {
-      return next();
-    }
+    if (req.url.startsWith('/api') || req.url.startsWith('/auth')) return next();
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
 }
 
-// 404 Handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `Route not found: ${req.originalUrl}`,
-  });
-});
-
-// Global Error Handler
 app.use(errorHandler);
 
-// Background Services
+// Background Services Manager
 let servicesInitialized = false;
-
 const startServices = () => {
   if (servicesInitialized) return;
   servicesInitialized = true;
 
-  console.log('⚙️ Initializing background services...');
+  console.log('⚙️ Background Services: Starting...');
+  
+  // Initialize ROI Distribution Engine
   initRioEngine(io);
 
-  console.log('📡 Starting blockchain deposit watchers...');
+  // Initial Blockchain Scan
   watchBtcDeposits(io);
   watchEthDeposits(io);
 
+  // Recursive Scans every 5 minutes
   setInterval(() => {
-    console.log('🔄 Running deposit watchers...');
+    console.log('🔄 Periodic Blockchain Sync...');
     watchBtcDeposits(io);
     watchEthDeposits(io);
   }, 5 * 60 * 1000);
 };
 
-// Database Connection + Server Start
+// Database & Server Launch
 mongoose.set('strictQuery', true);
-
-mongoose
-  .connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => {
-    console.log('✅ MongoDB connected successfully');
-
+    console.log('✅ MongoDB Ready');
     server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🚀 Server listening on port ${PORT}`);
       startServices();
     });
   })
   .catch((err) => {
-    console.error('❌ MongoDB connection failed:', err.message);
+    console.error('❌ Database connection failed:', err.message);
     process.exit(1);
   });
 
-// Global Crash Handlers
+// Process Guards
 process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err.stack || err.message);
-  process.exit(1);
+  console.error('❌ Uncaught Exception:', err.stack);
+  process.exit(1); 
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled Rejection:', reason);
 });
+

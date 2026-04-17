@@ -20,11 +20,11 @@ const transactionSchema = new mongoose.Schema(
         'compound',
         'bonus',
         'roi',
-        'yield' // --- ADDED TO PREVENT RIO ENGINE CRASH ---
+        'yield'
       ],
       required: true,
       index: true,
-      lowercase: true // Ensures 'Yield' from frontend matches 'yield' in DB
+      lowercase: true
     },
     amount: {
       type: Number,
@@ -44,7 +44,8 @@ const transactionSchema = new mongoose.Schema(
       required: true
     },
     walletAddress: { type: String, trim: true, sparse: true },
-    txHash: { type: String, trim: true, sparse: true, index: true },
+    // 🛡️ CRITICAL: Added unique: true to prevent double-crediting deposits
+    txHash: { type: String, trim: true, sparse: true, unique: true }, 
     status: {
       type: String,
       enum: ['pending', 'completed', 'rejected', 'failed', 'confirmed', 'success'],
@@ -53,7 +54,7 @@ const transactionSchema = new mongoose.Schema(
     },
     description: { type: String, trim: true, maxlength: 200 },
     referenceId: { type: mongoose.Schema.Types.ObjectId, sparse: true },
-    processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    metadata: { type: mongoose.Schema.Types.Mixed }, // Added for watcher flexibility
     method: {
       type: String,
       enum: ['crypto', 'bank', 'internal', 'card'],
@@ -69,21 +70,17 @@ const transactionSchema = new mongoose.Schema(
 
 /**
  * Pre-validation Logic:
- * Ensures signedAmount correctly reflects the impact on the user's principal.
+ * Ensures signedAmount correctly reflects impact on balance.
  */
 transactionSchema.pre('validate', function (next) {
   this.netAmount = this.amount - (this.fee || 0);
 
-  // Define which types are "Outflow"
+  // Inflow vs Outflow
   const negativeTypes = ['withdrawal', 'investment'];
   
   this.signedAmount = negativeTypes.includes(this.type)
     ? -Math.abs(this.netAmount)
     : Math.abs(this.netAmount);
-
-  if (this.netAmount < 0) {
-    this.invalidate('netAmount', 'Net amount cannot be negative');
-  }
 
   next();
 });
@@ -105,3 +102,4 @@ transactionSchema.virtual('formattedAmount').get(function () {
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 export default Transaction;
+

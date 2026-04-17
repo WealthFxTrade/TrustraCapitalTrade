@@ -1,18 +1,24 @@
-// utils/rioEngine.js
 import cron from 'node-cron';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 
+/**
+ * 🌘 RIO ENGINE (ROI Distribution)
+ * Handles daily yield distribution based on investment tiers.
+ */
 const RIO_DAILY_RATES = {
-  'Tier I: Entry': 0.00020,
-  'Tier II: Core': 0.00028,
-  'Tier III: Prime': 0.00038,
-  'Tier IV: Institutional': 0.00049,
-  'Tier V: Sovereign': 0.00061,
+  'Tier I: Entry': 0.00020,         // ~0.6% Monthly
+  'Tier II: Core': 0.00028,         // ~0.84% Monthly
+  'Tier III: Prime': 0.00038,        // ~1.14% Monthly
+  'Tier IV: Institutional': 0.00049, // ~1.47% Monthly
+  'Tier V: Sovereign': 0.00061,      // ~1.83% Monthly
   'Sovereign': 0.00061,
   'Rio Elite': 0.00061,
 };
 
+/**
+ * Distributes yield to all active investment nodes
+ */
 export const runYieldDistribution = async (io) => {
   const sessionDate = new Date().toISOString().split('T')[0];
   console.log(`🌘 [RIO ENGINE] EXECUTING SETTLEMENT: ${sessionDate}`);
@@ -22,96 +28,96 @@ export const runYieldDistribution = async (io) => {
       isActive: true,
       isBanned: false,
       activePlan: { $ne: 'None' },
-      'balances.INVESTED': { $gt: 0 }   // only nodes with principal
+      'balances.INVESTED': { $gt: 0 }
     }).select('_id email activePlan balances');
 
-    console.log(`📡 Processing ${activeNodes.length} Active Nodes...`);
+    console.log(`📡 [RIO ENGINE] Processing ${activeNodes.length} Active Nodes...`);
 
     for (const node of activeNodes) {
       try {
-        // Strong daily idempotency
+        // 1. Daily Idempotency Check: Prevent paying the same user twice in one day
         const alreadyProcessed = await Transaction.findOne({
           user: node._id,
           type: 'yield',
           createdAt: {
             $gte: new Date(sessionDate),
-            $lt: new Date(new Date(sessionDate).getTime() + 86400000)
+            $lt: new Date(new Date(sessionDate).getTime() + 24 * 60 * 60 * 1000)
           }
         });
 
         if (alreadyProcessed) {
-          console.log(`⏩ Skipping \( {node.email}: Already settled for \){sessionDate}`);
+          console.log(`⏩ Skipping ${node.email}: Already settled for ${sessionDate}`);
           continue;
         }
 
-        const plan = node.activePlan || 'Tier I: Entry';
-        const rate = RIO_DAILY_RATES[plan] || 0.00020;
-        const principal = Number(node.balances.get('INVESTED') || 0);
+        // 2. Calculate Yield
+        const dailyRate = RIO_DAILY_RATES[node.activePlan] || 0.00015; // Default low rate if plan not found
+        const principal = node.balances.get('INVESTED') || 0;
+        const yieldAmount = principal * dailyRate;
 
-        if (principal <= 0) continue;
+        if (yieldAmount <= 0) continue;
 
-        // Precise calculation (avoid JS float issues)
-        let dailyYield = Math.round((principal * rate) * 100) / 100;   // 2 decimal precision
-
-        // Special case override (keep if needed, but consider moving to DB config)
-        if (node.email === 'gery.maes1@telenet.be' && principal === 110000) {
-          dailyYield = 12.50;
-        }
-
-        if (dailyYield <= 0) continue;
-
-        // Atomic update using $inc (safer than loading → modifying → saving)
+        // 3. Atomic Database Update
         const updatedUser = await User.findOneAndUpdate(
           { _id: node._id },
           {
             $inc: {
-              'balances.ROI': dailyYield,
-              // Optional: auto-compound to INVESTED if your product allows
-              // 'balances.INVESTED': dailyYield
+              'balances.EUR': Number(yieldAmount.toFixed(2)),
+              'balances.TOTAL_PROFIT': Number(yieldAmount.toFixed(2))
             }
           },
           { new: true }
         );
 
-        // Audit trail
+        // 4. Create Audit Trail
         await Transaction.create({
           user: node._id,
           type: 'yield',
-          amount: dailyYield,
+          amount: Number(yieldAmount.toFixed(2)),
           currency: 'EUR',
           status: 'completed',
-          method: 'internal',
-          description: `Alpha Protocol Settlement • \( {plan} • \){sessionDate}`,
-          metadata: { rate, principal, plan }
+          description: `Daily Yield Settlement (${node.activePlan})`,
+          metadata: {
+            principalAtTime: principal,
+            rateUsed: dailyRate,
+            sessionDate: sessionDate
+          }
         });
 
-        console.log(`✅ [RIO] Credited \( {node.email}: +€ \){dailyYield.toFixed(2)} (${plan})`);
+        console.log(`💰 [RIO] ${node.email}: +€${yieldAmount.toFixed(2)} (Rate: ${dailyRate})`);
 
-        // Real-time socket
+        // 5. Real-time Notification
         if (io && updatedUser) {
           io.to(node._id.toString()).emit('balanceUpdate', {
             balances: Object.fromEntries(updatedUser.balances),
-            message: `📈 +€${dailyYield.toFixed(2)} Alpha Yield Distributed`
+            message: `🌘 Daily yield received: +€${yieldAmount.toFixed(2)}`
           });
         }
+
       } catch (nodeErr) {
-        console.error(`❌ [RIO NODE ERROR] ${node.email}:`, nodeErr.message);
-        // Continue with other nodes
+        console.error(`❌ [RIO ERROR] Node ${node.email}:`, nodeErr.message);
       }
     }
 
-    console.log(`--- [RIO ENGINE] Settlement Complete ---`);
+    console.log(`--- [RIO ENGINE] Settlement Complete for ${sessionDate} ---`);
   } catch (err) {
-    console.error('❌ [RIO ENGINE FATAL]', err.message);
+    console.error('⚠️ [RIO ENGINE FATAL ERROR]:', err.message);
   }
 };
 
+/**
+ * Initialize the Engine
+ * Default: Runs every midnight (00:00)
+ */
 export const initRioEngine = (io) => {
   console.log('⚙️ [RIO ENGINE] Alpha Protocol Synchronized');
+  
+  // Schedule: Once daily at midnight
+  cron.schedule('0 0 * * *', () => {
+    runYieldDistribution(io);
+  });
 
-  // Daily at midnight
-  cron.schedule('0 0 * * *', () => runYieldDistribution(io));
-
-  // Run once on startup for testing
-  setTimeout(() => runYieldDistribution(io), 8000);
+  // Optional: Run once on startup for development testing (can be commented out for production)
+  // setTimeout(() => runYieldDistribution(io), 5000); 
 };
+

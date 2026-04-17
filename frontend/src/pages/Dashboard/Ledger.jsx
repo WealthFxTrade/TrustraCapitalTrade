@@ -1,13 +1,14 @@
+// frontend/src/pages/Dashboard/Ledger.jsx
 import React, { useState } from 'react';
 import {
   CheckCircle2,
   Clock,
   XCircle,
   RefreshCw,
-  Search,
   ArrowDownLeft,
   ArrowUpRight,
-  Zap
+  Zap,
+  TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -17,7 +18,6 @@ export default function Ledger({ transactions = [], refreshBalances }) {
 
   const handleManualRefresh = async () => {
     if (!refreshBalances) return;
-    
     setIsRefreshing(true);
     try {
       await refreshBalances();
@@ -28,29 +28,22 @@ export default function Ledger({ transactions = [], refreshBalances }) {
     }
   };
 
-  /**
-   * Safe value formatter for EUR and BTC
-   */
   const formatValue = (amount, currency = 'EUR') => {
     const num = Number(amount || 0);
-    const isBTC = currency?.toUpperCase() === 'BTC';
+    const isCrypto = ['BTC', 'ETH', 'USDT'].includes(currency?.toUpperCase());
 
     const formatter = new Intl.NumberFormat('de-DE', {
-      minimumFractionDigits: isBTC ? 8 : 2,
-      maximumFractionDigits: isBTC ? 8 : 2,
+      minimumFractionDigits: isCrypto ? 8 : 2,
+      maximumFractionDigits: isCrypto ? 8 : 2,
     });
 
-    return isBTC 
-      ? `${formatter.format(num)} BTC` 
+    return isCrypto 
+      ? `${formatter.format(num)} ${currency.toUpperCase()}` 
       : `€${formatter.format(num)}`;
   };
 
-  /**
-   * Status badge component
-   */
   const getStatusBadge = (status) => {
     const s = (status || 'pending').toLowerCase();
-
     switch (s) {
       case 'completed':
       case 'confirmed':
@@ -61,7 +54,6 @@ export default function Ledger({ transactions = [], refreshBalances }) {
           </span>
         );
       case 'pending':
-      case 'processing':
         return (
           <span className="flex items-center gap-2 px-4 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full text-[10px] font-black uppercase tracking-widest">
             <Clock size={12} className="animate-pulse" /> Pending
@@ -76,37 +68,34 @@ export default function Ledger({ transactions = [], refreshBalances }) {
     }
   };
 
-  /**
-   * Transaction type icon
-   */
   const getTypeIcon = (type) => {
     const t = type?.toLowerCase();
     if (t === 'deposit') return <ArrowDownLeft className="text-emerald-500" size={18} />;
     if (t === 'withdrawal') return <ArrowUpRight className="text-rose-500" size={18} />;
-    return <Zap className="text-blue-500" size={18} />;
+    if (t === 'yield' || t === 'roi') return <TrendingUp className="text-blue-400" size={18} />;
+    return <Zap className="text-amber-500" size={18} />;
   };
 
-  // Filter transactions
-  const filteredTransactions = transactions.filter(tx => 
+  const filteredTransactions = transactions.filter(tx =>
     filter === 'all' || tx.type?.toLowerCase() === filter
   );
 
   return (
     <div className="space-y-8">
-      {/* Toolbar */}
+      {/* Toolbar - Updated with 'Yield' */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex gap-2 bg-white/5 border border-white/10 rounded-2xl p-1 w-fit">
-          {['all', 'deposit', 'withdrawal', 'compound'].map((type) => (
+        <div className="flex overflow-x-auto gap-2 bg-white/5 border border-white/10 rounded-2xl p-1 no-scrollbar">
+          {['all', 'deposit', 'withdrawal', 'investment', 'yield'].map((type) => (
             <button
               key={type}
               onClick={() => setFilter(type)}
-              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                filter === type 
-                  ? 'bg-emerald-500 text-black shadow-md' 
+              className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+                filter === type
+                  ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20'
                   : 'text-gray-400 hover:text-white hover:bg-white/10'
               }`}
             >
-              {type.charAt(0).toUpperCase() + type.slice(1)}
+              {type}
             </button>
           ))}
         </div>
@@ -114,86 +103,88 @@ export default function Ledger({ transactions = [], refreshBalances }) {
         <button
           onClick={handleManualRefresh}
           disabled={isRefreshing}
-          className="flex items-center gap-3 px-8 py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-white/10 disabled:opacity-60 transition-all"
+          className="flex items-center justify-center gap-3 px-8 py-3 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-white/10 disabled:opacity-60 transition-all"
         >
-          <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-          Refresh Ledger
+          <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
+          Sync Ledger
         </button>
       </div>
 
-      {/* Transactions Table */}
-      <div className="bg-[#0a0c10] border border-white/10 rounded-3xl overflow-hidden">
+      {/* Ledger Table */}
+      <div className="bg-[#0a0c10] border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full min-w-full">
             <thead>
-              <tr className="border-b border-white/10 text-left text-[10px] font-black uppercase tracking-[0.5px] text-gray-500">
-                <th className="px-8 py-6">Date & Time</th>
-                <th className="px-8 py-6">Transaction</th>
-                <th className="px-8 py-6 text-right">Amount</th>
-                <th className="px-8 py-6 text-center">Status</th>
+              <tr className="border-b border-white/10 text-left text-[10px] font-black uppercase tracking-widest text-gray-500">
+                <th className="px-8 py-6">Timestamp</th>
+                <th className="px-8 py-6">Operation</th>
+                <th className="px-8 py-6 text-right">Volume</th>
+                <th className="px-8 py-6 text-center">Verification</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               <AnimatePresence mode="popLayout">
                 {filteredTransactions.length > 0 ? (
-                  filteredTransactions.map((tx, index) => (
-                    <motion.tr
-                      key={tx._id || index}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      className="hover:bg-white/[0.015] transition-colors group"
-                    >
-                      <td className="px-8 py-6 whitespace-nowrap">
-                        <div className="text-sm font-medium text-white">
-                          {new Date(tx.createdAt).toLocaleDateString('de-DE')}
-                        </div>
-                        <div className="text-xs text-gray-600 font-mono mt-0.5">
-                          {new Date(tx.createdAt).toLocaleTimeString('de-DE', { 
-                            hour: '2-digit', 
-                            minute: '2-digit' 
-                          })}
-                        </div>
-                      </td>
-
-                      <td className="px-8 py-6">
-                        <div className="flex items-center gap-4">
-                          <div className="p-3 bg-white/5 rounded-2xl group-hover:bg-white/10 transition-colors">
-                            {getTypeIcon(tx.type)}
+                  filteredTransactions.map((tx, index) => {
+                    const isOutflow = ['withdrawal', 'investment'].includes(tx.type?.toLowerCase());
+                    const isYield = ['yield', 'roi'].includes(tx.type?.toLowerCase());
+                    
+                    return (
+                      <motion.tr
+                        key={tx._id || index}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="hover:bg-white/[0.02] transition-colors group"
+                      >
+                        <td className="px-8 py-6 whitespace-nowrap">
+                          <div className="text-sm font-bold text-white">
+                            {new Date(tx.createdAt).toLocaleDateString('de-DE')}
                           </div>
-                          <div>
-                            <p className="font-semibold text-white capitalize">
-                              {tx.type || 'Internal'}
-                            </p>
-                            <p className="text-xs text-gray-500 line-clamp-1 max-w-[220px]">
-                              {tx.description || 'Node transaction'}
-                            </p>
+                          <div className="text-[10px] text-gray-600 font-black uppercase mt-1">
+                            {new Date(tx.createdAt).toLocaleTimeString('de-DE', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-8 py-6 text-right">
-                        <p className={`font-black text-lg tracking-tighter ${
-                          tx.type?.toLowerCase() === 'withdrawal' ? 'text-rose-500' : 'text-emerald-400'
-                        }`}>
-                          {tx.type?.toLowerCase() === 'withdrawal' ? '−' : '+'}
-                          {formatValue(tx.amount, tx.currency)}
-                        </p>
-                      </td>
+                        <td className="px-8 py-6">
+                          <div className="flex items-center gap-4">
+                            <div className="p-3 bg-white/5 rounded-2xl border border-white/5 group-hover:border-white/10 transition-colors">
+                              {getTypeIcon(tx.type)}
+                            </div>
+                            <div>
+                              <p className="font-bold text-white uppercase text-xs tracking-wider">
+                                {tx.type}
+                              </p>
+                              <p className="text-[11px] text-gray-500 line-clamp-1 max-w-[200px]">
+                                {tx.description || 'Blockchain interaction'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
 
-                      <td className="px-8 py-6">
-                        <div className="flex justify-center">
+                        <td className="px-8 py-6 text-right whitespace-nowrap">
+                          <p className={`font-black text-lg tracking-tighter ${
+                            isOutflow ? 'text-rose-500' : isYield ? 'text-blue-400' : 'text-emerald-400'
+                          }`}>
+                            {isOutflow ? '-' : '+'}{formatValue(tx.amount, tx.currency)}
+                          </p>
+                        </td>
+
+                        <td className="px-8 py-6 flex justify-center">
                           {getStatusBadge(tx.status)}
-                        </div>
-                      </td>
-                    </motion.tr>
-                  ))
+                        </td>
+                      </motion.tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={4} className="px-8 py-20 text-center">
-                      <Search className="mx-auto mb-4 text-gray-700" size={40} />
-                      <p className="text-sm font-medium text-gray-500">No transactions found</p>
-                      <p className="text-xs text-gray-600 mt-1">Try changing the filter or refresh the ledger</p>
+                    <td colSpan="4" className="px-8 py-20 text-center">
+                      <p className="text-gray-600 italic text-sm font-medium">
+                        No transactions found in this protocol.
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -202,14 +193,7 @@ export default function Ledger({ transactions = [], refreshBalances }) {
           </table>
         </div>
       </div>
-
-      {/* Footer Note */}
-      <div className="flex items-center gap-3 px-6 py-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl">
-        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-        <p className="text-xs text-blue-400 font-medium tracking-wide">
-          All transactions are recorded on the institutional audit ledger and cannot be altered.
-        </p>
-      </div>
     </div>
   );
 }
+
