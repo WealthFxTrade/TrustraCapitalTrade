@@ -1,48 +1,64 @@
-import React, { useState, useEffect, useCallback } from 'react';      
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';              
+import { motion } from 'framer-motion';
 import {
   TrendingUp, ArrowRight, ShieldCheck, Loader2, AlertTriangle,
   PlusCircle, Zap, ChevronRight, LayoutDashboard
-} from 'lucide-react';                                               
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import api, { API_ENDPOINTS } from '../../constants/api';             
+import api, { API_ENDPOINTS } from '../../constants/api';
 import toast from 'react-hot-toast';
 
-export default function Invest() {
+export default function Invest({ balances, refreshBalances }) {
   const { initialized, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
-  const [fetching, setFetching] = useState(true);                       
-  const [localBalances, setLocalBalances] = useState({ EUR: 0, ROI: 0 });
+  const [fetching, setFetching] = useState(true);
 
-  /** * Fetch Fresh Portfolio Data from Node Ledger
-   * Using the verified STATS endpoint to resolve the Sync Error
+  // Use balances passed from Dashboard (preferred) + local fallback
+  const [localBalances, setLocalBalances] = useState({
+    EUR: balances?.EUR || 0,
+    ROI: balances?.ROI || 0,
+  });
+
+  /**
+   * Fetch fresh portfolio data using the current flat stats endpoint
    */
   const fetchPortfolio = useCallback(async () => {
     if (!isAuthenticated) return;
     setFetching(true);
+
     try {
-      // Changed from BALANCES to STATS to match working backend route
       const res = await api.get(API_ENDPOINTS.USER.STATS);
-      
-      if (res.data) {
-        // Mapping backend 'totalBalance' and 'accruedROI' to UI state
+
+      if (res.data?.success) {
+        const data = res.data;
+
         setLocalBalances({
-          EUR: Number(res.data.totalBalance || 0),
-          ROI: Number(res.data.accruedROI || 0)
+          EUR: Number(data.principal || data.availableBalance || 0),   // Principal is the main invested amount
+          ROI: Number(data.accruedROI || 0),
         });
       }
     } catch (err) {
       console.error("Ledger Sync Error:", err);
-      toast.error('Sync Error: Connection to Ledger interrupted');
+      toast.error('Failed to sync portfolio data');
     } finally {
       setFetching(false);
     }
   }, [isAuthenticated]);
 
-  useEffect(() => {                                                       
+  // Sync when balances are passed from parent or on mount
+  useEffect(() => {
+    if (balances) {
+      setLocalBalances({
+        EUR: Number(balances.EUR || 0),
+        ROI: Number(balances.ROI || 0),
+      });
+    }
+  }, [balances]);
+
+  useEffect(() => {
     if (initialized) {
       if (!isAuthenticated) {
         navigate('/login');
@@ -53,162 +69,169 @@ export default function Invest() {
   }, [initialized, isAuthenticated, fetchPortfolio, navigate]);
 
   /**
-   * Handle Yield Reinvestment (Compounding)
+   * Handle Yield Compounding (ROI → Principal)
    */
-  const handleCompound = async () => {                                     
+  const handleCompound = async () => {
     if (localBalances.ROI < 10) {
       toast.error("Minimum €10.00 in accrued ROI required for reinvestment.");
       return;
     }
-                                                                          
+
     setLoading(true);
-    const toastId = toast.loading("Rebalancing Node Portfolio...");
+    const toastId = toast.loading("Processing compounding...");
 
     try {
-      // Executes the POST request to move ROI into Principal
-      const res = await api.post(API_ENDPOINTS.USER.COMPOUND);                                                                                                   
+      const res = await api.post(API_ENDPOINTS.USER.COMPOUND);
+
       if (res.data?.success) {
-        toast.success("Yield successfully compounded into principal.", { id: toastId });
-        
-        // Optimistic UI update: Move ROI into EUR principal immediately
-        setLocalBalances(prev => ({                                                                             
+        toast.success("ROI successfully compounded into principal.", { id: toastId });
+
+        // Optimistic update
+        setLocalBalances(prev => ({
           EUR: prev.EUR + prev.ROI,
-          ROI: 0
+          ROI: 0,
         }));
-        
-        // Redirect after short delay to allow the user to see the success state
-        setTimeout(() => navigate('/dashboard'), 2000);
+
+        // Refresh parent dashboard
+        if (refreshBalances) refreshBalances();
+
+        // Optional: redirect back to main dashboard after success
+        setTimeout(() => navigate('/dashboard'), 1800);
       }
-    } catch (err) {                                                         
-      const msg = err.response?.data?.message || 'Compounding Protocol Failed';
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Compounding failed';
       toast.error(msg, { id: toastId });
     } finally {
-      setLoading(false);                                                  
+      setLoading(false);
     }
   };
 
   if (!initialized || fetching) {
     return (
-      <div className="min-h-screen bg-[#020408] flex flex-col items-center justify-center">                                                         
+      <div className="min-h-[500px] flex flex-col items-center justify-center bg-[#020408]">
         <Loader2 className="text-emerald-500 animate-spin" size={56} />
-        <p className="mt-8 text-[10px] font-black uppercase tracking-[0.3em] text-gray-500 italic">
-          Syncing Yield Ledger...
+        <p className="mt-6 text-xs font-black uppercase tracking-widest text-gray-500">
+          Syncing Institutional Portfolio...
         </p>
       </div>
-    );                                                                    
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[#020408] text-white flex flex-col font-sans">                                                         
-      
-      {/* ── TOP NAV ── */}
-      <nav className="h-24 border-b border-white/5 px-8 flex items-center justify-between sticky top-0 bg-[#020408]/90 backdrop-blur-xl z-50">                                                                                                             
-        <div className="flex items-center gap-4 cursor-pointer" onClick={() => navigate('/dashboard')}>                                               
-          <LayoutDashboard className="text-emerald-500" size={24} />            
-          <h2 className="text-xl font-black tracking-tighter uppercase italic">Capital Hub</h2>
+    <div className="min-h-screen bg-[#020408] text-white">
+      {/* Top Navigation */}
+      <nav className="h-20 border-b border-white/5 px-8 flex items-center justify-between bg-[#020408]/95 backdrop-blur-xl sticky top-0 z-50">
+        <div 
+          className="flex items-center gap-4 cursor-pointer" 
+          onClick={() => navigate('/dashboard')}
+        >
+          <LayoutDashboard className="text-emerald-500" size={24} />
+          <h2 className="text-xl font-black tracking-tighter">Capital Hub</h2>
         </div>
         <button
-          onClick={() => navigate('/dashboard')}                                
-          className="p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all"
+          onClick={() => navigate('/dashboard')}
+          className="p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
         >
           <ArrowRight className="rotate-180" size={20} />
         </button>
-      </nav>                                                         
-      
-      <main className="flex-1 p-6 lg:p-12 overflow-y-auto">
+      </nav>
+
+      <main className="p-6 lg:p-12">
         <div className="max-w-5xl mx-auto space-y-12">
 
-          {/* Hero Header */}
-          <header className="flex flex-col md:flex-row md:items-end justify-between gap-8">                                                             
+          {/* Header */}
+          <header className="flex flex-col md:flex-row md:items-end justify-between gap-8">
             <div className="space-y-4">
-              <div className="inline-flex items-center gap-3 px-4 py-2 bg-emerald-500/10 rounded-full border border-emerald-500/20">
-                <Zap className="text-emerald-500" size={14} />
-                <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400">Strategic Compounding Protocol</span>
+              <div className="inline-flex items-center gap-3 px-5 py-2 bg-emerald-500/10 rounded-full border border-emerald-500/20">
+                <Zap className="text-emerald-500" size={16} />
+                <span className="text-xs font-black uppercase tracking-widest text-emerald-400">Yield Compounding Protocol</span>
               </div>
-              <h1 className="text-5xl lg:text-7xl font-black tracking-tighter uppercase italic leading-none">Yield <br/><span className="text-emerald-500">Maturity</span></h1>
-              <p className="text-gray-500 text-sm font-medium max-w-lg leading-relaxed uppercase tracking-wider">
-                Merge accrued ROI into your institutional principal to maximize future node performance.
-              </p>                                                                                
+              <h1 className="text-5xl lg:text-6xl font-black tracking-tighter leading-none">
+                Yield <span className="text-emerald-500">Maturity</span>
+              </h1>
+              <p className="text-gray-400 max-w-md">
+                Compound your accrued ROI into institutional principal to increase future yield generation.
+              </p>
             </div>
 
-            <button                                                                                 
+            <button
               onClick={() => navigate('/dashboard/deposit')}
-              className="flex items-center gap-4 px-10 py-5 bg-emerald-600 hover:bg-emerald-400 text-black rounded-[2rem] text-[10px] font-black uppercase tracking-widest transition-all shadow-2xl shadow-emerald-500/20 active:scale-95"
-            >                                                                                       
-              <PlusCircle size={18} /> Inject New Capital
+              className="flex items-center gap-3 px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-black rounded-2xl font-bold text-sm uppercase tracking-widest transition-all active:scale-95"
+            >
+              <PlusCircle size={20} />
+              Inject New Capital
             </button>
           </header>
 
-          {/* Balance Comparison */}                                             
+          {/* Balance Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* ROI Card */}
             <motion.div
-              initial={{ opacity: 0, x: -20 }} 
-              animate={{ opacity: 1, x: 0 }}                                                                                                                                 
-              className="bg-[#0a0c10] border border-white/5 rounded-[3rem] p-10 relative overflow-hidden group hover:border-emerald-500/30 transition-all"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-[#0a0c10] border border-white/10 rounded-3xl p-10 relative overflow-hidden group hover:border-emerald-500/40 transition-all"
             >
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-6 italic">Accrued Yield (ROI)</p>
-              <p className="text-5xl lg:text-6xl font-black text-emerald-500 tracking-tighter italic">
-                €{localBalances.ROI.toLocaleString('de-DE', { minimumFractionDigits: 2 })}                                                               
+              <p className="uppercase text-xs tracking-widest text-emerald-500 font-semibold mb-4">Accrued ROI</p>
+              <p className="text-6xl font-black tracking-tighter text-emerald-400">
+                €{localBalances.ROI.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
               </p>
-              <div className="mt-8 flex items-center gap-2 text-[9px] font-black text-gray-600 uppercase tracking-widest">
-                <ShieldCheck size={12} /> Vaulted Liquidity
+              <div className="mt-10 flex items-center gap-2 text-xs text-gray-500">
+                <ShieldCheck size={16} /> Ready for compounding
               </div>
-              <TrendingUp className="absolute -bottom-6 -right-6 opacity-[0.03] group-hover:opacity-10 transition-opacity" size={180} />
             </motion.div>
 
+            {/* Principal Card */}
             <motion.div
-              initial={{ opacity: 0, x: 20 }} 
-              animate={{ opacity: 1, x: 0 }}
-              className="bg-[#0a0c10] border border-white/5 rounded-[3rem] p-10 relative overflow-hidden"                                                >
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-6 italic">Institutional Principal</p>
-              <p className="text-5xl lg:text-6xl font-black text-white tracking-tighter italic">                                                           
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-[#0a0c10] border border-white/10 rounded-3xl p-10 relative overflow-hidden group hover:border-white/30 transition-all"
+            >
+              <p className="uppercase text-xs tracking-widest text-gray-400 font-semibold mb-4">Institutional Principal</p>
+              <p className="text-6xl font-black tracking-tighter">
                 €{localBalances.EUR.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
               </p>
-              <div className="mt-8 flex items-center gap-2 text-[9px] font-black text-gray-600 uppercase tracking-widest">
-                <ShieldCheck size={12} /> AUM Baseline
+              <div className="mt-10 flex items-center gap-2 text-xs text-gray-500">
+                <ShieldCheck size={16} /> Current AUM baseline
               </div>
             </motion.div>
           </div>
-                                                                                  
-          {/* Action Hub */}                                                     
-          <section className="bg-[#0a0c10] border border-white/5 rounded-[3.5rem] p-12 lg:p-16 relative overflow-hidden">
-            <div className="relative z-10 grid lg:grid-cols-2 gap-12 items-center">                                                                                 
+
+          {/* Compound Action Section */}
+          <section className="bg-[#0a0c10] border border-white/10 rounded-3xl p-12 lg:p-16">
+            <div className="grid lg:grid-cols-2 gap-12 items-center">
               <div className="space-y-6">
-                <h3 className="text-3xl font-black uppercase tracking-tighter italic">Execute Settlement</h3>
-                <p className="text-gray-500 text-xs font-medium uppercase tracking-widest leading-relaxed">
-                  Compounding shifts your realized ROI into your primary investment node. This increases your
-                  working capital and compounds future daily returns based on the updated AUM.
+                <h3 className="text-4xl font-black tracking-tighter">Execute Compounding</h3>
+                <p className="text-gray-400 leading-relaxed">
+                  Transfer accrued ROI into your principal. This action permanently increases your invested capital 
+                  and will generate higher future daily yields.
                 </p>
-                <div className="flex items-start gap-4 p-6 bg-rose-500/5 border border-rose-500/10 rounded-3xl">
-                  <AlertTriangle className="text-rose-500 shrink-0 mt-1" size={18} />
-                  <p className="text-[10px] text-rose-500/70 font-black uppercase tracking-widest leading-loose italic">
-                    Finalization Notice: Compounding actions are immediate and cannot be reversed. Minimum required: €10.00.
+
+                <div className="p-6 bg-rose-500/10 border border-rose-500/20 rounded-2xl">
+                  <p className="text-rose-400 text-sm font-medium">
+                    ⚠️ This action is irreversible. Minimum €10.00 ROI required.
                   </p>
                 </div>
               </div>
 
               <div className="flex justify-center lg:justify-end">
                 <button
-                  disabled={loading || localBalances.ROI < 10}
                   onClick={handleCompound}
-                  className={`group relative px-16 py-8 rounded-[2.5rem] text-[11px] font-black uppercase tracking-[0.3em] transition-all overflow-hidden ${
+                  disabled={loading || localBalances.ROI < 10}
+                  className={`px-16 py-8 rounded-3xl font-black uppercase tracking-widest text-sm transition-all flex items-center gap-4 ${
                     localBalances.ROI >= 10
-                      ? 'bg-emerald-600 text-black hover:bg-emerald-500 shadow-2xl shadow-emerald-600/30 active:scale-95'
-                      : 'bg-white/5 text-gray-700 cursor-not-allowed border border-white/5'
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-black shadow-xl shadow-emerald-600/40 active:scale-[0.97]'
+                      : 'bg-white/5 text-gray-600 cursor-not-allowed'
                   }`}
                 >
-                  <span className="relative z-10 flex items-center gap-4">
-                    {loading ? <Loader2 className="animate-spin" /> : <TrendingUp size={20} />}
-                    {loading ? 'Processing...' : 'Confirm Reinvestment'}
-                    <ChevronRight size={18} className="group-hover:translate-x-2 transition-transform" />
-                  </span>
+                  {loading ? (
+                    <Loader2 className="animate-spin" size={22} />
+                  ) : (
+                    <TrendingUp size={22} />
+                  )}
+                  {loading ? 'Processing...' : 'Confirm Compounding'}
                 </button>
               </div>
-            </div>                                                         
-            
-            {/* Background Branding */}                                             
-            <div className="absolute top-0 right-0 p-12 opacity-5">
-               <ShieldCheck size={200} />
             </div>
           </section>
         </div>

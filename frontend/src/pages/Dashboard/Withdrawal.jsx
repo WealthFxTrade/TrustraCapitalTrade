@@ -1,19 +1,15 @@
-// src/pages/Dashboard/Withdrawal.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  ArrowUpRight, 
+  ArrowUpRight,
   ShieldCheck,
-  Loader2, 
-  AlertTriangle, 
-  Wallet, 
-  Landmark, 
-  Info, 
+  Loader2,
+  AlertTriangle,
+  Wallet,
   CheckCircle2,
   ChevronRight
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import api from '../../constants/api';
+import api, { API_ENDPOINTS } from '../../constants/api';
 import toast from 'react-hot-toast';
 
 export default function Withdrawal({ balances, refreshBalances }) {
@@ -23,39 +19,57 @@ export default function Withdrawal({ balances, refreshBalances }) {
   const [formData, setFormData] = useState({
     amount: '',
     asset: 'USDT',
-    walletType: 'ROI',
+    walletType: 'EUR',           // Default to available EUR (safer)
     address: '',
-    network: 'TRC-20'
   });
+
+  // Current available balances from parent (Dashboard)
+  const availableROI = Number(balances?.ROI || 0);
+  const availableEUR = Number(balances?.EUR || 0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     const amount = Number(formData.amount);
-    const available = formData.walletType === 'ROI' ? (balances.ROI || 0) : (balances.EUR || 0);
+    const available = formData.walletType === 'ROI' ? availableROI : availableEUR;
 
     // Validation
-    if (amount < 50) return toast.error('Minimum withdrawal threshold is €50.00');
-    if (amount > available) return toast.error('Liquidity exceeds available node balance');
-    if (!formData.address) return toast.error('Destination address or IBAN required');
+    if (!amount || amount < 50) {
+      return toast.error('Minimum withdrawal amount is €50.00');
+    }
+    if (amount > available) {
+      return toast.error('Requested amount exceeds available balance');
+    }
+    if (!formData.address.trim()) {
+      return toast.error('Destination address or IBAN is required');
+    }
 
     setSubmitting(true);
-    const toastId = toast.loading("Initiating Security Audit...");
+    const toastId = toast.loading("Initiating secure withdrawal...");
 
     try {
-      // Matches backend: router.post('/withdraw', requestWithdrawal)
-      const res = await api.post('/users/withdraw', formData);
-      
+      const payload = {
+        amount,
+        address: formData.address.trim(),
+        asset: formData.asset,
+        walletType: formData.walletType,
+      };
+
+      const res = await api.post(API_ENDPOINTS.USER.WITHDRAW, payload);
+
       if (res.data?.success) {
-        toast.success('Withdrawal queued for institutional audit', { id: toastId });
-        
-        // Refresh parent balances to show pending deduction
-        await refreshBalances();
-        
-        // Redirect to Ledger to see the pending status
-        setTimeout(() => navigate('/dashboard'), 2000);
+        toast.success('Withdrawal request queued for institutional audit', { id: toastId });
+
+        // Refresh balances in parent component
+        if (refreshBalances) {
+          await refreshBalances();
+        }
+
+        // Redirect back to dashboard / ledger after success
+        setTimeout(() => navigate('/dashboard'), 1800);
       }
     } catch (err) {
-      const msg = err.response?.data?.message || 'Liquidation Request Failed';
+      const msg = err.response?.data?.message || 'Withdrawal request failed';
       toast.error(msg, { id: toastId });
     } finally {
       setSubmitting(false);
@@ -63,133 +77,160 @@ export default function Withdrawal({ balances, refreshBalances }) {
   };
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-500">
+    <div className="space-y-10">
       {/* Header */}
       <header className="border-b border-white/5 pb-8">
-        <h2 className="text-2xl font-black tracking-tighter uppercase italic leading-none">Asset Liquidation</h2>
-        <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-2">
-          Node Status: <span className="text-emerald-500">Liquidity Sufficient</span>
+        <h2 className="text-3xl font-black tracking-tighter uppercase italic">Asset Liquidation</h2>
+        <p className="text-xs text-gray-500 mt-2 uppercase tracking-widest">
+          Secure withdrawal from institutional node
         </p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        {/* Main Form Section */}
         <div className="lg:col-span-7 space-y-8">
-          
           {/* Source Selection */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {[
-              { id: 'ROI', label: 'Accrued ROI', val: balances.ROI || 0, icon: ArrowUpRight },
-              { id: 'EUR', label: 'Principal AUM', val: balances.EUR || 0, icon: Wallet }
-            ].map((w) => (
+              { 
+                id: 'EUR', 
+                label: 'Available Principal', 
+                val: availableEUR, 
+                icon: Wallet 
+              },
+              { 
+                id: 'ROI', 
+                label: 'Accrued ROI', 
+                val: availableROI, 
+                icon: ArrowUpRight 
+              },
+            ].map((source) => (
               <button
-                key={w.id}
+                key={source.id}
                 type="button"
-                onClick={() => setFormData(p => ({ ...p, walletType: w.id }))}
-                className={`p-8 rounded-[2.5rem] border text-left transition-all relative overflow-hidden group ${
-                  formData.walletType === w.id 
-                    ? 'bg-emerald-500 border-emerald-500 text-black' 
-                    : 'bg-black/20 border-white/5 text-white hover:border-white/20'
+                onClick={() => setFormData(prev => ({ ...prev, walletType: source.id }))}
+                className={`p-8 rounded-3xl border text-left transition-all group relative overflow-hidden ${
+                  formData.walletType === source.id
+                    ? 'bg-emerald-500 border-emerald-500 text-black'
+                    : 'bg-[#0a0c10] border-white/10 hover:border-white/30'
                 }`}
               >
-                <p className={`text-[9px] font-black uppercase tracking-widest mb-2 ${formData.walletType === w.id ? 'text-black/60' : 'text-gray-500'}`}>
-                  {w.label}
+                <p className={`text-xs font-black uppercase tracking-widest mb-3 ${
+                  formData.walletType === source.id ? 'text-black/70' : 'text-gray-500'
+                }`}>
+                  {source.label}
                 </p>
-                <p className="text-3xl font-black italic tracking-tighter">
-                  €{w.val.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
+                <p className="text-4xl font-black tracking-tighter">
+                  €{source.val.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
                 </p>
-                <w.icon className={`absolute right-6 bottom-6 opacity-10 group-hover:scale-110 transition-transform`} size={48} />
+                <source.icon 
+                  className={`absolute bottom-6 right-6 opacity-20 group-hover:opacity-40 transition-all`} 
+                  size={52} 
+                />
               </button>
             ))}
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="bg-black/20 border border-white/5 rounded-[3rem] p-8 md:p-12 space-y-8">
+          {/* Withdrawal Form */}
+          <form onSubmit={handleSubmit} className="bg-[#0a0c10] border border-white/10 rounded-3xl p-10 space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Amount */}
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">Amount (EUR)</label>
+                <label className="text-xs font-black uppercase tracking-widest text-gray-500">Withdrawal Amount (EUR)</label>
                 <div className="relative">
                   <input
                     type="number"
+                    step="0.01"
                     value={formData.amount}
-                    onChange={(e) => setFormData(p => ({ ...p, amount: e.target.value }))}
-                    placeholder="0.00"
-                    className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xl font-black focus:border-emerald-500 outline-none transition-all text-white pr-16"
+                    onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="50.00"
+                    className="w-full bg-black border border-white/10 p-6 rounded-2xl text-2xl font-black focus:border-emerald-500 outline-none transition-colors"
                     required
                   />
-                  <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-[10px] text-gray-600 uppercase">EUR</span>
+                  <span className="absolute right-6 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-600">EUR</span>
                 </div>
               </div>
 
+              {/* Asset */}
               <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">Settlement Asset</label>
-                <div className="relative">
-                  <select
-                    value={formData.asset}
-                    onChange={(e) => setFormData(p => ({ ...p, asset: e.target.value }))}
-                    className="w-full bg-black border border-white/10 p-5 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none appearance-none cursor-pointer text-white focus:border-emerald-500"
-                  >
-                    <option value="USDT">USDT (TRC-20)</option>
-                    <option value="BTC">Bitcoin (Native)</option>
-                    <option value="SEPA">Euro Bank Wire</option>
-                  </select>
-                  <ChevronRight size={16} className="absolute right-6 top-1/2 -translate-y-1/2 rotate-90 text-gray-500 pointer-events-none" />
-                </div>
+                <label className="text-xs font-black uppercase tracking-widest text-gray-500">Receive As</label>
+                <select
+                  value={formData.asset}
+                  onChange={(e) => setFormData(prev => ({ ...prev, asset: e.target.value }))}
+                  className="w-full bg-black border border-white/10 p-6 rounded-2xl text-sm font-bold uppercase tracking-widest focus:border-emerald-500 outline-none"
+                >
+                  <option value="USDT">USDT (TRC-20)</option>
+                  <option value="BTC">Bitcoin</option>
+                  <option value="SEPA">SEPA Bank Transfer</option>
+                </select>
               </div>
             </div>
 
+            {/* Destination */}
             <div className="space-y-3">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-2">
-                {formData.asset === 'SEPA' ? 'IBAN / Swift Details' : `Destination ${formData.asset} Address`}
+              <label className="text-xs font-black uppercase tracking-widest text-gray-500">
+                {formData.asset === 'SEPA' ? 'IBAN / Bank Details' : `${formData.asset} Destination Address`}
               </label>
               <input
                 type="text"
                 value={formData.address}
-                onChange={(e) => setFormData(p => ({ ...p, address: e.target.value }))}
-                placeholder={formData.asset === 'SEPA' ? "DE00 0000..." : "Ox... or T..."}
-                className="w-full bg-black border border-white/10 p-5 rounded-2xl text-xs font-mono focus:border-emerald-500 outline-none transition-all text-white"
+                onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                placeholder={formData.asset === 'SEPA' ? "DE89370400440532013000" : "0x... or bc1..."}
+                className="w-full bg-black border border-white/10 p-6 rounded-2xl font-mono text-sm focus:border-emerald-500 outline-none"
                 required
               />
             </div>
 
             <button
+              type="submit"
               disabled={submitting}
-              className="w-full py-6 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+              className="w-full py-7 bg-emerald-500 hover:bg-emerald-600 disabled:bg-emerald-500/50 text-black font-black text-sm uppercase tracking-[1px] rounded-2xl transition-all flex items-center justify-center gap-3"
             >
-              {submitting ? <Loader2 className="animate-spin" size={18} /> : <ShieldCheck size={18} />}
-              {submitting ? "Processing Liquidation..." : "Execute Withdrawal Request"}
+              {submitting ? (
+                <Loader2 className="animate-spin" size={22} />
+              ) : (
+                <ShieldCheck size={22} />
+              )}
+              {submitting ? "Processing Request..." : "Submit Withdrawal Request"}
             </button>
           </form>
         </div>
 
-        {/* Info Sidebar */}
+        {/* Sidebar Info */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="p-8 bg-white/5 border border-white/5 rounded-[2.5rem] space-y-6">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-500 flex items-center gap-2">
-              <CheckCircle2 size={14} /> Audit Protocol
+          <div className="p-8 bg-white/5 border border-white/10 rounded-3xl space-y-6">
+            <h4 className="flex items-center gap-2 text-emerald-500 text-xs font-black uppercase tracking-widest">
+              <CheckCircle2 size={16} /> Security & Processing
             </h4>
-            <div className="space-y-4">
-              {[
-                { title: 'Processing Time', desc: 'Requests are audited within 2-24 hours for security.' },
-                { title: 'Network Fees', desc: 'A fixed 1% liquidation fee applies to all external transfers.' },
-                { title: 'Security Lock', desc: 'Large withdrawals may require secondary voice verification.' }
-              ].map((item, i) => (
-                <div key={i} className="border-l-2 border-emerald-500/20 pl-4 py-1">
-                  <p className="text-[10px] font-black uppercase text-white tracking-widest">{item.title}</p>
-                  <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">{item.desc}</p>
-                </div>
-              ))}
+            <div className="space-y-5 text-sm">
+              <div className="border-l-2 border-emerald-500/30 pl-5">
+                <p className="font-medium">Audit Time</p>
+                <p className="text-gray-500 text-xs">2 – 24 hours for security review</p>
+              </div>
+              <div className="border-l-2 border-emerald-500/30 pl-5">
+                <p className="font-medium">Fees</p>
+                <p className="text-gray-500 text-xs">Network fees + 1% liquidation fee apply</p>
+              </div>
+              <div className="border-l-2 border-emerald-500/30 pl-5">
+                <p className="font-medium">Irreversible</p>
+                <p className="text-gray-500 text-xs">Double-check destination before submitting</p>
+              </div>
             </div>
           </div>
 
-          <div className="p-8 bg-amber-500/5 border border-amber-500/10 rounded-[2.5rem] flex gap-4">
-            <AlertTriangle className="text-amber-500 shrink-0" size={20} />
-            <p className="text-[10px] text-amber-200/60 font-medium leading-relaxed uppercase tracking-widest">
-              Please verify your destination address carefully. Transfers to incorrect wallet addresses or bank accounts cannot be reversed by the vault node.
-            </p>
+          <div className="p-8 bg-amber-500/10 border border-amber-500/20 rounded-3xl">
+            <div className="flex gap-4">
+              <AlertTriangle className="text-amber-500 mt-1" size={24} />
+              <div>
+                <p className="font-medium text-amber-400">Important</p>
+                <p className="text-xs text-amber-400/70 leading-relaxed mt-2">
+                  Incorrect addresses or bank details cannot be recovered. All withdrawals undergo manual audit for security.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
