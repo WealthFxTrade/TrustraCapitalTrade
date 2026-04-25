@@ -1,6 +1,7 @@
 import express from 'express';
 import asyncHandler from 'express-async-handler';
 import { protect, admin } from '../middleware/authMiddleware.js';
+
 import {
   getPlatformStats,
   getAllUsers,
@@ -8,65 +9,73 @@ import {
   triggerYieldDistribution,
   getPendingKYCs,
   updateKYCStatus,
-  impersonateUser
+  impersonateUser,
+
+  // ✅ ADD THESE
+  getWithdrawalRequests,
+  approveWithdrawal,
+  rejectWithdrawal
+
 } from '../controllers/adminController.js';
 
 const router = express.Router();
 
-// ── PROTECTION & ADMIN MIDDLEWARE ──
-router.use(protect);  // Ensures user is logged in
-router.use(admin);    // Ensures user is admin
-
-// ── PLATFORM STATS / HEALTH ──
 /**
- * @desc Get platform health and AUM stats
- * @route GET /api/admin/health
+ * 🔐 GLOBAL PROTECTION
+ */
+router.use(protect);
+router.use(admin);
+
+/**
+ * ─────────────────────────────
+ * 📊 PLATFORM STATS
+ * ─────────────────────────────
  */
 router.get('/health', asyncHandler(getPlatformStats));
-
-/**
- * @desc Alias route for health stats
- * @route GET /api/admin/stats
- */
 router.get('/stats', asyncHandler(getPlatformStats));
 
-// ── USERS MANAGEMENT ──
 /**
- * @desc Get all registered users (Admin-only)
- * @route GET /api/admin/users
+ * ─────────────────────────────
+ * 👥 USER MANAGEMENT
+ * ─────────────────────────────
  */
 router.get('/users', asyncHandler(getAllUsers));
-
-/**
- * @desc Update user status (ban or activate)
- * @route PATCH /api/admin/user/:id/:action
- */
 router.patch('/user/:id/:action', asyncHandler(updateUserStatus));
 
-// ── YIELD / INVESTMENT MANAGEMENT ──
 /**
- * @desc Trigger global yield distribution
- * @route POST /api/admin/yield/trigger
+ * ─────────────────────────────
+ * 💸 WITHDRAWAL ENGINE (🔥 FIX)
+ * ─────────────────────────────
+ */
+
+// Get all withdrawals
+router.get('/withdrawals', asyncHandler(getWithdrawalRequests));
+
+// Approve withdrawal → triggers blockchain send
+router.put('/withdrawal/:id/approve', asyncHandler(approveWithdrawal));
+
+// Reject withdrawal → refund user
+router.put('/withdrawal/:id/reject', asyncHandler(rejectWithdrawal));
+
+/**
+ * ─────────────────────────────
+ * ⚙️ YIELD ENGINE
+ * ─────────────────────────────
  */
 router.post('/yield/trigger', asyncHandler(triggerYieldDistribution));
 
-// ── KYC MANAGEMENT ──
 /**
- * @desc Get pending KYC submissions
- * @route GET /api/admin/kyc/pending
+ * ─────────────────────────────
+ * 🪪 KYC SYSTEM
+ * ─────────────────────────────
  */
 router.get('/kyc/pending', asyncHandler(getPendingKYCs));
-
-/**
- * @desc Update KYC status of a user
- * @route PATCH /api/admin/kyc/update
- */
 router.patch('/kyc/update', asyncHandler(updateKYCStatus));
 
-// ── ADMIN IMPERSONATION ──
 /**
- * @desc Securely impersonate a user
- * @route POST /api/admin/impersonate/:userId
+ * ─────────────────────────────
+ * 🎭 ADMIN IMPERSONATION
+ * ─────────────────────────────
  */
 router.post('/impersonate/:userId', asyncHandler(impersonateUser));
 

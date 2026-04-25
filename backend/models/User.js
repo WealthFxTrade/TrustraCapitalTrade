@@ -2,93 +2,113 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: [true, 'Please add a name'],
-      trim: true
-    },
-    email: {
-      type: String,
-      required: [true, 'Please add an email'],
-      unique: true,
-      lowercase: true,
-      trim: true,
-      match: [/^\S+@\S+\.\S+$/, 'Please add a valid email'],
-    },
-    phoneNumber: { type: String, default: null, trim: true },
-    password: {
-      type: String,
-      required: [true, 'Please add a password'],
-      minlength: 8,
-      select: false
-    },
-    role: {
-      type: String,
-      enum: ['user', 'admin', 'superadmin'],
-      default: 'user'
-    },
-    isActive: { type: Boolean, default: true },
-    isBanned: { type: Boolean, default: false },
-    address_index: { type: Number, unique: true, sparse: true },      
-    
-    // 🛡️ SYNCED BALANCES - Matches Watchers & ROI Engine
-    balances: {
-      type: Map,
-      of: Number,
-      default: () => new Map([
-        ['EUR', 0],
-        ['BTC', 0],
-        ['ETH', 0],       // Added to match ethWatcher
-        ['USDT', 0],
-        ['INVESTED', 0],   // Principal for RioEngine
-        ['TOTAL_PROFIT', 0] // Synced with RioEngine logic
-      ]),
-    },
-
-    walletAddresses: {
-      type: Map,
-      of: String,
-      default: () => new Map([
-        ['BTC', ''],
-        ['ETH', ''],
-      ]),
-    },                                                                
-    twoFactorEnabled: { type: Boolean, default: false },
-    twoFactorSecret: { type: String, select: false },
-    failedLoginAttempts: { type: Number, default: 0 },
-    lockUntil: { type: Date },
-    sessions: [
-      {
-        token: String,
-        createdAt: { type: Date, default: Date.now },
-        userAgent: String,
-        ipAddress: String,
-        expiresAt: Date,
-      },
-    ],
-    activePlan: { type: String, default: 'None' },
-    kycStatus: {
-      type: String,
-      enum: ['unverified', 'pending', 'submitted', 'verified', 'rejected'],
-      default: 'unverified'
-    },
-    kycNotes: { type: String, default: null },
-    kycVerifiedAt: { type: Date, default: null },
-    idFrontUrl: { type: String, default: null },
-    idBackUrl: { type: String, default: null },
-    selfieUrl: { type: String, default: null },
-    resetPasswordToken: String,
-    resetPasswordExpire: Date,
+{
+  name: {
+    type: String,
+    required: true,
+    trim: true
   },
-  {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
-  }
+
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+
+  phoneNumber: {
+    type: String,
+    default: null
+  },
+
+  password: {
+    type: String,
+    required: true,
+    minlength: 8,
+    select: false
+  },
+
+  role: {
+    type: String,
+    enum: ['user', 'admin', 'superadmin'],
+    default: 'user'
+  },
+
+  isActive: { type: Boolean, default: true },
+  isBanned: { type: Boolean, default: false },
+
+  address_index: {
+    type: Number,
+    unique: true,
+    sparse: true
+  },
+
+  /**
+   * 💰 BALANCE ENGINE (LOCKED SYSTEM)
+   */
+  balances: {
+    EUR: { type: Number, default: 0 },
+    BTC: { type: Number, default: 0 },
+    ETH: { type: Number, default: 0 },
+    USDT: { type: Number, default: 0 },
+
+    LOCKED_EUR: { type: Number, default: 0 },
+    LOCKED_BTC: { type: Number, default: 0 },
+    LOCKED_ETH: { type: Number, default: 0 },
+    LOCKED_USDT: { type: Number, default: 0 },
+
+    INVESTED: { type: Number, default: 0 },
+    TOTAL_PROFIT: { type: Number, default: 0 },
+  },
+
+  /**
+   * 🔐 WALLET SYSTEM
+   */
+  walletAddresses: {
+    BTC: { type: String, default: '' },
+    ETH: { type: String, default: '' },
+    USDT: { type: String, default: '' },
+  },
+
+  /**
+   * 📈 INVESTMENT
+   */
+  investment: {
+    startDate: Date,
+    maturityDate: Date,
+    lockPeriodMonths: { type: Number, default: 12 },
+    lastYieldAt: Date
+  },
+
+  activePlan: {
+    type: String,
+    default: 'None'
+  },
+
+  /**
+   * 🪪 KYC
+   */
+  kycStatus: {
+    type: String,
+    enum: ['unverified', 'pending', 'submitted', 'verified', 'rejected'],
+    default: 'unverified'
+  },
+
+  /**
+   * 🔐 SECURITY
+   */
+  twoFactorEnabled: { type: Boolean, default: false },
+
+},
+{
+  timestamps: true
+}
 );
 
-// Password hashing
+/**
+ * 🔐 HASH PASSWORD
+ */
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password')) return next();
   const salt = await bcrypt.genSalt(12);
@@ -96,19 +116,27 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+/**
+ * 🔑 MATCH PASSWORD
+ */
+userSchema.methods.matchPassword = function (entered) {
+  return bcrypt.compare(entered, this.password);
 };
 
-// Virtuals for easier access in logic
-userSchema.virtual('btcAddress').get(function () {
-  return this.walletAddresses?.get('BTC') || null;
+/**
+ * ⚡ AUTO PLAN
+ */
+userSchema.pre('save', function (next) {
+  const invested = this.balances?.INVESTED || 0;
+
+  if (invested >= 50000) this.activePlan = 'Tier V: Sovereign';
+  else if (invested >= 15000) this.activePlan = 'Tier IV: Institutional';
+  else if (invested >= 5000) this.activePlan = 'Tier III: Prime';
+  else if (invested >= 1000) this.activePlan = 'Tier II: Core';
+  else if (invested >= 100) this.activePlan = 'Tier I: Entry';
+  else this.activePlan = 'None';
+
+  next();
 });
 
-userSchema.virtual('ethAddress').get(function () {
-  return this.walletAddresses?.get('ETH') || null;
-});
-
-const User = mongoose.model('User', userSchema);
-export default User;
-
+export default mongoose.model('User', userSchema);

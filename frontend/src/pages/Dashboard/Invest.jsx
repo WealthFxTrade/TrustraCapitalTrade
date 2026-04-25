@@ -1,51 +1,30 @@
-// frontend/src/pages/Dashboard/Invest.jsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+// src/pages/Dashboard/Invest.jsx
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import {
-  TrendingUp, ArrowRight, ShieldCheck, Loader2,
-  PlusCircle, Zap, LayoutDashboard, CheckCircle2
-} from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { TrendingUp } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api, { API_ENDPOINTS } from '../../constants/api';
 import toast from 'react-hot-toast';
 
-// Matches your backend RIO_DAILY_RATES keys exactly
 const INVESTMENT_PLANS = [
-  { name: 'Tier I: Entry', min: 250, rate: '0.02%', daily: 0.00020 },
-  { name: 'Tier II: Core', min: 1000, rate: '0.028%', daily: 0.00028 },
-  { name: 'Tier III: Prime', min: 5000, rate: '0.038%', daily: 0.00038 },
-  { name: 'Tier IV: Institutional', min: 25000, rate: '0.049%', daily: 0.00049 },
+  { name: 'Tier I: Entry', min: 100, daily: 0.00020, roi: '6–9%' },
+  { name: 'Tier II: Core', min: 1000, daily: 0.00028, roi: '9–12%' },
+  { name: 'Tier III: Prime', min: 5000, daily: 0.00038, roi: '12–16%' },
+  { name: 'Tier IV: Institutional', min: 15000, daily: 0.00049, roi: '16–20%' },
+  { name: 'Tier V: Sovereign', min: 50000, daily: 0.00061, roi: '20–25%' },
 ];
 
 export default function Invest({ balances, refreshBalances }) {
-  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
 
-  // Synced with Backend keys
-  const [localBalances, setLocalBalances] = useState({
-    EUR: Number(balances?.EUR || 0),           // Available to spend
-    TOTAL_PROFIT: Number(balances?.ROI || 0), // Accrued ROI
-    INVESTED: Number(balances?.INVESTED || 0) // Principal locked
-  });
+  const availableEUR = Number(balances?.EUR || 0);
+  const accruedProfit = Number(balances?.ROI || 0);
+  const principal = Number(balances?.INVESTED || 0);
 
-  useEffect(() => {
-    if (balances) {
-      setLocalBalances({
-        EUR: Number(balances.EUR || 0),
-        TOTAL_PROFIT: Number(balances.ROI || 0),
-        INVESTED: Number(balances.INVESTED || 0)
-      });
-    }
-  }, [balances]);
-
-  /**
-   * CREATE NEW INVESTMENT (Buy Plan)
-   */
   const handleInvest = async (plan) => {
-    if (localBalances.EUR < plan.min) {
-      toast.error(`Minimum for ${plan.name} is €${plan.min.toLocaleString()}`);
+    if (availableEUR < plan.min) {
+      toast.error(`Minimum investment for \( {plan.name} is € \){plan.min.toLocaleString()}`);
       return;
     }
 
@@ -59,38 +38,35 @@ export default function Invest({ balances, refreshBalances }) {
         currency: 'EUR'
       });
 
-      if (res.data.success) {
-        toast.success(`${plan.name} Activated Successfully!`, { id: tid });
-        if (refreshBalances) refreshBalances();
-        setTimeout(() => navigate('/dashboard'), 2000);
+      if (res.data?.success) {
+        toast.success(`${plan.name} activated successfully!`, { id: tid });
+        refreshBalances?.();
+        setTimeout(() => navigate('/dashboard'), 1500);
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || "Investment failed", { id: tid });
+      toast.error(err.response?.data?.message || 'Investment failed', { id: tid });
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * COMPOUND ROI (Move TOTAL_PROFIT to INVESTED)
-   */
   const handleCompound = async () => {
-    if (localBalances.TOTAL_PROFIT < 50) {
-      toast.error("Minimum €50.00 in accrued profit required for compounding.");
+    if (accruedProfit < 10) {
+      toast.error('Minimum €10 required to compound');
       return;
     }
 
     setLoading(true);
-    const tid = toast.loading("Executing compounding protocol...");
+    const tid = toast.loading('Compounding profit...');
 
     try {
-      const res = await api.post('/api/users/compound'); // Adjust to your actual compound route
-      if (res.data.success) {
-        toast.success("ROI compounded into Principal", { id: tid });
-        if (refreshBalances) refreshBalances();
+      const res = await api.post('/api/users/compound');
+      if (res.data?.success) {
+        toast.success('Profit compounded successfully!', { id: tid });
+        refreshBalances?.();
       }
     } catch (err) {
-      toast.error("Compounding failed", { id: tid });
+      toast.error(err.response?.data?.message || 'Compounding failed', { id: tid });
     } finally {
       setLoading(false);
     }
@@ -98,62 +74,74 @@ export default function Invest({ balances, refreshBalances }) {
 
   return (
     <div className="space-y-12 pb-20">
-      {/* SECTION 1: COMPANION BALANCES */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-8">
-          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-500 mb-2">Accrued Profit</p>
-          <h2 className="text-5xl font-black tracking-tighter">€{localBalances.TOTAL_PROFIT.toLocaleString('de-DE')}</h2>
-          <button 
+      {/* Balance Cards */}
+      <div className="grid md:grid-cols-3 gap-6">
+        <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+          <p className="text-xs text-gray-500 uppercase tracking-widest">Available Capital</p>
+          <p className="text-5xl font-black mt-3">€{availableEUR.toLocaleString('de-DE')}</p>
+        </div>
+
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-3xl p-8">
+          <p className="text-xs text-emerald-500 uppercase tracking-widest">Accrued Profit</p>
+          <p className="text-5xl font-black text-emerald-400 mt-3">€{accruedProfit.toLocaleString('de-DE')}</p>
+
+          <button
             onClick={handleCompound}
-            disabled={loading || localBalances.TOTAL_PROFIT < 50}
-            className="mt-8 w-full py-4 bg-emerald-500 text-black font-black text-xs uppercase tracking-widest rounded-2xl hover:bg-emerald-400 transition-all disabled:opacity-30"
+            disabled={loading || accruedProfit < 10}
+            className="mt-8 w-full py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-700 text-black font-bold rounded-2xl transition"
           >
-            Compound into Principal
+            Compound Profit
           </button>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 flex flex-col justify-center">
-          <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">Available for Investment</p>
-          <h2 className="text-5xl font-black tracking-tighter">€{localBalances.EUR.toLocaleString('de-DE')}</h2>
-          <p className="mt-4 text-xs text-gray-500">Inject liquidity via the Deposit tab to activate higher tiers.</p>
+        <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
+          <p className="text-xs text-gray-500 uppercase tracking-widest">Principal Invested</p>
+          <p className="text-5xl font-black mt-3">€{principal.toLocaleString('de-DE')}</p>
         </div>
       </div>
 
-      {/* SECTION 2: INVESTMENT TIERS */}
+      {/* Investment Tiers */}
       <div>
-        <h3 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-8 flex items-center gap-3">
-          <TrendingUp size={16} /> Available Capital Tiers
+        <h3 className="text-xs uppercase text-gray-500 mb-6 flex items-center gap-2">
+          <TrendingUp size={16} /> CAPITAL TIERS
         </h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {INVESTMENT_PLANS.map((plan) => (
-            <motion.div 
-              key={plan.name}
-              whileHover={{ y: -5 }}
-              className="bg-[#0a0c10] border border-white/10 p-8 rounded-3xl flex flex-col justify-between group hover:border-emerald-500/50 transition-all"
-            >
-              <div>
-                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-4">{plan.rate} Daily Yield</p>
-                <h4 className="text-xl font-black tracking-tight mb-2">{plan.name}</h4>
-                <p className="text-2xl font-black text-white mb-6">€{plan.min.toLocaleString()}<span className="text-xs text-gray-600 font-medium"> min</span></p>
-              </div>
-              
-              <button 
-                onClick={() => handleInvest(plan)}
-                disabled={loading || localBalances.EUR < plan.min}
-                className={`w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                  localBalances.EUR >= plan.min 
-                  ? 'bg-white text-black hover:bg-emerald-500' 
-                  : 'bg-white/5 text-gray-600 cursor-not-allowed'
-                }`}
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {INVESTMENT_PLANS.map((plan) => {
+            const canActivate = availableEUR >= plan.min;
+
+            return (
+              <motion.div
+                key={plan.name}
+                whileHover={{ y: -4 }}
+                className="bg-black border border-white/10 rounded-3xl p-8 hover:border-emerald-500/40 transition-all"
               >
-                {localBalances.EUR >= plan.min ? 'Activate Node' : 'Insufficient EUR'}
-              </button>
-            </motion.div>
-          ))}
+                <p className="text-emerald-400 text-sm">{plan.roi} Annual ROI</p>
+                <h4 className="text-2xl font-bold mt-3">{plan.name}</h4>
+
+                <div className="mt-8">
+                  <p className="text-5xl font-black">€{plan.min.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Daily Yield: {(plan.daily * 100).toFixed(3)}%
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => handleInvest(plan)}
+                  disabled={!canActivate || loading}
+                  className={`mt-10 w-full py-4 rounded-2xl text-sm font-bold transition-all ${
+                    canActivate 
+                      ? 'bg-white text-black hover:bg-emerald-500 hover:text-white' 
+                      : 'bg-white/10 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  {canActivate ? 'Activate Plan' : 'Insufficient Balance'}
+                </button>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     </div>
   );
 }
-
