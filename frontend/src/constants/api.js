@@ -8,44 +8,42 @@ import axios from 'axios';
 const getBaseURL = () => {
   const { hostname, protocol } = window.location;
 
-  // 1. PRODUCTION ASSETS
-  // Add all live domains here. If the browser is on these domains, it hits Render.
+  // 1️⃣ PRODUCTION HOSTS
+  // Add all live domains here. If the browser is on these domains, it hits the production backend.
   const productionHosts = [
     'trustracapitaltrade.online',
     'www.trustracapitaltrade.online',
-    'trustra-capital-trade.vercel.app',
-    '://trustracapitaltrade-backend.onrender.com'
+    'trustra-capital-trade.vercel.app'
   ];
 
   if (productionHosts.includes(hostname)) {
-    // Production Cloud Node (Render)
-    return 'https://trustracapitaltrade-backend.onrender.com';
+    // Explicit production backend API URL
+    return 'https://trustracapitaltrade-backend.onrender.com/api';
   }
 
-  // 2. DEVELOPMENT ASSETS
-  // If on localhost, 127.0.0.1, or local network (e.g. 192.168.x.x), it hits local port 10000.
-  // This allows you to test on your phone/tablet by using your PC's IP address.
+  // 2️⃣ DEVELOPMENT HOSTS
+  // If on localhost, 127.0.0.1, or local network, hit the local backend port
   return `${protocol}//${hostname}:10000/api`;
 };
 
 /**
  * Institutional API Endpoints
- * Synchronized with backend routes in userController and authController.
+ * Must stay synchronized with backend routes.
  */
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
     LOGOUT: '/auth/logout',
-    PROFILE: '/auth/profile', 
+    PROFILE: '/auth/profile',
   },
   USER: {
-    STATS: '/users/stats',           // Main dashboard data
-    TRANSACTIONS: '/users/ledger',   // Audit history
+    STATS: '/users/stats',           // Dashboard stats
+    TRANSACTIONS: '/users/ledger',   // Ledger / transaction history
     COMPOUND: '/users/compound',     // Reinvestment protocol
-    WITHDRAW: '/users/withdraw',     // Liquidation
-    DEPOSIT_ADDRESS: '/users/deposit-address', 
-    PROFILE: '/users/profile',       // Identity update
+    WITHDRAW: '/users/withdraw',     // Withdrawals
+    DEPOSIT_ADDRESS: '/users/deposit-address', // Deposit address
+    PROFILE: '/users/profile',       // Profile update
   },
   ADMIN: {
     USERS: '/admin/users',
@@ -55,19 +53,19 @@ export const API_ENDPOINTS = {
 };
 
 /**
- * Axios Instance Configuration
+ * Axios Instance
  */
 const api = axios.create({
   baseURL: getBaseURL(),
-  withCredentials: true, // Crucial for cross-origin session persistence
+  withCredentials: true, // Important for cross-origin session cookies
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 /**
- * REQUEST INTERCEPTOR: Bearer Token Injection
- * Attaches the cryptographic identity token to every outgoing secure request.
+ * REQUEST INTERCEPTOR
+ * Attaches Bearer token to secure requests
  */
 api.interceptors.request.use(
   (config) => {
@@ -81,12 +79,12 @@ api.interceptors.request.use(
 );
 
 /**
- * RESPONSE INTERCEPTOR: Persistence & Session Guardianship
- * Automatically logs users out if the session key is revoked or expired.
+ * RESPONSE INTERCEPTOR
+ * Handles token refresh, session expiry, and auto-logout
  */
 api.interceptors.response.use(
   (response) => {
-    // Sync fresh tokens from rotation if the backend provides them
+    // Sync fresh token if provided by backend
     if (response.data?.token) {
       localStorage.setItem('trustra_token', response.data.token);
     }
@@ -95,20 +93,19 @@ api.interceptors.response.use(
   (error) => {
     const { response } = error;
 
-    // 401 Unauthorized Logic (Vault Session Timeout)
+    // 401 Unauthorized → Session expired / token revoked
     if (response?.status === 401) {
       const publicPaths = ['/login', '/register', '/', '/auth/reset-password'];
       const currentPath = window.location.pathname;
 
-      // Only force logout if the user is currently in a protected route
       if (!publicPaths.includes(currentPath)) {
-        console.warn('Node Identity Revoked. Clearing Local Ledger...');
+        console.warn('Session expired. Clearing local token...');
         localStorage.removeItem('trustra_token');
-        
-        // Dispatch event for AuthContext to reset state
+
+        // Dispatch custom event for AuthContext or global state
         window.dispatchEvent(new Event('vault-auth-expired'));
 
-        // Instant fail-safe redirect to prevent dashboard "ghosting"
+        // Redirect to login if user is on dashboard or protected route
         if (currentPath.startsWith('/dashboard')) {
           window.location.href = '/login?reason=session_expired';
         }
@@ -120,4 +117,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-
