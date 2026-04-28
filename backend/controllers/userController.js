@@ -14,13 +14,12 @@ export const getUserStats = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id).lean();
 
   if (!user) {
-    return res.status(404).json({ 
-      success: false, 
-      message: 'User identity not found' 
+    return res.status(404).json({
+      success: false,
+      message: 'User identity not found'
     });
   }
 
-  // balances is a plain object in your schema
   const balances = user.balances || {};
 
   const transactions = await Transaction.find({ user: req.user._id })
@@ -35,10 +34,8 @@ export const getUserStats = asyncHandler(async (req, res) => {
     accruedROI: Number(balances.TOTAL_PROFIT || 0),
     btcBalance: Number(balances.BTC || 0),
     ethBalance: Number(balances.ETH || 0),
-
-    balances,                    // raw balances for debugging
+    balances, 
     transactions,
-
     activePlan: user.activePlan || 'None',
     kycStatus: user.kycStatus || 'unverified',
   });
@@ -89,7 +86,6 @@ export const getDepositAddress = asyncHandler(async (req, res) => {
       address = deriveEthAddress(user.address_index).address;
     }
 
-    // Initialize walletAddresses if it doesn't exist
     user.walletAddresses = user.walletAddresses || {};
     user.walletAddresses[asset] = address;
 
@@ -115,7 +111,6 @@ export const getDepositAddress = asyncHandler(async (req, res) => {
  */
 export const compoundYield = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-
   const balances = user.balances || {};
   const profit = Number(balances.TOTAL_PROFIT || 0);
 
@@ -125,7 +120,6 @@ export const compoundYield = asyncHandler(async (req, res) => {
 
   const invested = Number(balances.INVESTED || 0);
 
-  // Update balances
   user.balances = user.balances || {};
   user.balances.TOTAL_PROFIT = 0;
   user.balances.INVESTED = invested + profit;
@@ -159,7 +153,6 @@ export const compoundYield = asyncHandler(async (req, res) => {
  */
 export const requestWithdrawal = asyncHandler(async (req, res) => {
   const { amount, address } = req.body;
-
   const user = await User.findById(req.user._id);
   const balances = user.balances || {};
   const currentBalance = Number(balances.EUR || 0);
@@ -172,7 +165,6 @@ export const requestWithdrawal = asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, message: 'Insufficient balance' });
   }
 
-  // Update balance
   user.balances = user.balances || {};
   user.balances.EUR = currentBalance - amount;
 
@@ -202,7 +194,6 @@ export const getUserProfile = asyncHandler(async (req, res) => {
 
 export const updateUserProfile = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-
   user.name = req.body.name || user.name;
   user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
 
@@ -211,33 +202,25 @@ export const updateUserProfile = asyncHandler(async (req, res) => {
   }
 
   await user.save();
-
   res.status(200).json({ success: true, user });
 });
 
 /**
  * ===============================
  * SEED GERY BALANCES
- * Available: €85,000 | Profit: €15,550 | Principal: €25,000
- * Total: €125,550
- * POST /api/users/seed-gery
  * ===============================
  */
 export const seedGeryBalances = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
 
   if (!user) {
-    return res.status(404).json({ 
-      success: false, 
-      message: 'User not found' 
-    });
+    return res.status(404).json({ success: false, message: 'User not found' });
   }
 
-  // Set balances as plain object to match your schema
   user.balances = {
-    EUR: 85000,           // Available Balance
-    INVESTED: 25000,      // Principal
-    TOTAL_PROFIT: 15550,  // Accrued Profit
+    EUR: 85000,           
+    INVESTED: 25000,      
+    TOTAL_PROFIT: 15550,  
     BTC: 0.45,
     ETH: 2.15,
     USDT: 5000,
@@ -247,14 +230,9 @@ export const seedGeryBalances = asyncHandler(async (req, res) => {
 
   res.json({
     success: true,
-    message: '✅ Gery balances seeded successfully! Total Capital = €125,550',
+    message: '✅ Gery balances seeded successfully!',
     totalCapital: 125550,
-    breakdown: {
-      availableEUR: 85000,
-      principal: 25000,
-      accruedProfit: 15550,
-      total: 125550
-    },
     rawBalances: user.balances
   });
 });
+

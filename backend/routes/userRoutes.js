@@ -8,35 +8,29 @@ import {
   requestWithdrawal,
   getUserProfile,
   updateUserProfile,
-  getDepositAddress
+  getDepositAddress,
+  seedGeryBalances // Crucial import for balance seeding
 } from '../controllers/userController.js';
 
-/**
- * PROTECT ALL ROUTES BELOW
- * Every endpoint in this file requires a valid 'trustra_token'
- */
+// Protect all routes
 router.use(protect);
 
-// Dashboard Metrics (Balances & Stats)
+// Dashboard & Ledger
 router.get('/stats', getUserStats);
+router.get('/ledger', getLedger);
 
-// Audit Ledger (Transaction History)
-router.get('/transactions', getLedger);
-
-// Vault Services (Deposits & Withdrawals)
+// Vault & Reinvestment
 router.get('/deposit-address', getDepositAddress);
 router.post('/withdraw', requestWithdrawal);
-
-// Strategic Reinvestment (Yield Management)
 router.post('/compound', compoundYield);
 
-/**
- * PROFILE MANAGEMENT
- * .get() fetches the verified user data
- * .put() updates profile information
- */
+// Profile Management
 router.route('/profile')
   .get(getUserProfile)
   .put(updateUserProfile);
 
+// ✅ Special Endpoint for Gery Balance Seeding
+router.post('/seed-gery', seedGeryBalances);
+
 export default router;
+
