@@ -44,6 +44,7 @@ export default function Profile() {
 
       if (res.data?.success) {
         const data = res.data;
+
         setStats({
           principal: Number(data.principal || 0),
           availableBalance: Number(data.availableBalance || 0),
@@ -54,8 +55,7 @@ export default function Profile() {
         });
       }
     } catch (err) {
-      console.error('Profile stats error:', err);
-      // Don't show toast on every render - only on critical failure
+      console.error('Profile stats error:', err.response || err);
     }
   }, []);
 
@@ -86,12 +86,12 @@ export default function Profile() {
         payload.password = profile.password;
       }
 
-      const res = await api.put(API_ENDPOINTS.USER.PROFILE || '/api/users/profile', payload);
+      const res = await api.put(API_ENDPOINTS.USER.PROFILE, payload);
 
       if (res.data?.success) {
         toast.success('Profile updated successfully', { id: tid });
 
-        // Update global auth context
+        // Update global user
         setUser((prev) => ({
           ...prev,
           name: profile.name,
@@ -105,11 +105,21 @@ export default function Profile() {
           confirmPassword: '',
         }));
 
-        // Optional: Refresh session
-        if (refreshSession) refreshSession();
+        // Refresh session if needed
+        if (refreshSession) {
+          await refreshSession();
+        }
+      } else {
+        toast.error(res.data?.message || 'Profile update failed', { id: tid });
       }
     } catch (err) {
-      const msg = err?.response?.data?.message || 'Profile update failed';
+      console.error('PROFILE UPDATE ERROR:', err.response || err);
+
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Network error. Please try again.';
+
       toast.error(msg, { id: tid });
     } finally {
       setLoading(false);
@@ -131,29 +141,36 @@ export default function Profile() {
               €{stats.availableBalance.toLocaleString('de-DE')}
             </p>
           </div>
+
           <div>
             <p className="text-gray-500">Principal</p>
             <p className="text-2xl font-bold text-white">
               €{stats.principal.toLocaleString('de-DE')}
             </p>
           </div>
+
           <div>
             <p className="text-gray-500">Accrued Profit</p>
             <p className="text-2xl font-bold text-emerald-400">
               €{stats.profit.toLocaleString('de-DE')}
             </p>
           </div>
+
           <div>
             <p className="text-gray-500">Bitcoin</p>
             <p className="text-xl font-mono">{stats.btc.toFixed(8)} BTC</p>
           </div>
+
           <div>
             <p className="text-gray-500">Ethereum</p>
             <p className="text-xl font-mono">{stats.eth.toFixed(4)} ETH</p>
           </div>
+
           <div>
             <p className="text-gray-500">USDT</p>
-            <p className="text-xl font-mono">€{stats.usdt.toLocaleString('de-DE')}</p>
+            <p className="text-xl font-mono">
+              €{stats.usdt.toLocaleString('de-DE')}
+            </p>
           </div>
         </div>
       </div>
@@ -165,71 +182,52 @@ export default function Profile() {
         </h3>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div>
-            <label className="block text-xs text-gray-500 mb-2">Full Name</label>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-              <input
-                type="text"
-                value={profile.name}
-                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-500 focus:border-emerald-500 outline-none"
-                placeholder="Enter your full name"
-              />
-            </div>
-          </div>
+          <input
+            type="text"
+            value={profile.name}
+            onChange={(e) =>
+              setProfile({ ...profile, name: e.target.value })
+            }
+            placeholder="Full Name"
+            className="w-full bg-black border border-white/10 rounded-2xl py-4 px-4"
+          />
 
-          <div>
-            <label className="block text-xs text-gray-500 mb-2">Phone Number</label>
-            <div className="relative">
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-              <input
-                type="tel"
-                value={profile.phoneNumber}
-                onChange={(e) => setProfile({ ...profile, phoneNumber: e.target.value })}
-                className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-500 focus:border-emerald-500 outline-none"
-                placeholder="+32 000 00 00 00"
-              />
-            </div>
-          </div>
+          <input
+            type="tel"
+            value={profile.phoneNumber}
+            onChange={(e) =>
+              setProfile({ ...profile, phoneNumber: e.target.value })
+            }
+            placeholder="Phone Number"
+            className="w-full bg-black border border-white/10 rounded-2xl py-4 px-4"
+          />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs text-gray-500 mb-2">New Password</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-                <input
-                  type="password"
-                  value={profile.password}
-                  onChange={(e) => setProfile({ ...profile, password: e.target.value })}
-                  className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-500 focus:border-emerald-500 outline-none"
-                  placeholder="New password (optional)"
-                />
-              </div>
-            </div>
+          <input
+            type="password"
+            value={profile.password}
+            onChange={(e) =>
+              setProfile({ ...profile, password: e.target.value })
+            }
+            placeholder="New Password"
+            className="w-full bg-black border border-white/10 rounded-2xl py-4 px-4"
+          />
 
-            <div>
-              <label className="block text-xs text-gray-500 mb-2">Confirm New Password</label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
-                <input
-                  type="password"
-                  value={profile.confirmPassword}
-                  onChange={(e) => setProfile({ ...profile, confirmPassword: e.target.value })}
-                  className="w-full bg-black border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder-gray-500 focus:border-emerald-500 outline-none"
-                  placeholder="Confirm password"
-                />
-              </div>
-            </div>
-          </div>
+          <input
+            type="password"
+            value={profile.confirmPassword}
+            onChange={(e) =>
+              setProfile({ ...profile, confirmPassword: e.target.value })
+            }
+            placeholder="Confirm Password"
+            className="w-full bg-black border border-white/10 rounded-2xl py-4 px-4"
+          />
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-6 py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-600 text-black font-bold rounded-2xl flex items-center justify-center gap-3 transition-all"
+            className="w-full py-4 bg-emerald-500 rounded-2xl font-bold"
           >
-            <Save size={18} />
-            {loading ? 'Saving Changes...' : 'Save Profile'}
+            {loading ? 'Saving...' : 'Save Profile'}
           </button>
         </form>
       </div>
