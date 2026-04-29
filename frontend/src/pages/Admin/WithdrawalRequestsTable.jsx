@@ -44,15 +44,15 @@ export default function WithdrawalRequestsTable() {
 
     setProcessingId(id);
     const toastId = toast.loading(`Executing Outbound Protocol: ${action.toUpperCase()}...`);
-    
+
     try {
-      // Standardized with your controller: /admin/withdrawal/:id/approve or reject
-      const endpoint = action === 'approve' 
-        ? API_ENDPOINTS.ADMIN.APPROVE_WITHDRAWAL(id) 
+      // Standardized with your controller logic
+      const endpoint = action === 'approve'
+        ? API_ENDPOINTS.ADMIN.APPROVE_WITHDRAWAL(id)
         : API_ENDPOINTS.ADMIN.REJECT_WITHDRAWAL(id);
-      
-      await api.put(endpoint); // Using PUT to match your KYC/User update pattern
-      
+
+      await api.put(endpoint);
+
       toast.success(`Liquidity Outbound: ${action.toUpperCase()} Successful`, { id: toastId });
       fetchWithdrawals();
     } catch (err) {
@@ -69,7 +69,7 @@ export default function WithdrawalRequestsTable() {
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="space-y-8 animate-in fade-in duration-700 pb-20">
       {/* ── HEADER ── */}
       <div className="flex flex-col lg:flex-row justify-between items-end gap-6 px-2">
         <div>
@@ -92,8 +92,8 @@ export default function WithdrawalRequestsTable() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <button 
-            onClick={fetchWithdrawals} 
+          <button
+            onClick={fetchWithdrawals}
             className="p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-rose-500 hover:text-white transition-all group"
           >
             <RefreshCw size={20} className={`${loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
@@ -165,7 +165,7 @@ export default function WithdrawalRequestsTable() {
                         <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500 bg-emerald-500/5 self-start px-2 py-0.5 rounded border border-emerald-500/10">
                           {r.asset || r.method || 'SEPA/BANK'}
                         </span>
-                        <span className="text-[10px] text-gray-500 font-mono truncate w-48" title={r.address}>
+                        <span className="text-[10px] text-gray-500 font-mono truncate w-64" title={r.address}>
                           {r.address || 'Standard SEPA Linked Account'}
                         </span>
                       </div>
@@ -173,29 +173,27 @@ export default function WithdrawalRequestsTable() {
 
                     <td className="px-10 py-8 text-right">
                       {r.status === 'pending' ? (
-                        <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
                           <button
+                            onClick={() => handleAction(r._id, 'reject')}
                             disabled={processingId === r._id}
-                            onClick={() => handleAction(r._id, 'approve')}
-                            className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-500 hover:bg-emerald-500 hover:text-black transition-all shadow-[0_0_20px_rgba(16,185,129,0.1)]"
-                            title="Approve Redemption"
+                            className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-2xl hover:bg-rose-500 hover:text-white transition-all disabled:opacity-30"
                           >
-                            {processingId === r._id ? <RefreshCw className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                            <XCircle size={20} />
                           </button>
                           <button
+                            onClick={() => handleAction(r._id, 'approve')}
                             disabled={processingId === r._id}
-                            onClick={() => handleAction(r._id, 'reject')}
-                            className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 hover:bg-rose-500 hover:text-white transition-all"
-                            title="Reject Redemption"
+                            className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-2xl hover:bg-emerald-500 hover:text-black transition-all disabled:opacity-30"
                           >
-                            {processingId === r._id ? <RefreshCw className="animate-spin" size={18} /> : <XCircle size={18} />}
+                            <CheckCircle2 size={20} />
                           </button>
                         </div>
                       ) : (
-                        <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-xl border ${
-                          r.status === 'completed' || r.status === 'approved' 
-                            ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/5' 
-                            : 'text-rose-500 border-rose-500/20 bg-rose-500/5'
+                        <span className={`text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl border ${
+                          r.status === 'approved' 
+                            ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-500' 
+                            : 'bg-rose-500/5 border-rose-500/20 text-rose-500'
                         }`}>
                           {r.status}
                         </span>
@@ -206,6 +204,17 @@ export default function WithdrawalRequestsTable() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* ── SECURITY FOOTER ── */}
+      <div className="flex items-center gap-4 p-8 bg-white/5 border border-white/5 rounded-[2.5rem]">
+        <ShieldAlert className="text-rose-500" size={24} />
+        <div>
+          <p className="text-[10px] font-black text-white uppercase tracking-widest">Manual Liquidity Protocol</p>
+          <p className="text-[9px] text-gray-600 uppercase font-bold mt-1">
+            Always verify the destination node address before authorizing outbound capital transfers.
+          </p>
         </div>
       </div>
     </div>

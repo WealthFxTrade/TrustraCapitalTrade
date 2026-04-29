@@ -7,7 +7,7 @@ import { Toaster } from 'react-hot-toast';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import AdminRoute from './components/routing/AdminRoute';
 
-// Layouts
+// Layout
 import MainLayout from './components/layout/MainLayout';
 
 // Public Pages
@@ -20,7 +20,7 @@ import ResetPassword from './pages/Auth/ResetPassword';
 // User Dashboard Pages
 import UserDashboard from './pages/Dashboard/Dashboard';
 import Deposit from './pages/Dashboard/Deposit';
-import Withdrawal from './pages/Dashboard/WithdrawalForm';
+import Withdrawal from './pages/Dashboard/Withdrawal';
 import UserProfile from './pages/Dashboard/Profile';
 import Ledger from './pages/Dashboard/Ledger';
 
@@ -39,7 +39,6 @@ import {
 function App() {
   return (
     <>
-      {/* Global Notification System */}
       <Toaster
         position="top-right"
         toastOptions={{
@@ -55,18 +54,14 @@ function App() {
       />
 
       <Routes>
-        {/* ====================== PUBLIC ROUTES ====================== */}
+        {/* ================= PUBLIC ROUTES ================= */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Signup />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* ====================== PROTECTED UNIFIED LAYOUT ====================== */}
-        {/* Both User and Admin routes live inside this Route group. 
-            MainLayout will automatically detect the user's role 
-            and swap the Sidebar/Theme dynamically.
-        */}
+        {/* ================= PROTECTED LAYOUT ================= */}
         <Route
           element={
             <ProtectedRoute>
@@ -74,35 +69,28 @@ function App() {
             </ProtectedRoute>
           }
         >
-          {/* --- User Space --- */}
+          {/* -------- USER ROUTES -------- */}
           <Route path="/dashboard" element={<UserDashboard />} />
           <Route path="/dashboard/deposit" element={<Deposit />} />
           <Route path="/dashboard/withdrawal" element={<Withdrawal />} />
           <Route path="/dashboard/profile" element={<UserProfile />} />
           <Route path="/dashboard/ledger" element={<Ledger />} />
 
-          {/* --- Admin Space (Double Layer Protection) --- */}
-          {/* Admin Index Redirect */}
-          <Route 
-            path="/admin" 
-            element={
-              <AdminRoute>
-                <Navigate to="/admin/dashboard" replace />
-              </AdminRoute>
-            } 
-          />
-          
-          <Route path="/admin/dashboard" element={<AdminRoute><AdminOverview /></AdminRoute>} />
-          <Route path="/admin/users" element={<AdminRoute><AdminUserTable /></AdminRoute>} />
-          <Route path="/admin/users/:id" element={<AdminRoute><UserIdentityDetail /></AdminRoute>} />
-          <Route path="/admin/withdrawals" element={<AdminRoute><WithdrawalRequestsTable /></AdminRoute>} />
-          <Route path="/admin/deposits" element={<AdminRoute><DepositRequestsTable /></AdminRoute>} />
-          <Route path="/admin/kyc" element={<AdminRoute><KycVerificationQueue /></AdminRoute>} />
-          <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
-          <Route path="/admin/health" element={<AdminRoute><SystemHealth /></AdminRoute>} />
+          {/* -------- ADMIN ROUTES -------- */}
+          <Route element={<AdminRoute />}>
+            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/admin/dashboard" element={<AdminOverview />} />
+            <Route path="/admin/users" element={<AdminUserTable />} />
+            <Route path="/admin/users/:id" element={<UserIdentityDetail />} />
+            <Route path="/admin/withdrawals" element={<WithdrawalRequestsTable />} />
+            <Route path="/admin/deposits" element={<DepositRequestsTable />} />
+            <Route path="/admin/kyc" element={<KycVerificationQueue />} />
+            <Route path="/admin/settings" element={<AdminSettings />} />
+            <Route path="/admin/health" element={<SystemHealth />} />
+          </Route>
         </Route>
 
-        {/* ====================== FALLBACK ====================== */}
+        {/* ================= FALLBACK ================= */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
