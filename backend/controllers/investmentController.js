@@ -6,20 +6,43 @@ import { ApiError } from '../middleware/errorMiddleware.js';
 
 /**
  * ── CREATE INVESTMENT ──
- * Deducts EUR and moves it to the INVESTED vault for ROI generation
+ * Atomic operation to deduct EUR and move it to the INVESTED vault
  */
 export const createInvestment = async (req, res, next) => {
   try {
     const { amount, planKey, planName, durationDays, currency = 'EUR' } = req.body;
     const userId = req.user._id;
 
-    // 1. Validate Balance
-    const user = await User.findById(userId);
-    const userBalance = user.balances.get(currency) || 0;
-    if (userBalance < amount) throw new ApiError(400, 'Insufficient vault balance');
+    if (!amount || amount <= 0) throw new ApiError(400, 'Invalid investment amount');
 
-    // 2. Process Deduction & Ledger Entry
-    // This handles the Transaction record and the decrement of EUR
+    /**
+     * 1. ATOMIC DEDUCTION & VAULT TRANSFER
+     * We only update the user if their balance is greater than or equal to the amount.
+     * This prevents race conditions and double-spending.
+     */
+    const updatedUser = await User.findOneAndUpdate(
+      { 
+        _id: userId, 
+        [`balances.${currency}`]: { $gte: amount } 
+      },
+      {
+        $inc: { 
+          [`balances.${currency}`]: -Number(amount),
+          'balances.INVESTED': Number(amount) 
+        },
+        $set: { activePlan: planName } // Tier I: Entry, etc.
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      throw new ApiError(400, 'Insufficient vault balance or account error');
+    }
+
+    /**
+     * 2. LEDGER RECORDING
+     * Create the transaction history entry for the user.
+     */
     await applyTransaction({
       userId,
       type: 'investment',
@@ -29,18 +52,10 @@ export const createInvestment = async (req, res, next) => {
       description: `Capital Commitment: ${planName}`,
     });
 
-    // 3. Move Funds to INVESTED & Set Active Plan
-    // This is the "Bridge" to the RIO Engine
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      {
-        $inc: { 'balances.INVESTED': Number(amount) },
-        $set: { activePlan: planName } // Sets the tier for the ROI engine
-      },
-      { new: true }
-    );
-
-    // 4. Create Investment Record
+    /**
+     * 3. INVESTMENT LOGGING
+     * Create a detailed record of the investment plan.
+     */
     const investment = await Investment.create({
       user: userId,
       planKey,
@@ -51,20 +66,22 @@ export const createInvestment = async (req, res, next) => {
       status: 'active'
     });
 
-    // 5. Real-Time Sync to Dashboard
+    /**
+     * 4. REAL-TIME SYNC
+     * Immediately push updated balances to the user's dashboard via Socket.io
+     */
     const io = req.app.get('io');
-    if (io && updatedUser) {
-      // Notifies the dashboard to update the "Principal" and "Available" numbers instantly
+    if (io) {
       io.to(userId.toString()).emit('balanceUpdate', {
         balances: Object.fromEntries(updatedUser.balances),
-        message: `🚀 Investment Active: ${planName} Plan`
+        message: `🚀 [NODE ACTIVATED] ${planName} is now generating yield.`
       });
       io.to(userId.toString()).emit('portfolioUpdate', investment);
     }
 
     res.status(201).json({
       success: true,
-      message: 'Investment successful. Principal is now yielding.',
+      message: 'Node synchronized. Principal is now yielding daily.',
       investment,
     });
   } catch (err) {
@@ -72,7 +89,9 @@ export const createInvestment = async (req, res, next) => {
   }
 };
 
-// ── GET MY INVESTMENTS ──
+/**
+ * ── GET ACTIVE NODES ──
+ */
 export const getMyInvestments = async (req, res, next) => {
   try {
     const investments = await Investment.find({ user: req.user._id }).sort({ createdAt: -1 });
@@ -82,27 +101,34 @@ export const getMyInvestments = async (req, res, next) => {
   }
 };
 
-// ── DELETE/CANCEL INVESTMENT (Optional Admin Logic) ──
+/**
+ * ── LIQUIDATE NODE (REFUND) ──
+ */
 export const deleteInvestment = async (req, res, next) => {
   try {
     const investment = await Investment.findOne({ _id: req.params.id, user: req.user._id });
-    if (!investment) throw new ApiError(404, 'Investment not found');
+    if (!investment) throw new ApiError(404, 'Node record not found');
 
-    // Refund Logic: Move INVESTED back to EUR
-    await User.findByIdAndUpdate(req.user._id, {
-      $inc: { 
+    // Refund Logic: Atomic reversal
+    const updatedUser = await User.findByIdAndUpdate(req.user._id, {
+      $inc: {
         'balances.EUR': investment.amount,
-        'balances.INVESTED': -investment.amount 
+        'balances.INVESTED': -investment.amount
       },
       $set: { activePlan: 'None' }
-    });
+    }, { new: true });
 
     await Investment.deleteOne({ _id: req.params.id });
 
     const io = req.app.get('io');
-    if (io) io.to(req.user._id.toString()).emit('balanceUpdate', { message: 'Investment Cancelled & Refunded' });
+    if (io && updatedUser) {
+      io.to(req.user._id.toString()).emit('balanceUpdate', { 
+        balances: Object.fromEntries(updatedUser.balances),
+        message: 'Node Liquidated: Capital returned to available balance' 
+      });
+    }
 
-    res.status(200).json({ success: true, message: 'Investment liquidated to available balance' });
+    res.status(200).json({ success: true, message: 'Liquidation complete' });
   } catch (err) {
     next(err);
   }
