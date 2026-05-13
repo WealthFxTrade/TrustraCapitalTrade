@@ -40,7 +40,9 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PROD = NODE_ENV === 'production';
 
 /**
+ * =========================
  * 1. SECURITY
+ * =========================
  */
 app.use(helmet({ contentSecurityPolicy: false }));
 
@@ -50,15 +52,14 @@ if (IS_PROD) {
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
-  message: 'Security Alert: Excessive requests from this IP.',
-  standardHeaders: true,
-  legacyHeaders: false,
+  max: 150,
 });
 app.use('/api/', apiLimiter);
 
 /**
- * 2. PERFORMANCE & MIDDLEWARE
+ * =========================
+ * 2. MIDDLEWARE
+ * =========================
  */
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
@@ -67,79 +68,60 @@ app.use(cookieParser());
 app.use(morgan(IS_PROD ? 'combined' : 'dev'));
 
 /**
- * 3. CORS (FIXED & SECURE)
+ * =========================
+ * 3. CORS
+ * =========================
  */
 const allowedOrigins = [
   'https://trustracapitaltrade.online',
   'https://www.trustracapitaltrade.online',
   'https://trustra-capital-trade.vercel.app',
   'http://localhost:5173',
-  'http://127.0.0.1:5173',
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // allow Postman/mobile
+      if (!origin) return callback(null, true);
 
-      if (!IS_PROD) return callback(null, true); // allow all in dev
+      if (!IS_PROD) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      console.error(`❌ Blocked by CORS: ${origin}`);
-      return callback(new Error('CORS policy violation'));
+      console.error(`❌ CORS BLOCKED: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
   })
 );
 
 /**
- * 4. SOCKET.IO (SYNCED WITH CORS)
+ * =========================
+ * 4. SOCKET.IO
+ * =========================
  */
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
     credentials: true,
   },
-  transports: ['websocket', 'polling'],
-  pingTimeout: 60000,
-  pingInterval: 25000,
 });
 
-const connectedUsers = new Map();
-
 io.on('connection', (socket) => {
-  console.log(`🔌 Socket Connected: ${socket.id}`);
-
   socket.on('join', (userId) => {
-    try {
-      if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return;
-
-      const room = userId.toString();
-
-      // Prevent duplicate join
-      if (socket.rooms.has(room)) return;
-
-      socket.join(room);
-      connectedUsers.set(socket.id, room);
-
-      console.log(`🔒 User ${userId} joined private room`);
-    } catch (err) {
-      console.error('Join Error:', err);
-    }
-  });
-
-  socket.on('disconnect', () => {
-    connectedUsers.delete(socket.id);
+    if (!mongoose.Types.ObjectId.isValid(userId)) return;
+    socket.join(userId.toString());
   });
 });
 
 app.set('io', io);
 
 /**
+ * =========================
  * 5. ROUTES
+ * =========================
  */
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -147,20 +129,25 @@ app.use('/api/investments', investmentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', apiRoutes);
 
+/**
+ * =========================
+ * 6. HEALTH CHECK
+ * =========================
+ */
 app.get('/health', (req, res) => {
   res.json({
     status: 'active',
     db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    uptime: process.uptime(),
   });
 });
 
 /**
- * 6. SPA SERVE (PRODUCTION)
+ * =========================
+ * 7. SPA SERVE
+ * =========================
  */
 if (IS_PROD) {
   const frontendPath = path.join(__dirname, '../frontend/dist');
-
   app.use(express.static(frontendPath));
 
   app.get('*', (req, res, next) => {
@@ -170,81 +157,85 @@ if (IS_PROD) {
 }
 
 /**
- * 7. ERROR HANDLER
+ * =========================
+ * 8. ERROR HANDLER
+ * =========================
  */
 app.use(errorHandler);
 
 /**
- * 8. BACKGROUND SERVICES (FIXED DUPLICATION)
+ * =========================
+ * 9. DATABASE CONNECTION (FIXED)
+ * =========================
  */
-let servicesInitialized = false;
-let intervalRef;
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+    });
 
-const startServices = () => {
-  if (servicesInitialized) {
-    console.log('⚠️ Services already initialized, skipping...');
-    return;
-  }
-
-  servicesInitialized = true;
-
-  console.log('⚙️ Starting Engines...');
-
-  // Start RIO Engine (should internally guard itself too)
-  initRioEngine(io);
-
-  // Run watchers once
-  watchBtcDeposits(io);
-  watchEthDeposits(io);
-
-  // Then run periodically (5 mins)
-  intervalRef = setInterval(() => {
-    watchBtcDeposits(io);
-    watchEthDeposits(io);
-  }, 5 * 60 * 1000);
-};
-
-/**
- * 9. START SERVER
- */
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
     console.log('✅ MongoDB Connected');
 
-    server.listen(PORT, () => {
-      console.log(`🚀 Server running on ${PORT}`);
-      startServices();
+    mongoose.connection.on('disconnected', () => {
+      console.log('❌ MongoDB Disconnected');
     });
-  })
-  .catch((err) => {
-    console.error('❌ DB Connection Error:', err.message);
-    process.exit(1);
-  });
 
-/**
- * 10. GRACEFUL SHUTDOWN
- */
-const gracefulShutdown = async (signal) => {
-  console.log(`\n🛑 ${signal} received. Shutting down...`);
+    mongoose.connection.on('reconnected', () => {
+      console.log('🔁 MongoDB Reconnected');
+    });
 
-  if (intervalRef) clearInterval(intervalRef);
-
-  try {
-    await mongoose.connection.close();
-    console.log('🧹 MongoDB connection closed');
-    process.exit(0);
   } catch (err) {
-    console.error('Shutdown error:', err);
+    console.error('❌ DB ERROR:', err.message);
     process.exit(1);
   }
 };
 
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+/**
+ * =========================
+ * 10. BACKGROUND SERVICES (FIXED)
+ * =========================
+ */
+let running = false;
+
+const startServices = () => {
+  if (running) return;
+  running = true;
+
+  console.log('⚙️ Starting Background Services...');
+
+  initRioEngine(io);
+
+  // SAFE INTERVAL (no overload)
+  setInterval(async () => {
+    if (mongoose.connection.readyState !== 1) {
+      console.log('⚠️ Skipping watchers (DB not ready)');
+      return;
+    }
+
+    await watchBtcDeposits(io);
+    await watchEthDeposits(io);
+
+  }, 5 * 60 * 1000); // every 5 mins
+};
 
 /**
- * 11. GLOBAL ERROR SAFETY (VERY IMPORTANT)
+ * =========================
+ * 11. START SERVER
+ * =========================
+ */
+connectDB().then(() => {
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on ${PORT}`);
+    startServices();
+  });
+});
+
+/**
+ * =========================
+ * 12. GLOBAL ERROR SAFETY
+ * =========================
  */
 process.on('uncaughtException', (err) => {
   console.error('💥 Uncaught Exception:', err);
