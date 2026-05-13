@@ -1,22 +1,12 @@
-// frontend/src/api/api.js
+// src/api/api.js
 import axios from 'axios';
+import { API_ENDPOINTS, getApiBaseUrl } from '@/constants/api';
 
 const isDev = import.meta.env.DEV;
 
-// IMPORTANT: backend already exposes /api in production
-const API_BASE_URL = isDev
-  ? '/api'
-  : (import.meta.env.VITE_API_URL || 'https://trustracapitaltrade-backend.onrender.com/api');
-
-const SOCKET_URL = isDev
-  ? 'http://localhost:10000'
-  : (import.meta.env.VITE_SOCKET_URL || 'https://trustracapitaltrade-backend.onrender.com');
-
-console.log(`[API] Mode: ${isDev ? 'DEV' : 'PROD'}`);
-console.log(`[API] Base URL: ${API_BASE_URL}`);
-
+// Create single axios instance
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getApiBaseUrl(),
   withCredentials: true,
   timeout: 15000,
   headers: {
@@ -24,28 +14,56 @@ const api = axios.create({
   },
 });
 
-// Attach token
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('trustra_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
+/* ==================== REQUEST INTERCEPTOR ==================== */
+api.interceptors.request.use(
+  (config) => {
+    // Support both localStorage and sessionStorage (Remember Me)
+    const token = localStorage.getItem('trustra_token') || 
+                 sessionStorage.getItem('trustra_token');
 
-// Handle auth expiry
-api.interceptors.response.use(
-  (res) => {
-    if (res.data?.token) {
-      localStorage.setItem('trustra_token', res.data.token);
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-    return res;
+    return config;
   },
-  (err) => {
-    if (err.response?.status === 401) {
-      localStorage.removeItem('trustra_token');
+  (error) => Promise.reject(error)
+);
+
+/* ==================== RESPONSE INTERCEPTOR ==================== */
+api.interceptors.response.use(
+  (response) => {
+    // Save new token only if returned from auth endpoints
+    if (response.data?.token) {
+      const rememberMe = localStorage.getItem('trustra_remember') === 'true';
+      
+      if (rememberMe) {
+        localStorage.setItem('trustra_token', response.data.token);
+      } else {
+        sessionStorage.setItem('trustra_token', response.data.token);
+      }
     }
-    return Promise.reject(err);
+    return response;
+  },
+  (error) => {
+    if (error.response?.status === 401) {
+      console.warn('Session expired or unauthorized');
+
+      // Clear all tokens
+      localStorage.removeItem('trustra_token');
+      localStorage.removeItem('trustra_remember');
+      sessionStorage.removeItem('trustra_token');
+
+      const currentPath = window.location.pathname;
+      const publicPaths = ['/login', '/register', '/forgot-password'];
+
+      if (!publicPaths.includes(currentPath)) {
+        window.dispatchEvent(new CustomEvent('vault-auth-expired'));
+        window.location.href = '/login?reason=session_expired';
+      }
+    }
+    return Promise.reject(error);
   }
 );
 
 export default api;
-export { SOCKET_URL };
+export { API_ENDPOINTS };

@@ -7,38 +7,52 @@ import { dirname, resolve } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export default defineConfig({
-  plugins: [react()],
+export default defineConfig(({ mode }) => {
+  const isDev = mode === 'development';
 
-  resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-    },
-  },
+  return {
+    plugins: [react()],
 
-  server: {
-    port: 5173,
-    strictPort: true,
-    host: true,           // Allows access via 172.20.10.x
-    cors: false,          // Backend handles CORS
-
-    proxy: {
-      '/api': {
-        target: 'http://localhost:10000',
-        changeOrigin: true,
-        secure: false,
-      },
-      '/auth': {
-        target: 'http://localhost:10000',
-        changeOrigin: true,
-        secure: false,
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, 'src'),
       },
     },
-  },
 
-  build: {
-    outDir: 'dist',
-    chunkSizeWarningLimit: 1600,
-    sourcemap: false,
-  },
+    server: {
+      port: 5173,
+      strictPort: true,
+      host: true,
+      cors: false,
+
+      proxy: {
+        '/api': {
+          target: 'http://localhost:10000',
+          changeOrigin: true,
+          secure: false,
+        },
+      },
+    },
+
+    build: {
+      outDir: 'dist',
+      chunkSizeWarningLimit: 1600,
+      sourcemap: isDev, // Only in development
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+            ui: ['framer-motion', 'lucide-react'],
+            toast: ['react-hot-toast'],
+          },
+        },
+      },
+    },
+
+    envPrefix: 'VITE_',
+    preview: {
+      port: 4173,
+      strictPort: true,
+    },
+  };
 });

@@ -1,6 +1,7 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api, { API_ENDPOINTS } from '../constants/api';
+import api, { API_ENDPOINTS } from '@/api/api';
 
 const AuthContext = createContext();
 
@@ -45,11 +46,14 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const isInitializing = useRef(false);
 
+  // Initialize auth session on app load
   const initAuth = useCallback(async () => {
     if (isInitializing.current) return;
     isInitializing.current = true;
 
-    const token = localStorage.getItem('trustra_token');
+    const token = localStorage.getItem('trustra_token') || 
+                 sessionStorage.getItem('trustra_token');
+
     if (!token) {
       dispatch({ type: 'SET_INITIALIZED' });
       isInitializing.current = false;
@@ -58,12 +62,16 @@ export function AuthProvider({ children }) {
 
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
+
       if (data?.success && data?.user) {
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
       } else {
+        clearTokens();
         dispatch({ type: 'AUTH_LOGOUT' });
       }
     } catch (error) {
+      console.error('Session validation failed:', error);
+      clearTokens();
       dispatch({ type: 'AUTH_LOGOUT' });
     } finally {
       dispatch({ type: 'SET_INITIALIZED' });
@@ -75,44 +83,79 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
+  // Helper to clear all tokens
+  const clearTokens = () => {
+    localStorage.removeItem('trustra_token');
+    localStorage.removeItem('trustra_remember');
+    sessionStorage.removeItem('trustra_token');
+  };
+
+  // Login Function
   const login = async (credentials) => {
     dispatch({ type: 'AUTH_START' });
+
     try {
       const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, {
         email: credentials.email.trim(),
         password: credentials.password,
       });
-      if (data?.success) {
+
+      if (data?.success && data?.user) {
+        // Handle "Remember Me"
+        const remember = credentials.remember === true;
+        if (remember) {
+          localStorage.setItem('trustra_remember', 'true');
+          localStorage.setItem('trustra_token', data.token);
+        } else {
+          sessionStorage.setItem('trustra_token', data.token);
+        }
+
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
         return { success: true };
       }
-      return { success: false, message: data?.message };
+
+      return { 
+        success: false, 
+        message: data?.message || 'Invalid credentials' 
+      };
     } catch (error) {
       dispatch({ type: 'AUTH_ERROR' });
-      return { success: false, message: error.response?.data?.message || 'Login failed' };
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Login failed. Please try again.' 
+      };
     }
   };
 
+  // Logout Function
   const logout = useCallback(async () => {
     try {
-      await api.post(API_ENDPOINTS.AUTH.LOGOUT);
+      await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {
+        console.warn("Backend logout failed, clearing locally");
+      });
     } catch (err) {
-      console.warn("Server-side session clear skipped");
+      console.warn("Logout request skipped");
     } finally {
-      localStorage.removeItem('trustra_token');
+      clearTokens();
       dispatch({ type: 'AUTH_LOGOUT' });
       navigate('/login', { replace: true });
     }
   }, [navigate]);
 
+  const refreshSession = useCallback(() => initAuth(), [initAuth]);
+
   const authValue = useMemo(() => ({
     ...state,
     login,
     logout,
-    refreshSession: initAuth
-  }), [state, logout, initAuth]);
+    refreshSession,
+  }), [state, login, logout, refreshSession]);
 
-  return <AuthContext.Provider value={authValue}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={authValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => useContext(AuthContext);
