@@ -1,9 +1,18 @@
 // src/constants/api.js
 
 /**
- * Trustra Capital - Centralized API Endpoints
+ * Trustra Capital - Centralized API Configuration
+ * Production-ready with fallback safety
  */
 
+const BACKEND_URL = 'https://trustracapitaltrade-backend.onrender.com';
+
+export const API_BASE_URL = `${BACKEND_URL}/api`;
+export const SOCKET_URL = BACKEND_URL;
+
+/**
+ * API Endpoints
+ */
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
@@ -53,28 +62,22 @@ export const API_ENDPOINTS = {
 };
 
 /**
- * Get API Base URL with proper environment priority
+ * Get API Base URL (production-safe override system)
  */
 export const getApiBaseUrl = () => {
-  // Highest priority: Environment variable (from .env files)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
-
-  // Development fallback
-  if (import.meta.env.DEV) {
-    return 'http://localhost:10000/api';
-  }
-
-  // Production fallback (proxy or relative path)
-  return '/api';
+  return API_BASE_URL;
 };
 
-/** Debug helper */
+/**
+ * Debug helper
+ */
 export const logApiConfig = () => {
-  console.log('[Trustra API Config]', {
-    mode: import.meta.env.MODE,
+  console.log('Trustra API Config:', {
     baseURL: getApiBaseUrl(),
-    viteApiUrl: import.meta.env.VITE_API_URL || 'Not set',
+    socketURL: SOCKET_URL,
+    mode: import.meta.env.MODE,
   });
 };

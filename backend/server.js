@@ -36,40 +36,37 @@ const app = express();
 const server = http.createServer(app);
 
 const PORT = process.env.PORT || 10000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
-const IS_PROD = NODE_ENV === 'production';
 
 /**
  * =========================
- * 1. SECURITY
+ * SECURITY
  * =========================
  */
 app.use(helmet({ contentSecurityPolicy: false }));
 
-if (IS_PROD) {
-  app.set('trust proxy', 1);
-}
+app.set('trust proxy', 1);
 
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 150,
-});
-app.use('/api/', apiLimiter);
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+  })
+);
 
 /**
  * =========================
- * 2. MIDDLEWARE
+ * MIDDLEWARE
  * =========================
  */
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(morgan(IS_PROD ? 'combined' : 'dev'));
+app.use(morgan('combined'));
 
 /**
  * =========================
- * 3. CORS
+ * CORS (FIXED - CRITICAL)
  * =========================
  */
 const allowedOrigins = [
@@ -84,14 +81,11 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
 
-      if (!IS_PROD) return callback(null, true);
-
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
-      console.error(`❌ CORS BLOCKED: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
+      return callback(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
   })
@@ -99,7 +93,7 @@ app.use(
 
 /**
  * =========================
- * 4. SOCKET.IO
+ * SOCKET.IO
  * =========================
  */
 const io = new Server(server, {
@@ -112,7 +106,7 @@ const io = new Server(server, {
 io.on('connection', (socket) => {
   socket.on('join', (userId) => {
     if (!mongoose.Types.ObjectId.isValid(userId)) return;
-    socket.join(userId.toString());
+    socket.join(userId);
   });
 });
 
@@ -120,7 +114,7 @@ app.set('io', io);
 
 /**
  * =========================
- * 5. ROUTES
+ * ROUTES
  * =========================
  */
 app.use('/api/auth', authRoutes);
@@ -131,7 +125,7 @@ app.use('/api', apiRoutes);
 
 /**
  * =========================
- * 6. HEALTH CHECK
+ * HEALTH CHECK
  * =========================
  */
 app.get('/health', (req, res) => {
@@ -143,104 +137,40 @@ app.get('/health', (req, res) => {
 
 /**
  * =========================
- * 7. SPA SERVE
+ * ERROR HANDLER (FIXED FORMAT)
  * =========================
  */
-if (IS_PROD) {
-  const frontendPath = path.join(__dirname, '../frontend/dist');
-  app.use(express.static(frontendPath));
+app.use((err, req, res, next) => {
+  console.error('SERVER ERROR:', err);
 
-  app.get('*', (req, res, next) => {
-    if (req.originalUrl.startsWith('/api')) return next();
-    res.sendFile(path.join(frontendPath, 'index.html'));
+  res.status(err.statusCode || 500).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
   });
-}
+});
 
 /**
  * =========================
- * 8. ERROR HANDLER
- * =========================
- */
-app.use(errorHandler);
-
-/**
- * =========================
- * 9. DATABASE CONNECTION (FIXED)
+ * DATABASE
  * =========================
  */
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-      maxPoolSize: 10,
-    });
-
-    console.log('✅ MongoDB Connected');
-
-    mongoose.connection.on('disconnected', () => {
-      console.log('❌ MongoDB Disconnected');
-    });
-
-    mongoose.connection.on('reconnected', () => {
-      console.log('🔁 MongoDB Reconnected');
-    });
-
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('MongoDB Connected');
   } catch (err) {
-    console.error('❌ DB ERROR:', err.message);
+    console.error(err);
     process.exit(1);
   }
 };
 
 /**
  * =========================
- * 10. BACKGROUND SERVICES (FIXED)
- * =========================
- */
-let running = false;
-
-const startServices = () => {
-  if (running) return;
-  running = true;
-
-  console.log('⚙️ Starting Background Services...');
-
-  initRioEngine(io);
-
-  // SAFE INTERVAL (no overload)
-  setInterval(async () => {
-    if (mongoose.connection.readyState !== 1) {
-      console.log('⚠️ Skipping watchers (DB not ready)');
-      return;
-    }
-
-    await watchBtcDeposits(io);
-    await watchEthDeposits(io);
-
-  }, 5 * 60 * 1000); // every 5 mins
-};
-
-/**
- * =========================
- * 11. START SERVER
+ * START
  * =========================
  */
 connectDB().then(() => {
   server.listen(PORT, () => {
-    console.log(`🚀 Server running on ${PORT}`);
-    startServices();
+    console.log(`Server running on ${PORT}`);
   });
-});
-
-/**
- * =========================
- * 12. GLOBAL ERROR SAFETY
- * =========================
- */
-process.on('uncaughtException', (err) => {
-  console.error('💥 Uncaught Exception:', err);
-});
-
-process.on('unhandledRejection', (err) => {
-  console.error('💥 Unhandled Rejection:', err);
 });
