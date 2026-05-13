@@ -24,11 +24,6 @@ import apiRoutes from './routes/apiRoutes.js';
 // Middleware
 import { errorHandler } from './middleware/errorMiddleware.js';
 
-// Background Services
-import { watchBtcDeposits } from './utils/btcWatcher.js';
-import { watchEthDeposits } from './utils/ethWatcher.js';
-import { initRioEngine } from './utils/rioEngine.js';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -37,38 +32,31 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT || 10000;
 
-/**
- * =========================
- * SECURITY
- * =========================
- */
+/* =========================
+   SECURITY
+========================= */
 app.use(helmet({ contentSecurityPolicy: false }));
-
 app.set('trust proxy', 1);
 
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 200,
+    max: 300,
   })
 );
 
-/**
- * =========================
- * MIDDLEWARE
- * =========================
- */
+/* =========================
+   MIDDLEWARE
+========================= */
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(morgan('combined'));
+app.use(morgan('dev'));
 
-/**
- * =========================
- * CORS (FIXED - CRITICAL)
- * =========================
- */
+/* =========================
+   CORS (PRODUCTION SAFE)
+========================= */
 const allowedOrigins = [
   'https://trustracapitaltrade.online',
   'https://www.trustracapitaltrade.online',
@@ -76,29 +64,47 @@ const allowedOrigins = [
   'http://localhost:5173',
 ];
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Allow LAN / hotspot dev testing
+  if (
+    origin.startsWith('http://172.') ||
+    origin.startsWith('http://192.168.') ||
+    origin.startsWith('http://10.')
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
 
+      console.error(`❌ CORS BLOCKED: ${origin}`);
       return callback(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   })
 );
 
-/**
- * =========================
- * SOCKET.IO
- * =========================
- */
+// IMPORTANT: handle preflight requests
+app.options('*', cors());
+
+/* =========================
+   SOCKET.IO
+========================= */
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: isAllowedOrigin,
     credentials: true,
   },
 });
@@ -106,28 +112,24 @@ const io = new Server(server, {
 io.on('connection', (socket) => {
   socket.on('join', (userId) => {
     if (!mongoose.Types.ObjectId.isValid(userId)) return;
-    socket.join(userId);
+    socket.join(userId.toString());
   });
 });
 
 app.set('io', io);
 
-/**
- * =========================
- * ROUTES
- * =========================
- */
+/* =========================
+   ROUTES
+========================= */
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/investments', investmentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', apiRoutes);
 
-/**
- * =========================
- * HEALTH CHECK
- * =========================
- */
+/* =========================
+   HEALTH CHECK
+========================= */
 app.get('/health', (req, res) => {
   res.json({
     status: 'active',
@@ -135,11 +137,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-/**
- * =========================
- * ERROR HANDLER (FIXED FORMAT)
- * =========================
- */
+/* =========================
+   ERROR HANDLER
+========================= */
 app.use((err, req, res, next) => {
   console.error('SERVER ERROR:', err);
 
@@ -149,26 +149,26 @@ app.use((err, req, res, next) => {
   });
 });
 
-/**
- * =========================
- * DATABASE
- * =========================
- */
+/* =========================
+   DATABASE
+========================= */
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
+    await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000,
+      maxPoolSize: 10,
+    });
+
     console.log('MongoDB Connected');
   } catch (err) {
-    console.error(err);
+    console.error('DB ERROR:', err.message);
     process.exit(1);
   }
 };
 
-/**
- * =========================
- * START
- * =========================
- */
+/* =========================
+   START SERVER
+========================= */
 connectDB().then(() => {
   server.listen(PORT, () => {
     console.log(`Server running on ${PORT}`);
