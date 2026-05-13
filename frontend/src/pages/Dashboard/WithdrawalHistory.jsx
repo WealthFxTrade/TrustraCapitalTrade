@@ -6,7 +6,7 @@ import {
   CheckCircle, XCircle, Clock, Globe, RefreshCw 
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import api from '../../constants/api';
+import api from '@/api/api';
 import { useAuth } from '../../context/AuthContext';
 
 export default function WithdrawalHistory() {

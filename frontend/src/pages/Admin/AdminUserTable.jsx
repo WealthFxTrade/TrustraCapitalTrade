@@ -5,7 +5,7 @@ import {
   ShieldCheck, XCircle, CheckCircle, Eye, Search,
   Loader2, User, AlertTriangle, ChevronRight
 } from 'lucide-react';
-import api from '../../constants/api';
+import api from '@/api/api';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 

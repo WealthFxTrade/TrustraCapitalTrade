@@ -10,7 +10,7 @@ import {
   Clock,
   CircleDollarSign
 } from 'lucide-react';
-import api, { API_ENDPOINTS } from '../../constants/api';
+import api, { API_ENDPOINTS } from '@/api/api';
 import toast from 'react-hot-toast';
 
 const AdminTransactionAudit = () => {

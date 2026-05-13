@@ -11,7 +11,7 @@ import {
   Fingerprint
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import api, { API_ENDPOINTS } from '../../constants/api';
+import api, { API_ENDPOINTS } from '@/api/api';
 
 export default function ProfileSettings() {
   const [loading, setLoading] = useState(false);

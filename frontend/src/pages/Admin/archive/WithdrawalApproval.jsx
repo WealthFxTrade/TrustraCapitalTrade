@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../api/api';
-import { API_ENDPOINTS } from '../../constants/api';
+import { API_ENDPOINTS } from '@/api/api';
 import { 
   CheckCircle, 
   XCircle, 

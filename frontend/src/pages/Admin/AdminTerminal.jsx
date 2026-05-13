@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api, { API_ENDPOINTS } from '../../constants/api';
+import api, { API_ENDPOINTS } from '@/api/api';
 import { 
   ShieldCheck, 
   Users, 

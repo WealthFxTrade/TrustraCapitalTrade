@@ -4,7 +4,7 @@ import {
   Activity, Server, Database, Cpu, RefreshCw, 
   ShieldCheck, AlertCircle, Zap, Clock, Loader2, Globe 
 } from 'lucide-react';
-import api from '../../constants/api';
+import api from '@/api/api';
 import toast from 'react-hot-toast';
 import { motion } from 'framer-motion';
 

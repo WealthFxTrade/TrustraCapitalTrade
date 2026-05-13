@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { API_ENDPOINTS } from '../../constants/api'; // ← centralized
+import { API_ENDPOINTS } from '@/api/api'; // ← centralized
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://trustracapitaltrade-backend.onrender.com';
 

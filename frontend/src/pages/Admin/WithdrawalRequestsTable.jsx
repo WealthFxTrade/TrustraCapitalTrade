@@ -12,7 +12,8 @@ import {
   Wallet,
   AlertTriangle
 } from 'lucide-react';
-import api, { API_ENDPOINTS } from '../../constants/api';
+import api from '@/api/api';
+import { API_ENDPOINTS } from '../../constants/api';
 import toast from 'react-hot-toast';
 
 export default function WithdrawalRequestsTable() {

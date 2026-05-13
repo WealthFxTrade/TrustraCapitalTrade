@@ -4,7 +4,7 @@ import {
   ShieldCheck, XCircle, CheckCircle, Eye, Loader2, User,
   ChevronRight, Maximize2, AlertTriangle, Clock, X, FileText, Camera
 } from 'lucide-react';
-import api from '../../constants/api';
+import api from '@/api/api';
 import toast from 'react-hot-toast';
 
 export default function KYCManager() {

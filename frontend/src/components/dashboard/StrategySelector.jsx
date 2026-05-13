@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LayoutDashboard, PlusCircle, Zap, ShieldCheck, Crown, Loader2, Lock } from 'lucide-react';
-import api, { API_ENDPOINTS } from '../../constants/api';
+import api, { API_ENDPOINTS } from '@/api/api';
 import toast from 'react-hot-toast';
 
 const PLANS = [

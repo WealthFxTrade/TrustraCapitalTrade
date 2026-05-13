@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import api from '../../constants/api'; // Standardized API import
+import api from '@/api/api'; // Standardized API import
 import {
   Settings, ShieldCheck, Percent, Zap, Lock, Loader2, Save,
   RefreshCcw, AlertOctagon, TrendingUp, Coins, Globe, ArrowLeft

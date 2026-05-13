@@ -13,7 +13,7 @@ import {
   Mail,
   Fingerprint
 } from 'lucide-react';
-import api, { API_ENDPOINTS } from '../../constants/api';
+import api, { API_ENDPOINTS } from '@/api/api';
 import toast from 'react-hot-toast';
 
 export default function AdminUserTable() {

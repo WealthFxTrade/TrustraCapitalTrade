@@ -16,15 +16,12 @@ export default function Ledger({ transactions = [], refreshBalances }) {
   const [filter, setFilter] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Manual refresh handler
   const handleManualRefresh = async () => {
     if (!refreshBalances) return;
 
     setIsRefreshing(true);
     try {
       await refreshBalances(true);
-      // Optional: small success toast
-      // toast.success('Ledger synchronized');
     } catch (err) {
       console.error('Ledger refresh failed:', err);
     } finally {
@@ -32,7 +29,6 @@ export default function Ledger({ transactions = [], refreshBalances }) {
     }
   };
 
-  // Format amount with proper currency handling
   const formatValue = (amount, currency = 'EUR') => {
     const num = Number(amount || 0);
     const curr = (currency || 'EUR').toUpperCase();
@@ -43,13 +39,11 @@ export default function Ledger({ transactions = [], refreshBalances }) {
       maximumFractionDigits: isCrypto ? 8 : 2,
     });
 
-    if (isCrypto) {
-      return `\( {formatter.format(num)} \){curr}`;
-    }
-    return `€${formatter.format(num)}`;
+    return isCrypto 
+      ? `\( {formatter.format(num)} \){curr}` 
+      : `€${formatter.format(num)}`;
   };
 
-  // Status badge component
   const getStatusBadge = (status) => {
     const s = (status || 'pending').toLowerCase();
 
@@ -76,7 +70,6 @@ export default function Ledger({ transactions = [], refreshBalances }) {
     );
   };
 
-  // Type icon
   const getTypeIcon = (type) => {
     const t = (type || '').toLowerCase();
 
@@ -88,7 +81,6 @@ export default function Ledger({ transactions = [], refreshBalances }) {
     return <Zap className="text-amber-500" size={20} />;
   };
 
-  // Filtered transactions
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
       if (filter === 'all') return true;
@@ -156,30 +148,23 @@ export default function Ledger({ transactions = [], refreshBalances }) {
 
                     return (
                       <motion.tr
-                        key={tx._id || tx.id}
+                        key={tx._id || tx.id || Math.random()}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         className="hover:bg-white/[0.015] transition-colors group"
                       >
-                        {/* Timestamp */}
                         <td className="px-8 py-6 whitespace-nowrap">
                           <div className="text-sm font-semibold text-white">
-                            {tx.createdAt
-                              ? new Date(tx.createdAt).toLocaleDateString('de-DE')
-                              : '—'}
+                            {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('de-DE') : '—'}
                           </div>
                           <div className="text-[10px] text-gray-600 font-mono mt-0.5">
-                            {tx.createdAt
-                              ? new Date(tx.createdAt).toLocaleTimeString('de-DE', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })
+                            {tx.createdAt 
+                              ? new Date(tx.createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
                               : ''}
                           </div>
                         </td>
 
-                        {/* Operation */}
                         <td className="px-8 py-6">
                           <div className="flex items-center gap-4">
                             <div className="p-3 bg-white/5 rounded-2xl border border-white/5 group-hover:border-white/20 transition-colors">
@@ -196,23 +181,15 @@ export default function Ledger({ transactions = [], refreshBalances }) {
                           </div>
                         </td>
 
-                        {/* Amount */}
                         <td className="px-8 py-6 text-right whitespace-nowrap">
-                          <p
-                            className={`font-black text-lg tracking-tighter ${
-                              isOutflow
-                                ? 'text-rose-500'
-                                : isYield
-                                ? 'text-blue-400'
-                                : 'text-emerald-400'
-                            }`}
-                          >
+                          <p className={`font-black text-lg tracking-tighter ${
+                            isOutflow ? 'text-rose-500' : isYield ? 'text-blue-400' : 'text-emerald-400'
+                          }`}>
                             {isOutflow ? '−' : '+'}
                             {formatValue(tx.amount, tx.currency)}
                           </p>
                         </td>
 
-                        {/* Status */}
                         <td className="px-8 py-6 flex justify-center">
                           {getStatusBadge(tx.status)}
                         </td>
@@ -229,7 +206,7 @@ export default function Ledger({ transactions = [], refreshBalances }) {
                         No {filter !== 'all' ? filter : ''} transactions yet
                       </p>
                       <p className="text-gray-600 text-sm mt-2 max-w-xs mx-auto">
-                        Your transaction history will appear here after your first deposit, investment, or yield accrual.
+                        Your transaction history will appear here after your first activity.
                       </p>
                     </td>
                   </tr>

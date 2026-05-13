@@ -4,7 +4,7 @@ import {
   Calendar, Activity, Fingerprint, ShieldCheck, 
   Clock, Database, Loader2 
 } from 'lucide-react';
-import api from '../../constants/api'; // Use standardized constant
+import api from '@/api/api'; // Use standardized constant
 import toast from 'react-hot-toast';
 
 export default function AuditLogTable() {

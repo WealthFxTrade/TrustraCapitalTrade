@@ -4,7 +4,7 @@ import {
   CheckCircle, XCircle, Clock, Eye, 
   RefreshCcw, Loader2, ArrowDownLeft, ExternalLink 
 } from 'lucide-react';
-import api from '../../constants/api';
+import api from '@/api/api';
 import toast from 'react-hot-toast';
 
 export default function DepositRequestsTable() {

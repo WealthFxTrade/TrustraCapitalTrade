@@ -2,11 +2,19 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  TrendingUp, Users, ArrowUpRight, Activity,
-  Zap, Loader2, AlertCircle, RefreshCcw, ArrowRight
+  TrendingUp, 
+  Users, 
+  ArrowUpRight, 
+  Activity,
+  Zap, 
+  Loader2, 
+  AlertCircle, 
+  RefreshCcw, 
+  ArrowRight
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import api, { API_ENDPOINTS } from '../../constants/api'; // ✅ IMPORT ENDPOINTS
+import api from '@/api/api';                    // ← Default import for axios instance
+import { API_ENDPOINTS } from '@/constants/api'; // ← Named import for endpoints
 import toast from 'react-hot-toast';
 
 const AdminOverview = () => {
@@ -25,7 +33,6 @@ const AdminOverview = () => {
   const fetchLiveStats = async () => {
     setRefreshing(true);
     try {
-      // ✅ USE CENTRALIZED CONSTANT
       const { data } = await api.get(API_ENDPOINTS.ADMIN.OVERVIEW);
 
       if (data?.success) {
@@ -42,8 +49,7 @@ const AdminOverview = () => {
 
   useEffect(() => {
     fetchLiveStats();
-    // Auto-sync every 5 minutes to keep metrics fresh
-    const interval = setInterval(fetchLiveStats, 300000);
+    const interval = setInterval(fetchLiveStats, 300000); // every 5 minutes
     return () => clearInterval(interval);
   }, []);
 
@@ -76,15 +82,17 @@ const AdminOverview = () => {
           className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white hover:text-black transition-all group"
         >
           <RefreshCcw className={refreshing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'} size={18} />
-          <span className="text-xs font-bold uppercase tracking-widest">{refreshing ? 'Syncing...' : 'Sync Node'}</span>
+          <span className="text-xs font-bold uppercase tracking-widest">
+            {refreshing ? 'Syncing...' : 'Sync Node'}
+          </span>
         </button>
       </header>
 
       {/* STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {statConfig.map((stat, i) => (
-          <motion.div 
-            key={i} 
+          <motion.div
+            key={i}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
@@ -134,4 +142,3 @@ const AdminOverview = () => {
 };
 
 export default AdminOverview;
-

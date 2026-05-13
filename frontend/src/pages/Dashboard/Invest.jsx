@@ -2,20 +2,18 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import api, { API_ENDPOINTS } from '../../constants/api';
+import api, { API_ENDPOINTS } from '@/api/api';
 import toast from 'react-hot-toast';
 
 const INVESTMENT_PLANS = [
-  { name: 'Tier I: Entry', min: 100, daily: 0.00020, roi: '6–9%' },
-  { name: 'Tier II: Core', min: 1000, daily: 0.00028, roi: '9–12%' },
-  { name: 'Tier III: Prime', min: 5000, daily: 0.00038, roi: '12–16%' },
+  { name: 'Tier I: Entry',       min: 100,   daily: 0.00020, roi: '6–9%' },
+  { name: 'Tier II: Core',       min: 1000,  daily: 0.00028, roi: '9–12%' },
+  { name: 'Tier III: Prime',     min: 5000,  daily: 0.00038, roi: '12–16%' },
   { name: 'Tier IV: Institutional', min: 15000, daily: 0.00049, roi: '16–20%' },
-  { name: 'Tier V: Sovereign', min: 50000, daily: 0.00061, roi: '20–25%' },
+  { name: 'Tier V: Sovereign',   min: 50000, daily: 0.00061, roi: '20–25%' },
 ];
 
-export default function Invest({ balances, refreshBalances }) {
-  const navigate = useNavigate();
+export default function Invest({ balances = {}, refreshBalances }) {
   const [loading, setLoading] = useState(false);
 
   const availableEUR = Number(balances?.EUR || 0);
@@ -32,16 +30,18 @@ export default function Invest({ balances, refreshBalances }) {
     const tid = toast.loading(`Activating ${plan.name}...`);
 
     try {
-      const res = await api.post(API_ENDPOINTS.INVESTMENTS.BASE, {
+      // Note: You may need to update this endpoint in API_ENDPOINTS if it doesn't exist
+      const res = await api.post('/users/invest', {  // Adjust endpoint as per your backend
         amount: plan.min,
         planName: plan.name,
-        currency: 'EUR'
+        currency: 'EUR',
       });
 
       if (res.data?.success) {
         toast.success(`${plan.name} activated successfully!`, { id: tid });
         refreshBalances?.();
-        setTimeout(() => navigate('/dashboard'), 1500);
+      } else {
+        throw new Error(res.data?.message || 'Investment failed');
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Investment failed', { id: tid });
@@ -52,7 +52,7 @@ export default function Invest({ balances, refreshBalances }) {
 
   const handleCompound = async () => {
     if (accruedProfit < 10) {
-      toast.error('Minimum €10 required to compound');
+      toast.error('Minimum €10 required to compound profit');
       return;
     }
 
@@ -60,10 +60,13 @@ export default function Invest({ balances, refreshBalances }) {
     const tid = toast.loading('Compounding profit...');
 
     try {
-      const res = await api.post('/api/users/compound');
+      const res = await api.post(API_ENDPOINTS.USER.COMPOUND);
+
       if (res.data?.success) {
         toast.success('Profit compounded successfully!', { id: tid });
         refreshBalances?.();
+      } else {
+        throw new Error(res.data?.message || 'Compounding failed');
       }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Compounding failed', { id: tid });
@@ -74,7 +77,7 @@ export default function Invest({ balances, refreshBalances }) {
 
   return (
     <div className="space-y-12 pb-20">
-      {/* Balance Cards */}
+      {/* Balance Overview */}
       <div className="grid md:grid-cols-3 gap-6">
         <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
           <p className="text-xs text-gray-500 uppercase tracking-widest">Available Capital</p>
@@ -88,7 +91,7 @@ export default function Invest({ balances, refreshBalances }) {
           <button
             onClick={handleCompound}
             disabled={loading || accruedProfit < 10}
-            className="mt-8 w-full py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-700 text-black font-bold rounded-2xl transition"
+            className="mt-8 w-full py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-700 text-black font-bold rounded-2xl transition-all"
           >
             Compound Profit
           </button>
@@ -100,10 +103,10 @@ export default function Invest({ balances, refreshBalances }) {
         </div>
       </div>
 
-      {/* Investment Tiers */}
+      {/* Investment Plans */}
       <div>
         <h3 className="text-xs uppercase text-gray-500 mb-6 flex items-center gap-2">
-          <TrendingUp size={16} /> CAPITAL TIERS
+          <TrendingUp size={16} /> INVESTMENT TIERS
         </h3>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -116,7 +119,7 @@ export default function Invest({ balances, refreshBalances }) {
                 whileHover={{ y: -4 }}
                 className="bg-black border border-white/10 rounded-3xl p-8 hover:border-emerald-500/40 transition-all"
               >
-                <p className="text-emerald-400 text-sm">{plan.roi} Annual ROI</p>
+                <p className="text-emerald-400 text-sm font-medium">{plan.roi} Annual ROI</p>
                 <h4 className="text-2xl font-bold mt-3">{plan.name}</h4>
 
                 <div className="mt-8">
@@ -130,12 +133,12 @@ export default function Invest({ balances, refreshBalances }) {
                   onClick={() => handleInvest(plan)}
                   disabled={!canActivate || loading}
                   className={`mt-10 w-full py-4 rounded-2xl text-sm font-bold transition-all ${
-                    canActivate 
-                      ? 'bg-white text-black hover:bg-emerald-500 hover:text-white' 
+                    canActivate
+                      ? 'bg-white text-black hover:bg-emerald-500 hover:text-white'
                       : 'bg-white/10 text-gray-500 cursor-not-allowed'
                   }`}
                 >
-                  {canActivate ? 'Activate Plan' : 'Insufficient Balance'}
+                  {canActivate ? 'Activate Plan' : `Min €${plan.min.toLocaleString()}`}
                 </button>
               </motion.div>
             );

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import api from '../../constants/api';
+import api from '@/api/api';
 import toast from 'react-hot-toast';
 import { 
   ArrowUpRight, ShieldCheck, Wallet, Zap, Info, 
