@@ -37,9 +37,16 @@ export default function Login() {
 
   const validate = () => {
     const errs = {};
-    if (!formData.email.trim()) errs.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) errs.email = 'Invalid email';
-    if (!formData.password) errs.password = 'Password is required';
+    if (!formData.email.trim()) {
+      errs.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errs.email = 'Invalid email';
+    }
+    
+    if (!formData.password) {
+      errs.password = 'Password is required';
+    }
+    
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -60,15 +67,19 @@ export default function Login() {
 
       if (result.success) {
         toast.success('Access Granted. Welcome back.', { id: toastId });
-        // Redirect to intended page (dashboard or admin)
+        // Redirect to intended page (dashboard or admin layout nodes)
         setTimeout(() => navigate(from, { replace: true }), 800);
       } else {
         toast.error(result.message || 'Invalid credentials', { id: toastId });
-        setErrors({ auth: result.message || 'Invalid email or password' });
+        setErrors({ auth: result.message || 'Invalid email or access token.' });
+        
+        // PRODUCTION SECURITY FIX: Wipes password field instantly on authentication failures
+        setFormData((prev) => ({ ...prev, password: '' }));
       }
     } catch (err) {
       toast.error('Connection failed', { id: toastId });
-      setErrors({ auth: 'Network error. Please try again.' });
+      setErrors({ auth: 'Network error. Please try again later.' });
+      setFormData((prev) => ({ ...prev, password: '' }));
     } finally {
       setLoading(false);
     }
@@ -78,7 +89,7 @@ export default function Login() {
     <div className="min-h-screen bg-[#020408] flex items-center justify-center px-4 font-sans">
       <div className="w-full max-w-md space-y-8">
 
-        {/* Branding */}
+        {/* Central Brand Branding Block */}
         <div className="text-center space-y-3">
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
@@ -95,20 +106,23 @@ export default function Login() {
           </p>
         </div>
 
+        {/* Global Error Context Notification Banner */}
         {errors.auth && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl flex items-center gap-3 text-rose-500 text-sm"
+            className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl flex items-center gap-3 text-rose-500 text-sm font-medium"
           >
-            <AlertCircle size={20} />
+            <AlertCircle size={20} className="shrink-0" />
             {errors.auth}
           </motion.div>
         )}
 
+        {/* Access Control Input Matrix Form Frame */}
         <div className="bg-[#0a0c10] border border-white/5 rounded-[2.5rem] p-10 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email */}
+            
+            {/* Security Identity Input Block */}
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">
                 Security Identity (Email)
@@ -121,16 +135,17 @@ export default function Login() {
                   value={formData.email}
                   onChange={handleChange}
                   disabled={loading}
-                  className={`w-full pl-12 pr-4 py-4 bg-black/40 border rounded-2xl text-sm font-bold text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 ${
+                  className={`w-full pl-12 pr-4 py-4 bg-black/40 border rounded-2xl text-sm font-bold text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 transition-all ${
                     errors.email ? 'border-rose-500' : 'border-white/5'
                   }`}
                   placeholder="investor@trustra.com"
+                  required
                 />
               </div>
-              {errors.email && <p className="text-rose-500 text-xs ml-1">{errors.email}</p>}
+              {errors.email && <p className="text-rose-500 text-xs ml-1 font-semibold">{errors.email}</p>}
             </div>
 
-            {/* Password */}
+            {/* Access Token Password Block */}
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">
                 Access Token (Password)
@@ -143,26 +158,27 @@ export default function Login() {
                   value={formData.password}
                   onChange={handleChange}
                   disabled={loading}
-                  className={`w-full pl-12 pr-12 py-4 bg-black/40 border rounded-2xl text-sm font-bold text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 ${
+                  className={`w-full pl-12 pr-12 py-4 bg-black/40 border rounded-2xl text-sm font-bold text-white placeholder-gray-600 focus:outline-none focus:border-emerald-500/50 transition-all ${
                     errors.password ? 'border-rose-500' : 'border-white/5'
                   }`}
                   placeholder="••••••••"
+                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   disabled={loading}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-emerald-500"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-emerald-500 transition-colors"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              {errors.password && <p className="text-rose-500 text-xs ml-1">{errors.password}</p>}
+              {errors.password && <p className="text-rose-500 text-xs ml-1 font-semibold">{errors.password}</p>}
             </div>
 
-            {/* Trust Device + Recover */}
+            {/* Trust Device Selection + Recover Access Row Control Node */}
             <div className="flex items-center justify-between px-1 text-xs">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={rememberMe}
@@ -170,23 +186,25 @@ export default function Login() {
                   disabled={loading}
                   className="hidden"
                 />
-                <div className={`w-4 h-4 rounded border flex items-center justify-center ${
+                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
                   rememberMe ? 'bg-emerald-500 border-emerald-500' : 'border-white/20'
                 }`}>
-                  {rememberMe && <span className="text-black text-xs">✓</span>}
+                  {rememberMe && <span className="text-black text-[10px] font-black">✓</span>}
                 </div>
                 <span className="font-black uppercase tracking-widest text-gray-500">Trust Device</span>
               </label>
 
-              <Link to="/forgot-password" className="text-emerald-500 hover:text-emerald-400 font-black uppercase tracking-widest">
+              {/* PRODUCTION FIX: Updated alignment link target from /forgot-password to /forgotpassword */}
+              <Link to="/forgotpassword" className="text-emerald-500 hover:text-emerald-400 font-black uppercase tracking-widest transition-colors">
                 Recover Access
               </Link>
             </div>
 
+            {/* Form Execution Authorization Submit Button Node */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 bg-white hover:bg-emerald-500 active:bg-emerald-600 text-black rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-70 transition-all"
+              className="w-full py-4 bg-white hover:bg-emerald-500 active:bg-emerald-600 text-black rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 disabled:opacity-70 transition-all cursor-pointer"
             >
               {loading ? (
                 <>
@@ -201,15 +219,17 @@ export default function Login() {
               )}
             </button>
           </form>
-        </div>
 
-        <div className="text-center text-xs text-gray-600">
-          New to Trustra Capital?{' '}
-          <Link to="/register" className="text-white font-black hover:text-emerald-500">
-            Apply for an Account
-          </Link>
+          {/* Institutional Enrollment Onboarding Trigger Link */}
+          <div className="mt-8 pt-6 border-t border-white/5 text-center">
+            <Link to="/apply" className="text-xs text-gray-500 hover:text-white font-medium transition-colors">
+              New to Trustra Capital? <span className="text-white font-bold underline ml-1">Apply for an Account</span>
+            </Link>
+          </div>
+
         </div>
       </div>
     </div>
   );
 }
+
