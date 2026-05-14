@@ -1,5 +1,5 @@
+// backend/routes/adminRoutes.js
 import express from 'express';
-import asyncHandler from 'express-async-handler';
 import { protect, admin } from '../middleware/authMiddleware.js';
 
 import {
@@ -10,73 +10,74 @@ import {
   getPendingKYCs,
   updateKYCStatus,
   impersonateUser,
-
-  // ✅ ADD THESE
   getWithdrawalRequests,
   approveWithdrawal,
   rejectWithdrawal
-
 } from '../controllers/adminController.js';
 
 const router = express.Router();
 
 /**
- * 🔐 GLOBAL PROTECTION
+ * 🔐 GLOBAL PRODUCTION PROTECTION GATEWAY
+ * Restricts all sub-paths to authenticated, authorized administrators
  */
 router.use(protect);
 router.use(admin);
 
 /**
- * ─────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────────
  * 📊 PLATFORM STATS
- * ─────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────────
  */
-router.get('/health', asyncHandler(getPlatformStats));
-router.get('/stats', asyncHandler(getPlatformStats));
+// PRODUCTION FIX: Removed the redundant asyncHandler wrappers to prevent server-crashing duplication loops
+router.get('/health', getPlatformStats);
+router.get('/overview', getPlatformStats); // Central alignment fix
+router.get('/metrics', getPlatformStats);  // Central alignment fix
 
 /**
- * ─────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────────
  * 👥 USER MANAGEMENT
- * ─────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────────
  */
-router.get('/users', asyncHandler(getAllUsers));
-router.patch('/user/:id/:action', asyncHandler(updateUserStatus));
+router.get('/users', getAllUsers);
+router.patch('/users/:id/verify', updateUserStatus);
 
 /**
- * ─────────────────────────────
- * 💸 WITHDRAWAL ENGINE (🔥 FIX)
- * ─────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────────
+ * 💸 WITHDRAWAL ENGINE ROUTING NODES
+ * ────────────────────────────────────────────────────────────────────────────
  */
+// Get all pending operations records
+router.get('/withdrawals/pending', getWithdrawalRequests);
 
-// Get all withdrawals
-router.get('/withdrawals', asyncHandler(getWithdrawalRequests));
+// Approve withdrawal → triggers blockchain settlement engine
+router.post('/withdrawals/:id/approve', approveWithdrawal);
 
-// Approve withdrawal → triggers blockchain send
-router.put('/withdrawal/:id/approve', asyncHandler(approveWithdrawal));
-
-// Reject withdrawal → refund user
-router.put('/withdrawal/:id/reject', asyncHandler(rejectWithdrawal));
+// Reject withdrawal → returns capital reserves back into user balances pool
+router.post('/withdrawals/:id/reject', rejectWithdrawal);
 
 /**
- * ─────────────────────────────
- * ⚙️ YIELD ENGINE
- * ─────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────────
+ * ⚙️ YIELD ENGINE SCHEDULER OVERRIDES
+ * ────────────────────────────────────────────────────────────────────────────
  */
-router.post('/yield/trigger', asyncHandler(triggerYieldDistribution));
+router.post('/yield/trigger', triggerYieldDistribution);
 
 /**
- * ─────────────────────────────
- * 🪪 KYC SYSTEM
- * ─────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────────
+ * 🪪 KYC SECURITY IDENTITY VALIDATIONS
+ * ────────────────────────────────────────────────────────────────────────────
  */
-router.get('/kyc/pending', asyncHandler(getPendingKYCs));
-router.patch('/kyc/update', asyncHandler(updateKYCStatus));
+router.get('/kyc/pending', getPendingKYCs);
+// PRODUCTION FIX: Realigned signature paths to match parameter schema structures: /admin/kyc/:id
+router.patch('/kyc/:userId', updateKYCStatus);
 
 /**
- * ─────────────────────────────
- * 🎭 ADMIN IMPERSONATION
- * ─────────────────────────────
+ * ────────────────────────────────────────────────────────────────────────────
+ * 🎭 ADMIN IDENTITY IMPERSONATION NODES
+ * ────────────────────────────────────────────────────────────────────────────
  */
-router.post('/impersonate/:userId', asyncHandler(impersonateUser));
+router.post('/impersonate/:userId', impersonateUser);
 
 export default router;
+

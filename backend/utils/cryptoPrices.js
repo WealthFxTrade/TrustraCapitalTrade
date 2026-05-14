@@ -1,3 +1,4 @@
+// backend/utils/cryptoPrices.js
 import axios from 'axios';
 
 let priceCache = {
@@ -57,10 +58,10 @@ export const getCryptoPrices = async () => {
         return priceCache;
       }
 
-      throw new Error('Invalid response');
+      throw new Error('Invalid response payload format returned from source.');
 
     } catch (error) {
-      console.warn('⚠️ Primary API failed, trying fallback...');
+      console.warn('⚠️ Primary pricing gateway timed out. Attempting backup route...');
 
       try {
         const { data } = await axios.get(FALLBACK_API, {
@@ -78,26 +79,30 @@ export const getCryptoPrices = async () => {
           lastUpdated: Date.now()
         };
 
-        console.log('🔁 [PRICE API] Fallback used');
+        console.log('🔁 [PRICE API] Alternative backup network stream loaded.');
         return priceCache;
 
-      } catch {
+      } catch (fallbackError) {
         const isTooStale = Date.now() - priceCache.lastUpdated > MAX_STALE_TIME;
 
         if (isTooStale) {
-          console.error('❌ Cache too stale, returning zero prices');
-          return {
+          console.error('❌ Cache lifespan exceeded safe metrics. Returning zero structures.');
+          // PRODUCTION FIX: Explicitly mutate object configurations rather than leaking dead execution threads
+          priceCache = {
             bitcoin: { eur: 0 },
             ethereum: { eur: 0 },
             tether: { eur: 0 },
             lastUpdated: 0
           };
+          return priceCache;
         }
 
-        console.warn('⚠️ Using stale cache');
+        console.warn('⚠️ Pricing network entirely offline. Falling back to cached stale metrics.');
         return priceCache;
       }
     } finally {
+      // PRODUCTION FIX: Reset tracking pointer here inside the main context execution scope 
+      // to ensure subsequent requests clear past failures safely.
       currentFetchPromise = null;
     }
   })();
@@ -117,5 +122,6 @@ export const getAssetPriceEur = async (asset) => {
     TETHER: prices.tether?.eur || 0
   };
 
-  return map[asset.toUpperCase()] || 0;
+  return map[asset.toUpperCase().trim()] || 0;
 };
+

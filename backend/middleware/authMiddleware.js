@@ -75,6 +75,25 @@ export const protect = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, 'Session invalid. Please log in again.');
   }
 
+  // ── PRODUCTION SECURITY FIX: TOKEN VERSION ENFORCEMENT ──
+  // Checks token session versions against live user data properties.
+  // Instantly revokes access if a password change incremented tokenVersion.
+  const currentTokenVersion = decoded.version || 0;
+  const liveUserTokenVersion = user.tokenVersion || 0;
+
+  if (currentTokenVersion < liveUserTokenVersion) {
+    console.warn(`[AUTH] Token version mismatch for user ${user._id}. Revoking session states.`);
+    
+    res.clearCookie('trustra_token', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      path: '/',
+    });
+
+    throw new ApiError(401, 'Session invalidated due to credential modifications. Please log in again.');
+  }
+
   // ── CHECK ACCOUNT STATUS ──
   if (!user.isActive) {
     throw new ApiError(403, 'Account is deactivated');
@@ -95,7 +114,8 @@ export const protect = asyncHandler(async (req, res, next) => {
  * ============================================================================
  * Restricts access to admin and superadmin roles
  */
-export const admin = (req, res, next) => {
+// PRODUCTION FIX: Wrapped inside asyncHandler to safely pass execution errors to errorMiddleware
+export const admin = asyncHandler(async (req, res, next) => {
   if (!req.user) {
     throw new ApiError(401, 'Authentication required');
   }
@@ -107,14 +127,15 @@ export const admin = (req, res, next) => {
   }
 
   next();
-};
+});
 
 /**
  * ============================================================================
  * OPTIONAL: SUPER ADMIN ONLY
  * ============================================================================
  */
-export const superAdmin = (req, res, next) => {
+// PRODUCTION FIX: Wrapped inside asyncHandler to safely protect root admin route executions
+export const superAdmin = asyncHandler(async (req, res, next) => {
   if (!req.user) {
     throw new ApiError(401, 'Authentication required');
   }
@@ -124,5 +145,5 @@ export const superAdmin = (req, res, next) => {
   }
 
   next();
-};
+});
 

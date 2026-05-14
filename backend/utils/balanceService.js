@@ -1,193 +1,178 @@
-// controllers/adminController.js
-import asyncHandler from 'express-async-handler';
+// backend/utils/balanceService.js
 import User from '../models/User.js';
-import LedgerEntry from '../models/LedgerEntry.js';
-import Deposit from '../models/Deposit.js';
-import Withdrawal from '../models/Withdrawal.js';
-import { getCryptoPriceEUR } from '../utils/balanceService.js';
+import { getAssetPriceEur } from './cryptoPrices.js';
+import { createDoubleEntry } from './doubleEntry.js';
+import ApiError from './ApiError.js';
 
 /**
- * Add admin ledger entry
+ * ============================================================================
+ * BALANCE VALIDATION & MATH NORMALIZERS
+ * ============================================================================
  */
-const addAdminLedgerEntry = async ({
-  userId,
-  type,
-  source,
-  currency,
-  amount,
-  eurValue,
-  referenceId = null,
-  description = '',
-  createdBy,
-}) => {
-  return await LedgerEntry.create({
-    user: userId,
-    type,
-    source,
-    currency,
-    amount,
-    eurValue,
-    referenceId,
-    description,
-    createdBy,
-  });
+
+/**
+ * Validates if an asset ticker is supported by the system architecture
+ * @param {String} currency - Asset symbol (e.g., 'EUR', 'BTC', 'ETH', 'USDT')
+ * @returns {Boolean} True if supported
+ */
+export const isSupportedAsset = (currency) => {
+  const supported = ['EUR', 'BTC', 'ETH', 'USDT', 'INVESTED', 'TOTAL_PROFIT'];
+  return supported.includes(currency.toUpperCase().trim());
 };
 
 /**
- * @route   GET /api/admin/users
- * @desc    Get all users
- * @access  Admin
+ * Safely forces a numeric calculation float boundary to prevent precision errors
+ * @param {Number} value - The input float number 
+ * @param {Number} precision - Decimal places (default 8 for crypto, 2 for fiat)
+ * @returns {Number} Normalized finite float number
  */
-export const getAllUsers = asyncHandler(async (req, res) => {
-  const users = await User.find().select('-password');
-  res.status(200).json({ success: true, data: users });
-});
+export const normalizePrecision = (value, precision = 8) => {
+  const num = parseFloat(value);
+  return isNaN(num) || !isFinite(num) ? 0 : Number(num.toFixed(precision));
+};
 
 /**
- * @route   GET /api/admin/user/:id
- * @desc    Get user by ID
- * @access  Admin
+ * ============================================================================
+ * CORE USER BALANCE TRANSACTION UTILITIES
+ * ============================================================================
  */
-export const getUserById = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id).select('-password');
-  if (!user) throw new Error('User not found');
-  res.status(200).json({ success: true, data: user });
-});
 
 /**
- * @route   GET /api/admin/ledger
- * @desc    Get full ledger of all users
- * @access  Admin
+ * Modifies an absolute user balance sub-object field securely inside the database.
+ * Eliminates old Map abstractions (.get/.set) to prevent runtime TypeErrors.
+ * 
+ * @param {Object} params
+ * @param {String} params.userId - Target user database ID index
+ * @param {String} params.currency - Token target (e.g. 'BTC', 'ETH', 'EUR')
+ * @param {Number} params.amount - Numeric magnitude value of capital adjustment
+ * @param {String} params.operationType - Mathematical modifier switch ('credit' or 'debit')
+ * @param {String} params.balanceField - Sub-field scope target (e.g. 'available' or 'locked')
+ * @returns {Object} Updated User document instance
  */
-export const getFullLedger = asyncHandler(async (req, res) => {
-  const ledger = await LedgerEntry.find().populate('user', 'username email');
-  res.status(200).json({ success: true, data: ledger });
-});
+export const adjustUserBalance = async ({
+  userId,
+  currency,
+  amount,
+  operationType,
+  balanceField = 'available'
+}) => {
+  const asset = currency.toUpperCase().trim();
+  const magnitude = parseFloat(amount);
 
-/**
- * @route   POST /api/admin/ledger-adjustment
- * @desc    Add manual admin ledger adjustment
- * @access  Admin
- */
-export const addLedgerAdjustment = asyncHandler(async (req, res) => {
-  const { userId, type, currency, amount, description } = req.body;
+  if (!userId || isNaN(magnitude) || magnitude <= 0) {
+    throw new ApiError(400, 'Invalid parameters or amount supplied for balance mutation pipeline.');
+  }
+
+  if (!isSupportedAsset(asset)) {
+    throw new ApiError(400, `Digital crypto asset ticker [${asset}] is not supported by this vault node.`);
+  }
+
+  // Determine the true nested sub-field text key path name configuration dynamically
+  let targetFieldKey = asset;
+  if (balanceField === 'locked') {
+    if (['INVESTED', 'TOTAL_PROFIT'].includes(asset)) {
+      throw new ApiError(400, `System operational tracker metrics cannot be placed into a locked buffer.`);
+    }
+    targetFieldKey = `LOCKED_${asset}`;
+  }
+
+  // Fetch target user without omitting password fields if controllers require them later
   const user = await User.findById(userId);
-  if (!user) throw new Error('User not found');
+  if (!user) {
+    throw new ApiError(404, 'Target platform user profile profile trace absent.');
+  }
 
-  const numericAmount = Number(amount);
-  if (isNaN(numericAmount)) throw new Error('Invalid amount');
+  // PRODUCTION STABILITY FIX: Initialize parameter safety hooks if fields are absent
+  if (user.balances[targetFieldKey] === undefined) {
+    user.balances[targetFieldKey] = 0;
+  }
 
-  // Update user balance
-  const currentBalance = user.balances.get(currency) || 0;
-  const newBalance = type === 'credit' ? currentBalance + numericAmount : currentBalance - numericAmount;
-  user.balances.set(currency, newBalance);
+  const currentBalanceValue = Number(user.balances[targetFieldKey] || 0);
+  const decimalBoundary = ['EUR', 'TOTAL_PROFIT'].includes(asset) ? 2 : 8;
+
+  let computedFinalBalance = 0;
+  if (operationType === 'credit') {
+    computedFinalBalance = normalizePrecision(currentBalanceValue + magnitude, decimalBoundary);
+  } else if (operationType === 'debit') {
+    computedFinalBalance = normalizePrecision(currentBalanceValue - magnitude, decimalBoundary);
+  } else {
+    throw new ApiError(400, 'Invalid operational modifier token. Must specify credit or debit execution tracks.');
+  }
+
+  // Block malicious client or broken database sub-zero arithmetic modifications
+  if (computedFinalBalance < 0) {
+    throw new ApiError(400, `Operation aborted. Ledger adjustment triggers an illegal sub-zero capital state [${computedFinalBalance}] on wallet.`);
+  }
+
+  // Assign the finalized computation directly back to the flat sub-object property path
+  user.balances[targetFieldKey] = computedFinalBalance;
   user.markModified('balances');
+  
+  await user.save();
+  return user;
+};
 
-  // Compute EUR value for BTC/ETH
-  const eurValue =
-    currency === 'EUR' ? numericAmount : numericAmount * (await getCryptoPriceEUR(currency));
+/**
+ * Executes a high-security balanced admin adjustment trail across user profiles.
+ * Seamlessly integrates with the underlying Double-Entry bookkeeping transaction engine.
+ * 
+ * @param {Object} params
+ * @param {String} params.userId - Target user database footprint ID
+ * @param {String} params.type - 'credit' or 'debit' tracking descriptors
+ * @param {String} params.currency - Target fiat or crypto asset parameter string
+ * @param {Number} params.amount - Numeric magnitude indicator value
+ * @param {String} params.description - Intent statement rationale audit trace text
+ * @param {String} params.adminId - Admin execution agent identifier signature
+ * @returns {Object} Finalized balance state and currency context details
+ */
+export const executeAdminBalanceOverride = async ({
+  userId,
+  type,
+  currency,
+  amount,
+  description,
+  adminId
+}) => {
+  const asset = currency.toUpperCase().trim();
+  const numericAmount = parseFloat(amount);
 
-  await addAdminLedgerEntry({
-    userId: user._id,
-    type,
-    source: 'admin_adjustment',
-    currency,
+  if (isNaN(numericAmount) || numericAmount <= 0) {
+    throw new ApiError(400, 'Operational adjustment value must evaluate to a positive, finite float.');
+  }
+
+  // Execute atomic sub-object modifications safely 
+  const updatedUser = await adjustUserBalance({
+    userId,
+    currency: asset,
     amount: numericAmount,
-    eurValue,
-    description: description || 'Admin adjustment',
-    createdBy: req.admin._id, // admin performing adjustment
+    operationType: type,
+    balanceField: 'available'
   });
 
-  await user.save();
+  // Calculate equivalent reference asset values across fiat parameters safely
+  const marketConversionPrice = asset === 'EUR' ? 1 : await getAssetPriceEur(asset);
+  if (!marketConversionPrice) {
+    throw new ApiError(500, 'Unable to compute market conversion weights from external price feeds. Execution halted.');
+  }
 
-  res.status(201).json({
+  const calculatedEurWorth = normalizePrecision(numericAmount * marketConversionPrice, 2);
+
+  // PRODUCTION AUDIT trail FIX: Commit balanced records securely via the transactional accounting loop helper
+  await createDoubleEntry({
+    userId: updatedUser._id,
+    amount: numericAmount,
+    currency: asset,
+    source: 'admin_adjustment',
+    debitAccount: type === 'credit' ? 'SYSTEM_RESERVES_TREASURY_POOL' : `USER_WALLET_NODE_${asset}`,
+    creditAccount: type === 'credit' ? `USER_WALLET_NODE_${asset}` : 'SYSTEM_RESERVES_TREASURY_POOL',
+    description: `[MANUAL_ADMIN_ADJUSTMENT] performed by agent: ${adminId}. Reason: ${description || 'No statement provided.'}. Value parity: €${calculatedEurWorth}`
+  });
+
+  return {
     success: true,
-    message: 'Ledger adjustment applied successfully',
-    newBalance,
-  });
-});
+    newBalance: updatedUser.balances[asset],
+    asset,
+    calculatedEurWorth
+  };
+};
 
-/**
- * @route   GET /api/admin/deposits
- * @desc    List all deposits
- * @access  Admin
- */
-export const getAllDeposits = asyncHandler(async (req, res) => {
-  const deposits = await Deposit.find().populate('user', 'username email');
-  res.status(200).json({ success: true, data: deposits });
-});
-
-/**
- * @route   GET /api/admin/withdrawals
- * @desc    List all withdrawal requests
- * @access  Admin
- */
-export const getAllWithdrawals = asyncHandler(async (req, res) => {
-  const withdrawals = await Withdrawal.find().populate('user', 'username email');
-  res.status(200).json({ success: true, data: withdrawals });
-});
-
-/**
- * @route   POST /api/admin/withdrawals/:id/approve
- * @desc    Approve a withdrawal
- * @access  Admin
- */
-export const approveWithdrawal = asyncHandler(async (req, res) => {
-  const withdrawal = await Withdrawal.findById(req.params.id);
-  if (!withdrawal) throw new Error('Withdrawal not found');
-
-  if (withdrawal.status === 'completed') {
-    throw new Error('Withdrawal already completed');
-  }
-
-  const user = await User.findById(withdrawal.user);
-  if (!user) throw new Error('User not found');
-
-  const currency = withdrawal.currency;
-  const amount = withdrawal.amount;
-  const currentBalance = user.balances.get(currency) || 0;
-
-  if (currentBalance < amount) {
-    throw new Error('Insufficient balance for withdrawal');
-  }
-
-  user.balances.set(currency, currentBalance - amount);
-  user.markModified('balances');
-
-  // Ledger entry
-  const eurValue =
-    currency === 'EUR' ? amount : amount * (await getCryptoPriceEUR(currency));
-
-  await addAdminLedgerEntry({
-    userId: user._id,
-    type: 'debit',
-    source: 'withdrawal',
-    currency,
-    amount,
-    eurValue,
-    referenceId: withdrawal._id,
-    description: 'Approved withdrawal',
-    createdBy: req.admin._id,
-  });
-
-  withdrawal.status = 'completed';
-  await withdrawal.save();
-  await user.save();
-
-  res.status(200).json({ success: true, message: 'Withdrawal approved' });
-});
-
-/**
- * @route   POST /api/admin/withdrawals/:id/reject
- * @desc    Reject a withdrawal
- * @access  Admin
- */
-export const rejectWithdrawal = asyncHandler(async (req, res) => {
-  const withdrawal = await Withdrawal.findById(req.params.id);
-  if (!withdrawal) throw new Error('Withdrawal not found');
-
-  withdrawal.status = 'rejected';
-  await withdrawal.save();
-
-  res.status(200).json({ success: true, message: 'Withdrawal rejected' });
-});
