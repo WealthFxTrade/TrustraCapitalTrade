@@ -3,13 +3,13 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import api, { API_ENDPOINTS } from '@/api/api';
 import { useAuth } from '@/context/AuthContext';
-import { 
-  ShieldCheck, 
-  User, 
-  Phone, 
-  Lock, 
-  Save, 
-  Loader2 
+import {
+  ShieldCheck,
+  User,
+  Phone,
+  Lock,
+  Save,
+  Loader2
 } from 'lucide-react';
 
 export default function Profile({ balances = {} }) {
@@ -23,7 +23,7 @@ export default function Profile({ balances = {} }) {
     confirmPassword: '',
   });
 
-  // Sync user data into form
+  // Sync user data into local form states cleanly
   useEffect(() => {
     if (user) {
       setProfile((prev) => ({
@@ -44,44 +44,53 @@ export default function Profile({ balances = {} }) {
     setLoading(true);
     try {
       const payload = {
-        name: profile.name,
-        phoneNumber: profile.phoneNumber,
+        name: profile.name.trim(),
+        phoneNumber: profile.phoneNumber.trim(),
       };
 
       if (profile.password) {
         payload.password = profile.password;
       }
 
-      const res = await api.put(API_ENDPOINTS.USER.PROFILE, payload);
+      // PRODUCTION FIX: Re-routed endpoint execution path to match the verified auth layer structure
+      const res = await api.put(API_ENDPOINTS.AUTH.PROFILE, payload);
 
       if (res.data?.success) {
-        toast.success('Profile updated successfully');
+        toast.success('Profile credentials updated successfully');
         setProfile((prev) => ({ ...prev, password: '', confirmPassword: '' }));
-        if (refreshSession) await refreshSession();
+        if (refreshSession) {
+          await refreshSession();
+        }
       } else {
-        toast.error(res.data?.message || 'Update failed');
+        toast.error(res.data?.message || 'Update processing failed.');
       }
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to update profile');
+      toast.error(err?.response?.data?.message || 'Failed to update profile credentials.');
     } finally {
       setLoading(false);
     }
   };
 
+  // PRODUCTION FIX: Safe tracking function to prevent NaN formatting evaluation bugs
+  const formatBalance = (val, decimals = 2) => {
+    const num = Number(val);
+    return isNaN(num) ? (0).toFixed(decimals) : num.toFixed(decimals);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
-      {/* Wallet Overview */}
+      {/* Wallet Balance Metrics Overview */}
       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 shadow-2xl">
         <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 mb-8 flex items-center gap-2">
-          <ShieldCheck size={14} /> Security Vault Balances
+          <ShieldCheck size={14} className="text-emerald-500" /> Security Vault Balances
         </h3>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
           {[
             { label: 'Available', val: `€${Number(balances?.EUR || 0).toLocaleString('de-DE')}`, color: 'text-white' },
             { label: 'ROI',       val: `€${Number(balances?.ROI || 0).toLocaleString('de-DE')}`, color: 'text-emerald-400' },
-            { label: 'Bitcoin',   val: `${Number(balances?.BTC || 0).toFixed(6)} BTC`, color: 'text-orange-400' },
-            { label: 'Ethereum',  val: `${Number(balances?.ETH || 0).toFixed(4)} ETH`, color: 'text-blue-400' },
+            { label: 'Bitcoin',   val: `${formatBalance(balances?.BTC, 6)} BTC`, color: 'text-orange-400' },
+            { label: 'Ethereum',  val: `${formatBalance(balances?.ETH, 4)} ETH`, color: 'text-blue-400' },
           ].map((item, i) => (
             <div key={i}>
               <p className="text-[10px] font-bold text-gray-500 uppercase mb-1">{item.label}</p>
@@ -91,7 +100,7 @@ export default function Profile({ balances = {} }) {
         </div>
       </div>
 
-      {/* Profile Settings */}
+      {/* Profile Identity Form Controls */}
       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 md:p-12 shadow-2xl">
         <div className="mb-10">
           <h2 className="text-2xl font-bold">Account Settings</h2>
@@ -106,9 +115,11 @@ export default function Profile({ balances = {} }) {
               <input
                 type="text"
                 value={profile.name}
-                onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                // PRODUCTION FIX: Relies on functional previous state spreads to block input truncation drops
+                onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl px-12 py-4 focus:outline-none focus:border-white/30 transition-all"
                 placeholder="John Doe"
+                required
               />
             </div>
           </div>
@@ -120,7 +131,7 @@ export default function Profile({ balances = {} }) {
               <input
                 type="tel"
                 value={profile.phoneNumber}
-                onChange={(e) => setProfile({ ...profile, phoneNumber: e.target.value })}
+                onChange={(e) => setProfile((prev) => ({ ...prev, phoneNumber: e.target.value }))}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl px-12 py-4 focus:outline-none focus:border-white/30 transition-all"
                 placeholder="+234 000 000 0000"
               />
@@ -135,7 +146,7 @@ export default function Profile({ balances = {} }) {
                 type="password"
                 placeholder="••••••••"
                 value={profile.password}
-                onChange={(e) => setProfile({ ...profile, password: e.target.value })}
+                onChange={(e) => setProfile((prev) => ({ ...prev, password: e.target.value }))}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl px-12 py-4 focus:outline-none focus:border-white/30 transition-all"
               />
             </div>
@@ -149,7 +160,7 @@ export default function Profile({ balances = {} }) {
                 type="password"
                 placeholder="••••••••"
                 value={profile.confirmPassword}
-                onChange={(e) => setProfile({ ...profile, confirmPassword: e.target.value })}
+                onChange={(e) => setProfile((prev) => ({ ...prev, confirmPassword: e.target.value }))}
                 className="w-full bg-white/5 border border-white/10 rounded-2xl px-12 py-4 focus:outline-none focus:border-white/30 transition-all"
               />
             </div>
@@ -159,7 +170,7 @@ export default function Profile({ balances = {} }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-5 bg-white text-black font-black rounded-2xl flex items-center justify-center gap-3 hover:bg-emerald-400 transition-all disabled:opacity-50"
+              className="w-full py-5 bg-white text-black font-black rounded-2xl flex items-center justify-center gap-3 hover:bg-emerald-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
               {loading ? 'Securing Changes...' : 'Save Profile Changes'}
@@ -170,3 +181,4 @@ export default function Profile({ balances = {} }) {
     </div>
   );
 }
+

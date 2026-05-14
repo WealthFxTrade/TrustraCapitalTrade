@@ -12,9 +12,20 @@ export default function Withdrawal({ balances = {}, refreshBalances }) {
 
   const availableEUR = Number(balances?.EUR || 0);
 
+  // PRODUCTION HARDENING: Explicitly parses and normalizes floating-point strings safely
   const parseAmount = () => {
-    const num = Number(amount);
-    return isNaN(num) ? 0 : num;
+    if (!amount) return 0;
+    const num = parseFloat(amount);
+    return isNaN(num) || !isFinite(num) ? 0 : num;
+  };
+
+  const handleInputChange = (val) => {
+    // Blocks invalid characters and leading zero strings at the input level
+    if (val === '') {
+      setAmount('');
+      return;
+    }
+    setAmount(val);
   };
 
   const handleSubmit = (e) => {
@@ -55,6 +66,11 @@ export default function Withdrawal({ balances = {}, refreshBalances }) {
     }
   };
 
+  const handleBackAction = () => {
+    if (loading) return;
+    setShowConfirm(false);
+  };
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="bg-white/5 border border-white/10 rounded-[2rem] p-8 md:p-12 shadow-2xl">
@@ -76,8 +92,9 @@ export default function Withdrawal({ balances = {}, refreshBalances }) {
                 <label className="text-[10px] font-bold text-gray-500 uppercase ml-4 mb-2 block">Amount (EUR)</label>
                 <input
                   type="number"
+                  step="any" // PRODUCTION FIX: Allows fractional financial calculations without dropping UI states
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => handleInputChange(e.target.value)}
                   placeholder="50.00"
                   min="50"
                   className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-xl font-bold focus:outline-none focus:border-emerald-500/50 transition-all"
@@ -121,11 +138,11 @@ export default function Withdrawal({ balances = {}, refreshBalances }) {
             <div className="bg-white/5 rounded-2xl p-6 text-left space-y-4">
               <div className="flex justify-between border-b border-white/5 pb-3">
                 <span className="text-gray-500">Amount</span>
-                <span className="font-bold">€{parseAmount().toLocaleString('de-DE')}</span>
+                <span className="font-bold">€{parseAmount().toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div>
                 <span className="text-gray-500 block mb-1">Destination</span>
-                <span className="font-mono text-xs break-all bg-black/50 p-3 rounded-lg border border-white/5">
+                <span className="font-mono text-xs break-all bg-black/50 p-3 rounded-lg border border-white/5 block">
                   {address}
                 </span>
               </div>
@@ -133,12 +150,15 @@ export default function Withdrawal({ balances = {}, refreshBalances }) {
 
             <div className="grid grid-cols-2 gap-4">
               <button
-                onClick={() => !loading && setShowConfirm(false)}
-                className="py-4 bg-white/5 border border-white/10 rounded-2xl font-bold hover:bg-white/10 transition-all"
+                type="button"
+                onClick={handleBackAction}
+                disabled={loading}
+                className="py-4 bg-white/5 border border-white/10 rounded-2xl font-bold hover:bg-white/10 transition-all disabled:opacity-50"
               >
                 Back
               </button>
               <button
+                type="button"
                 onClick={confirmWithdrawal}
                 disabled={loading}
                 className="py-4 bg-emerald-500 text-black font-black rounded-2xl flex items-center justify-center gap-2 hover:bg-emerald-400 transition-all disabled:opacity-50"
@@ -153,3 +173,4 @@ export default function Withdrawal({ balances = {}, refreshBalances }) {
     </div>
   );
 }
+

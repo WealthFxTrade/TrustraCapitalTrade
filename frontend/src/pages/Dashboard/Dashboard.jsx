@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '@/context/AuthContext';
 import api, { API_ENDPOINTS } from '@/api/api';
+import { SOCKET_URL } from '@/constants/api'; // PRODUCTION FIX: Imported correctly from constants instead of api client instance
 import toast from 'react-hot-toast';
 
 import Deposit from './Deposit';
@@ -11,14 +12,14 @@ import Invest from './Invest';
 import Ledger from './Ledger';
 import Profile from './Profile';
 
-import { 
-  Loader2, 
-  RefreshCw, 
-  LayoutDashboard, 
-  Wallet, 
-  ArrowUpCircle, 
-  History, 
-  User as UserIcon 
+import {
+  Loader2,
+  RefreshCw,
+  LayoutDashboard,
+  Wallet,
+  ArrowUpCircle,
+  History,
+  User as UserIcon
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -67,7 +68,7 @@ export default function Dashboard() {
       console.error("Dashboard Sync Error:", err);
       const errorMsg = err.response?.data?.message || err.message || 'Failed to synchronize vault';
       setError(errorMsg);
-      
+
       if (document.visibilityState === 'visible') {
         toast.error(errorMsg);
       }
@@ -83,8 +84,8 @@ export default function Dashboard() {
 
     const userId = user._id || user.id;
 
-    // Use consistent base URL from environment
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:10000';
+    // Centralized mapping layer logic connects securely across different hosting provider roots
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || SOCKET_URL;
 
     socketRef.current = io(socketUrl, {
       withCredentials: true,
@@ -109,7 +110,7 @@ export default function Dashboard() {
       if (data.message) {
         toast.success(data.message, { icon: '💰' });
       }
-      // Refresh full data in background
+      // Refresh full data context in background layer
       syncNodeData(false);
     });
 
@@ -124,11 +125,11 @@ export default function Dashboard() {
     };
   }, [user, syncNodeData]);
 
-  // Initial load + periodic sync
+  // Initial load + periodic background sync
   useEffect(() => {
     if (user) {
       syncNodeData(true);
-      const interval = setInterval(() => syncNodeData(false), 60000); // every 60 seconds
+      const interval = setInterval(() => syncNodeData(false), 60000); // sync every 60 seconds
       return () => clearInterval(interval);
     }
   }, [user, syncNodeData]);
@@ -156,12 +157,12 @@ export default function Dashboard() {
       case 'Deposit':   return <Deposit refreshBalances={syncNodeData} />;
       case 'Withdraw':  return <Withdrawal balances={currentBalances} refreshBalances={syncNodeData} />;
       case 'Ledger':    return <Ledger transactions={transactions} refreshBalances={syncNodeData} />;
-      case 'Profile':   return <Profile refreshSession={refreshSession} />;
-      default:          return <div>Tab not found</div>;
+      case 'Profile':   return <Profile balances={currentBalances} refreshSession={refreshSession} />;
+      default:          return <div className="p-4 text-center text-gray-500">Tab target execution panel unavailable.</div>;
     }
   };
 
-  // Global error state
+  // Global exception display handler
   if (error && !loading) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-8">
@@ -170,6 +171,7 @@ export default function Dashboard() {
           <h2 className="text-2xl font-bold mb-4">Failed to load dashboard</h2>
           <p className="text-gray-400 mb-8">{error}</p>
           <button
+            type="button"
             onClick={() => syncNodeData(true)}
             className="px-8 py-4 bg-white text-black font-bold rounded-2xl flex items-center gap-3 mx-auto hover:bg-gray-200 transition"
           >
@@ -183,19 +185,19 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-black text-white p-4 lg:p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Top Metrics Cards */}
+        {/* Top Financial Metric Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Available EUR</p>
-            <p className="text-3xl font-black">€{availableBalance.toLocaleString('de-DE')}</p>
+            <p className="text-3xl font-black">€{availableBalance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
           </div>
           <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
             <p className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1">Total Profit</p>
-            <p className="text-3xl font-black text-emerald-400">€{accruedROI.toLocaleString('de-DE')}</p>
+            <p className="text-3xl font-black text-emerald-400">€{accruedROI.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
           </div>
           <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Principal</p>
-            <p className="text-3xl font-black">€{principal.toLocaleString('de-DE')}</p>
+            <p className="text-3xl font-black">€{principal.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
           </div>
           <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
             <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-1">Bitcoin</p>
@@ -203,7 +205,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Sub-Navigation System Controls */}
         <div className="flex overflow-x-auto gap-2 mb-8 pb-2 no-scrollbar">
           {[
             { id: 'Invest',    icon: LayoutDashboard, label: 'Invest' },
@@ -211,27 +213,32 @@ export default function Dashboard() {
             { id: 'Withdraw',  icon: ArrowUpCircle,  label: 'Withdraw' },
             { id: 'Ledger',    icon: History,        label: 'Ledger' },
             { id: 'Profile',   icon: UserIcon,       label: 'Profile' },
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'bg-white text-black scale-105 shadow-xl shadow-white/10'
-                  : 'bg-white/5 text-gray-400 hover:bg-white/10'
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
+          ].map((tab) => {
+            const IconComponent = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'bg-white text-black shadow-lg'
+                    : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <IconComponent className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
         </div>
 
-        {/* Tab Content */}
-        <div className="min-h-[500px]">
+        {/* Core Content Dynamic Target Container Pane */}
+        <div className="w-full bg-white/5 border border-white/10 rounded-3xl p-6 lg:p-8">
           {renderTabContent()}
         </div>
       </div>
     </div>
   );
 }
+

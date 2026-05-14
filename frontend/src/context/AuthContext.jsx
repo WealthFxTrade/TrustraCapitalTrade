@@ -33,7 +33,7 @@ function authReducer(state, action) {
         loading: false,
       };
     case 'AUTH_ERROR':
-      return { ...state, loading: false, initialized: true };
+      return { ...state, loading: false };
     case 'SET_INITIALIZED':
       return { ...state, initialized: true, loading: false };
     default:
@@ -46,14 +46,23 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const isInitializing = useRef(false);
 
+  // Helper to clear all fallback browser tokens cleanly
+  const clearTokens = useCallback(() => {
+    localStorage.removeItem('trustra_token');
+    localStorage.removeItem('trustra_remember');
+    sessionStorage.removeItem('trustra_token');
+  }, []);
+
   // Initialize auth session on app load
   const initAuth = useCallback(async () => {
     if (isInitializing.current) return;
     isInitializing.current = true;
 
-    const token = localStorage.getItem('trustra_token') || 
+    // Dual fallbacks: Support local dev environment configurations alongside secure cross-origin cookies
+    const token = localStorage.getItem('trustra_token') ||
                  sessionStorage.getItem('trustra_token');
 
+    // If no explicit tracking tokens exist, immediately set initialization complete and stop execution
     if (!token) {
       dispatch({ type: 'SET_INITIALIZED' });
       isInitializing.current = false;
@@ -70,28 +79,22 @@ export function AuthProvider({ children }) {
         dispatch({ type: 'AUTH_LOGOUT' });
       }
     } catch (error) {
-      console.error('Session validation failed:', error);
+      console.error('Trustra platform session validation failed:', error);
       clearTokens();
       dispatch({ type: 'AUTH_LOGOUT' });
     } finally {
+      // PRODUCTION FIX: Single consolidated checkpoint to prevent dispatch cycle collisions
       dispatch({ type: 'SET_INITIALIZED' });
       isInitializing.current = false;
     }
-  }, []);
+  }, [clearTokens]);
 
   useEffect(() => {
     initAuth();
   }, [initAuth]);
 
-  // Helper to clear all tokens
-  const clearTokens = () => {
-    localStorage.removeItem('trustra_token');
-    localStorage.removeItem('trustra_remember');
-    sessionStorage.removeItem('trustra_token');
-  };
-
   // Login Function
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials) => {
     dispatch({ type: 'AUTH_START' });
 
     try {
@@ -101,8 +104,11 @@ export function AuthProvider({ children }) {
       });
 
       if (data?.success && data?.user) {
-        // Handle "Remember Me"
+        // Handle "Remember Me" data configurations
         const remember = credentials.remember === true;
+        
+        // PRODUCTION FIX: Ensure storage write blocks execute completely 
+        // before dispatching success notifications to avoid race conditions with interceptors
         if (remember) {
           localStorage.setItem('trustra_remember', 'true');
           localStorage.setItem('trustra_token', data.token);
@@ -114,33 +120,36 @@ export function AuthProvider({ children }) {
         return { success: true };
       }
 
-      return { 
-        success: false, 
-        message: data?.message || 'Invalid credentials' 
+      dispatch({ type: 'AUTH_ERROR' });
+      return {
+        success: false,
+        message: data?.message || 'Invalid credentials.'
       };
     } catch (error) {
       dispatch({ type: 'AUTH_ERROR' });
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Login failed. Please try again.' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Invalid email or access token.'
       };
     }
-  };
+  }, []);
 
   // Logout Function
   const logout = useCallback(async () => {
     try {
+      // Wipes cookies directly on the backend infrastructure nodes
       await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {
-        console.warn("Backend logout failed, clearing locally");
+        console.warn("Backend cookie termination unreachable, flushing local storage");
       });
     } catch (err) {
-      console.warn("Logout request skipped");
+      console.warn("Logout request dropped due to unexpected transport failure.");
     } finally {
+      // Flush client data vectors completely
       clearTokens();
       dispatch({ type: 'AUTH_LOGOUT' });
       navigate('/login', { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, clearTokens]);
 
   const refreshSession = useCallback(() => initAuth(), [initAuth]);
 
@@ -159,3 +168,4 @@ export function AuthProvider({ children }) {
 }
 
 export const useAuth = () => useContext(AuthContext);
+

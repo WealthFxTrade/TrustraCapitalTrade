@@ -22,7 +22,8 @@ export default function Invest({ balances = {}, refreshBalances }) {
 
   const handleInvest = async (plan) => {
     if (availableEUR < plan.min) {
-      toast.error(`Minimum investment for \( {plan.name} is € \){plan.min.toLocaleString()}`);
+      // PRODUCTION FIX: Corrected the malformed bracket template literal syntax string
+      toast.error(`Minimum investment for ${plan.name} is €${plan.min.toLocaleString('de-DE')}`);
       return;
     }
 
@@ -30,8 +31,9 @@ export default function Invest({ balances = {}, refreshBalances }) {
     const tid = toast.loading(`Activating ${plan.name}...`);
 
     try {
-      // Note: You may need to update this endpoint in API_ENDPOINTS if it doesn't exist
-      const res = await api.post('/users/invest', {  // Adjust endpoint as per your backend
+      // PRODUCTION FIX: Relies on centralized tracking endpoints instead of a hardcoded route string
+      // Note: Make sure to verify this path route maps cleanly to your backend router definitions
+      const res = await api.post(API_ENDPOINTS.USER.INVEST || '/users/invest', {
         amount: plan.min,
         planName: plan.name,
         currency: 'EUR',
@@ -41,10 +43,11 @@ export default function Invest({ balances = {}, refreshBalances }) {
         toast.success(`${plan.name} activated successfully!`, { id: tid });
         refreshBalances?.();
       } else {
-        throw new Error(res.data?.message || 'Investment failed');
+        throw new Error(res.data?.message || 'Investment execution declined.');
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Investment failed', { id: tid });
+      // PRODUCTION FIX: Keeps error notifications attached to the same card layout context id
+      toast.error(err.response?.data?.message || 'Investment tracking failed. Please try again.', { id: tid });
     } finally {
       setLoading(false);
     }
@@ -66,10 +69,10 @@ export default function Invest({ balances = {}, refreshBalances }) {
         toast.success('Profit compounded successfully!', { id: tid });
         refreshBalances?.();
       } else {
-        throw new Error(res.data?.message || 'Compounding failed');
+        throw new Error(res.data?.message || 'Compounding request declined.');
       }
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Compounding failed', { id: tid });
+      toast.error(err.response?.data?.message || 'Compounding failed.', { id: tid });
     } finally {
       setLoading(false);
     }
@@ -77,7 +80,7 @@ export default function Invest({ balances = {}, refreshBalances }) {
 
   return (
     <div className="space-y-12 pb-20">
-      {/* Balance Overview */}
+      {/* Balance Overview Cards */}
       <div className="grid md:grid-cols-3 gap-6">
         <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
           <p className="text-xs text-gray-500 uppercase tracking-widest">Available Capital</p>
@@ -89,9 +92,10 @@ export default function Invest({ balances = {}, refreshBalances }) {
           <p className="text-5xl font-black text-emerald-400 mt-3">€{accruedProfit.toLocaleString('de-DE')}</p>
 
           <button
+            type="button"
             onClick={handleCompound}
             disabled={loading || accruedProfit < 10}
-            className="mt-8 w-full py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-700 text-black font-bold rounded-2xl transition-all"
+            className="mt-8 w-full py-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-gray-700 text-black font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Compound Profit
           </button>
@@ -103,10 +107,10 @@ export default function Invest({ balances = {}, refreshBalances }) {
         </div>
       </div>
 
-      {/* Investment Plans */}
+      {/* Investment Plans Section */}
       <div>
-        <h3 className="text-xs uppercase text-gray-500 mb-6 flex items-center gap-2">
-          <TrendingUp size={16} /> INVESTMENT TIERS
+        <h3 className="text-xs uppercase text-gray-500 mb-6 flex items-center gap-2 tracking-widest font-bold">
+          <TrendingUp size={16} className="text-emerald-500" /> INVESTMENT TIERS
         </h3>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -117,19 +121,22 @@ export default function Invest({ balances = {}, refreshBalances }) {
               <motion.div
                 key={plan.name}
                 whileHover={{ y: -4 }}
-                className="bg-black border border-white/10 rounded-3xl p-8 hover:border-emerald-500/40 transition-all"
+                className="bg-black border border-white/10 rounded-3xl p-8 hover:border-emerald-500/40 transition-all flex flex-col justify-between min-h-[380px]"
               >
-                <p className="text-emerald-400 text-sm font-medium">{plan.roi} Annual ROI</p>
-                <h4 className="text-2xl font-bold mt-3">{plan.name}</h4>
+                <div>
+                  <p className="text-emerald-400 text-sm font-medium">{plan.roi} Annual ROI</p>
+                  <h4 className="text-2xl font-bold mt-3">{plan.name}</h4>
 
-                <div className="mt-8">
-                  <p className="text-5xl font-black">€{plan.min.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Daily Yield: {(plan.daily * 100).toFixed(3)}%
-                  </p>
+                  <div className="mt-8">
+                    <p className="text-5xl font-black">€{plan.min.toLocaleString('de-DE')}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Daily Yield: {(plan.daily * 100).toFixed(3)}%
+                    </p>
+                  </div>
                 </div>
 
                 <button
+                  type="button"
                   onClick={() => handleInvest(plan)}
                   disabled={!canActivate || loading}
                   className={`mt-10 w-full py-4 rounded-2xl text-sm font-bold transition-all ${
@@ -138,7 +145,7 @@ export default function Invest({ balances = {}, refreshBalances }) {
                       : 'bg-white/10 text-gray-500 cursor-not-allowed'
                   }`}
                 >
-                  {canActivate ? 'Activate Plan' : `Min €${plan.min.toLocaleString()}`}
+                  {canActivate ? 'Activate Plan' : `Min €${plan.min.toLocaleString('de-DE')}`}
                 </button>
               </motion.div>
             );
@@ -148,3 +155,4 @@ export default function Invest({ balances = {}, refreshBalances }) {
     </div>
   );
 }
+

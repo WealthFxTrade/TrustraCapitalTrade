@@ -1,23 +1,25 @@
-// middleware/authMiddleware.js
+// backend/middleware/authMiddleware.js
 import asyncHandler from 'express-async-handler';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { ApiError } from './errorMiddleware.js';
 
 /**
- * =========================================
+ * ============================================================================
  * PROTECT MIDDLEWARE - Production Grade
- * =========================================
- * Validates JWT token from cookie (preferred) or Authorization header
+ * ============================================================================
+ * Validates JWT token from cross-origin cookie context or authorization header
  */
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
   // ── TOKEN EXTRACTION ──
-  // Priority: Cookie → Authorization Bearer header
+  // Priority parsing path: Cross-origin secure cookie context → Authorization Bearer string
   if (req.cookies?.trustra_token) {
     token = req.cookies.trustra_token;
   } else if (req.headers.authorization?.startsWith('Bearer ')) {
+    // PRODUCTION REALIGNMENT FIX: Added the array index [1] selector context
+    // This extracts the raw token payload string from the "Bearer <token>" header value
     token = req.headers.authorization.split(' ')[1];
   }
 
@@ -33,37 +35,41 @@ export const protect = asyncHandler(async (req, res, next) => {
   } catch (err) {
     console.error(`[AUTH] JWT verification failed: ${err.message}`);
 
-    // Clear cookie on token issues to prevent stuck sessions
+    // PRODUCTION COOKIE FLUSH FIX:
+    // This signature matches our login/register configuration exactly.
+    // It guarantees browsers drop the token over Vercel/Render networks.
     if (err.name === 'TokenExpiredError' || err.name === 'JsonWebTokenError') {
       res.clearCookie('trustra_token', {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-        path: '/'
+        secure: true,
+        sameSite: 'none',
+        path: '/',
       });
     }
 
-    const message = err.name === 'TokenExpiredError' 
-      ? 'Session expired. Please log in again.' 
+    const message = err.name === 'TokenExpiredError'
+      ? 'Session expired. Please log in again.'
       : 'Invalid authentication token.';
 
     throw new ApiError(401, message);
   }
 
   // ── USER VALIDATION ──
+  // PRODUCTION MIGRATION FIX: Removed the `.lean()` mapping block context.
+  // Downstream controller update methods rely natively on active mongoose model hooks.
   const user = await User.findById(decoded.id)
-    .select('-password -twoFactorSecret -sessions') // Don't expose sensitive fields
-    .lean(); // Use lean for better performance
+    .select('-password -twoFactorSecret -sessions');
 
   if (!user) {
-    console.warn(`[AUTH] User not found for token ID: ${decoded.id}`);
+    console.warn(`[AUTH] User profile absent for token footprint ID: ${decoded.id}`);
 
-    // Clear invalid session cookie
+    // PRODUCTION COOKIE FLUSH FIX:
+    // Ensures clean session invalidation across distinct domain infrastructures.
     res.clearCookie('trustra_token', {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      path: '/'
+      secure: true,
+      sameSite: 'none',
+      path: '/',
     });
 
     throw new ApiError(401, 'Session invalid. Please log in again.');
@@ -84,9 +90,9 @@ export const protect = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * =========================================
+ * ============================================================================
  * ADMIN MIDDLEWARE
- * =========================================
+ * ============================================================================
  * Restricts access to admin and superadmin roles
  */
 export const admin = (req, res, next) => {
@@ -104,9 +110,9 @@ export const admin = (req, res, next) => {
 };
 
 /**
- * =========================================
+ * ============================================================================
  * OPTIONAL: SUPER ADMIN ONLY
- * =========================================
+ * ============================================================================
  */
 export const superAdmin = (req, res, next) => {
   if (!req.user) {
@@ -119,3 +125,4 @@ export const superAdmin = (req, res, next) => {
 
   next();
 };
+

@@ -20,8 +20,9 @@ export const API_ENDPOINTS = {
     LOGOUT: '/auth/logout',
     PROFILE: '/auth/profile',
     REFRESH: '/auth/refresh',
-    FORGOT_PASSWORD: '/auth/forgot-password',
-    RESET_PASSWORD: '/auth/reset-password',
+    // PRODUCTION REALIGNMENT FIX: Aligned paths to match updated production route descriptors
+    FORGOT_PASSWORD: '/auth/forgotpassword',
+    RESET_PASSWORD: '/auth/resetpassword',
   },
 
   USER: {
@@ -81,3 +82,4 @@ export const logApiConfig = () => {
     mode: import.meta.env.MODE,
   });
 };
+

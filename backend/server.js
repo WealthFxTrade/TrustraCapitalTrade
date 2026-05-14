@@ -21,9 +21,6 @@ import investmentRoutes from './routes/investmentRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
 
-// Middleware
-import { errorHandler } from './middleware/errorMiddleware.js';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -33,17 +30,32 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 10000;
 
 /* =========================
-   SECURITY
+   SECURITY & REVERSE PROXY
 ========================= */
 app.use(helmet({ contentSecurityPolicy: false }));
+// Tells Express to trust headers set by production proxies (Render, AWS, Cloudflare, Vercel)
 app.set('trust proxy', 1);
 
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 300,
-  })
-);
+// 1. General global rate limiter (for generic application endpoints)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Elevated for general platform tracking data
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(globalLimiter);
+
+// 2. Strict Dedicated Auth Limiter (blocks aggressive brute-force/credential-stuffing)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15, // Maximum 15 attempts across login/register per window
+  message: {
+    success: false,
+    message: 'Too many authentication attempts from this IP. Please try again after 15 minutes.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /* =========================
    MIDDLEWARE
@@ -66,7 +78,6 @@ const allowedOrigins = [
 
 const isAllowedOrigin = (origin) => {
   if (!origin) return true;
-
   if (allowedOrigins.includes(origin)) return true;
 
   // Allow LAN / hotspot dev testing
@@ -77,7 +88,6 @@ const isAllowedOrigin = (origin) => {
   ) {
     return true;
   }
-
   return false;
 };
 
@@ -87,7 +97,6 @@ app.use(
       if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
-
       console.error(`❌ CORS BLOCKED: ${origin}`);
       return callback(new Error(`CORS blocked: ${origin}`));
     },
@@ -96,7 +105,7 @@ app.use(
   })
 );
 
-// IMPORTANT: handle preflight requests
+// Handle HTTP OPTIONS preflight requests explicitly
 app.options('*', cors());
 
 /* =========================
@@ -104,7 +113,12 @@ app.options('*', cors());
 ========================= */
 const io = new Server(server, {
   cors: {
-    origin: isAllowedOrigin,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('CORS blocked by WebSockets'));
+    },
     credentials: true,
   },
 });
@@ -121,7 +135,8 @@ app.set('io', io);
 /* =========================
    ROUTES
 ========================= */
-app.use('/api/auth', authRoutes);
+// Apply the high-security stricter limiter specifically to the auth pipelines
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/investments', investmentRoutes);
 app.use('/api/admin', adminRoutes);
@@ -145,7 +160,9 @@ app.use((err, req, res, next) => {
 
   res.status(err.statusCode || 500).json({
     success: false,
-    message: err.message || 'Internal Server Error',
+    message: process.env.NODE_ENV === 'production' 
+      ? 'An internal system error occurred.' 
+      : err.message,
   });
 });
 
@@ -158,7 +175,6 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 5000,
       maxPoolSize: 10,
     });
-
     console.log('MongoDB Connected');
   } catch (err) {
     console.error('DB ERROR:', err.message);
@@ -174,3 +190,4 @@ connectDB().then(() => {
     console.log(`Server running on ${PORT}`);
   });
 });
+

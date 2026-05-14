@@ -7,6 +7,7 @@ import {
   Check,
   Loader2,
   ShieldCheck,
+  RefreshCw, // PRODUCTION FIX: Added missing explicit icon import to prevent runtime reference crashes
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import api, { API_ENDPOINTS } from '@/api/api';
@@ -27,12 +28,13 @@ export default function Deposit() {
 
     setLoading(true);
     try {
-      const res = await api.get(`\( {API_ENDPOINTS.USER.DEPOSIT_ADDRESS}?asset= \){asset}`);
+      // PRODUCTION FIX: Corrected malformed template literal syntax string block
+      const res = await api.get(`${API_ENDPOINTS.USER.DEPOSIT_ADDRESS}?asset=${asset}`);
 
       if (res.data?.success) {
         setDepositData({
           address: res.data.address || '',
-          network: res.data.network || 
+          network: res.data.network ||
             (asset === 'BTC' ? 'Bitcoin Network' :
              asset === 'ETH' ? 'Ethereum (ERC-20)' : 'TRC20 / ERC20'),
         });
@@ -67,7 +69,7 @@ export default function Deposit() {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       toast.success('Address copied to clipboard!', { icon: '📋' });
-      
+
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       toast.error('Failed to copy address');
@@ -80,8 +82,8 @@ export default function Deposit() {
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 10 }} 
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className="max-w-5xl mx-auto"
     >
@@ -95,8 +97,8 @@ export default function Deposit() {
                 key={coin}
                 onClick={() => setAsset(coin)}
                 className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                  asset === coin 
-                    ? 'bg-white text-black shadow-lg' 
+                  asset === coin
+                    ? 'bg-white text-black shadow-lg'
                     : 'text-gray-500 hover:text-white hover:bg-white/5'
                 }`}
               >
@@ -112,10 +114,10 @@ export default function Deposit() {
                 <Loader2 className="animate-spin text-emerald-500" size={48} />
               </div>
             ) : (
-              <QRCodeSVG 
-                value={depositData.address || "Generating address..."} 
-                size={220} 
-                level="H" 
+              <QRCodeSVG
+                value={depositData.address || "Generating address..."}
+                size={220}
+                level="H"
                 includeMargin={true}
               />
             )}
@@ -128,7 +130,7 @@ export default function Deposit() {
                 <ShieldCheck size={14} className="text-emerald-500" />
                 YOUR PERSONAL {asset} DEPOSIT ADDRESS
               </span>
-              
+
               <button
                 onClick={handleRefresh}
                 disabled={refreshing || loading}
@@ -138,14 +140,14 @@ export default function Deposit() {
               </button>
             </div>
 
-            <div 
+            <div
               onClick={() => copyToClipboard(depositData.address)}
               className="group relative w-full bg-black border border-white/10 p-6 rounded-2xl cursor-pointer hover:border-emerald-500/50 transition-all active:scale-[0.985]"
             >
               <p className="text-sm font-mono text-white break-all pr-12 leading-relaxed">
                 {depositData.address || 'Waiting for vault node...'}
               </p>
-              
+
               <div className="absolute right-6 top-1/2 -translate-y-1/2">
                 {copied ? (
                   <Check size={22} className="text-emerald-500" />
@@ -171,3 +173,4 @@ export default function Deposit() {
     </motion.div>
   );
 }
+

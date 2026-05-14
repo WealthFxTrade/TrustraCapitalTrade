@@ -39,8 +39,9 @@ export default function Ledger({ transactions = [], refreshBalances }) {
       maximumFractionDigits: isCrypto ? 8 : 2,
     });
 
-    return isCrypto 
-      ? `\( {formatter.format(num)} \){curr}` 
+    // PRODUCTION FIX: Corrected malformed template literal syntax string block
+    return isCrypto
+      ? `${formatter.format(num)} ${curr}`
       : `€${formatter.format(num)}`;
   };
 
@@ -97,12 +98,13 @@ export default function Ledger({ transactions = [], refreshBalances }) {
 
   return (
     <div className="space-y-8">
-      {/* Toolbar */}
+      {/* Toolbar Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex overflow-x-auto gap-2 bg-white/5 border border-white/10 rounded-2xl p-1 no-scrollbar">
           {['all', 'deposit', 'withdrawal', 'investment', 'yield'].map((type) => (
             <button
               key={type}
+              type="button"
               onClick={() => setFilter(type)}
               className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all whitespace-nowrap ${
                 filter === type
@@ -116,6 +118,7 @@ export default function Ledger({ transactions = [], refreshBalances }) {
         </div>
 
         <button
+          type="button"
           onClick={handleManualRefresh}
           disabled={isRefreshing}
           className="flex items-center justify-center gap-3 px-8 py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-white/10 disabled:opacity-60 transition-all"
@@ -125,7 +128,7 @@ export default function Ledger({ transactions = [], refreshBalances }) {
         </button>
       </div>
 
-      {/* Ledger Table */}
+      {/* Ledger Table Container */}
       <div className="bg-[#0a0c10] border border-white/10 rounded-3xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px]">
@@ -138,17 +141,20 @@ export default function Ledger({ transactions = [], refreshBalances }) {
               </tr>
             </thead>
 
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-white/5 relative">
               <AnimatePresence mode="popLayout">
                 {filteredTransactions.length > 0 ? (
-                  filteredTransactions.map((tx) => {
+                  filteredTransactions.map((tx, index) => {
                     const txType = (tx.type || '').toLowerCase();
                     const isOutflow = ['withdrawal', 'investment'].includes(txType);
                     const isYield = ['yield', 'roi', 'profit', 'compound'].includes(txType);
+                    
+                    // PRODUCTION FIX: Secure structural unique identification mapping fallback configuration
+                    const continuousKey = tx._id || tx.id || `tx-fallback-${index}`;
 
                     return (
                       <motion.tr
-                        key={tx._id || tx.id || Math.random()}
+                        key={continuousKey}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
@@ -159,7 +165,7 @@ export default function Ledger({ transactions = [], refreshBalances }) {
                             {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString('de-DE') : '—'}
                           </div>
                           <div className="text-[10px] text-gray-600 font-mono mt-0.5">
-                            {tx.createdAt 
+                            {tx.createdAt
                               ? new Date(tx.createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
                               : ''}
                           </div>
@@ -190,26 +196,25 @@ export default function Ledger({ transactions = [], refreshBalances }) {
                           </p>
                         </td>
 
-                        <td className="px-8 py-6 flex justify-center">
-                          {getStatusBadge(tx.status)}
+                        {/* PRODUCTION FIX: Restored unshortened structural markup paths and closed out nodes layout loop */}
+                        <td className="px-8 py-6">
+                          <div className="flex justify-center items-center h-full">
+                            {getStatusBadge(tx.status)}
+                          </div>
                         </td>
                       </motion.tr>
                     );
                   })
                 ) : (
-                  <tr>
-                    <td colSpan="4" className="px-8 py-24 text-center">
-                      <div className="mx-auto w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mb-6">
-                        <Zap className="w-8 h-8 text-gray-600" />
-                      </div>
-                      <p className="text-gray-400 text-lg font-medium">
-                        No {filter !== 'all' ? filter : ''} transactions yet
-                      </p>
-                      <p className="text-gray-600 text-sm mt-2 max-w-xs mx-auto">
-                        Your transaction history will appear here after your first activity.
-                      </p>
+                  <motion.tr
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
+                    <td colSpan="4" className="text-center py-20 text-gray-500 font-medium text-sm">
+                      No matching records found in this vault cluster node ledger.
                     </td>
-                  </tr>
+                  </motion.tr>
                 )}
               </AnimatePresence>
             </tbody>
@@ -219,3 +224,4 @@ export default function Ledger({ transactions = [], refreshBalances }) {
     </div>
   );
 }
+

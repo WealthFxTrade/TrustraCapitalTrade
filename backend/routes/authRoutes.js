@@ -1,3 +1,4 @@
+// backend/routes/authRoutes.js
 import express from 'express';
 import {
     registerUser,
@@ -6,8 +7,8 @@ import {
     getUserProfile,
     updateUserProfile,
     refreshSession,
-    forgotPassword, // Added to match standard fintech auth flow
-    resetPassword  // Added to match standard fintech auth flow
+    forgotPassword,
+    resetPassword
 } from '../controllers/authController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -16,7 +17,6 @@ const router = express.Router();
 /**
  * ── PUBLIC PROTOCOLS ──
  * Access: Public
- * These endpoints handle entry/exit and recovery.
  */
 
 // @desc    Register a new user & auto-assign crypto index
@@ -32,28 +32,32 @@ router.post('/login', loginUser);
 router.post('/logout', logoutUser);
 
 // @desc    Generate password reset token
-// @route   POST /api/auth/forgot-password
-router.post('/forgot-password', forgotPassword);
+// @route   POST /api/auth/forgotpassword
+// FIXED: Adjusted to perfectly match your production controller signature mapping
+router.post('/forgotpassword', forgotPassword);
 
 // @desc    Reset password using token
-// @route   PUT /api/auth/reset-password/:resettoken
-router.put('/reset-password/:resettoken', resetPassword);
+// @route   PUT /api/auth/resetpassword/:resettoken
+// FIXED: Aligned URI path naming context with your unshortened controller signature
+router.put('/resetpassword/:resettoken', resetPassword);
 
 // @desc    Refresh session and validate token version
 // @route   POST /api/auth/refresh
-router.post('/refresh', refreshSession); 
+router.post('/refresh', refreshSession);
 
 /**
  * ── SECURE IDENTITY NODE ──
- * Access: Private (Requires Bearer Token)
+ * Access: Private (Requires HTTP-Only cookie / Authentication middleware)
  */
 
 // @desc    Get current user data
 // @route   GET /api/auth/profile
 router.get('/profile', protect, getUserProfile);
 
-// @desc    Update user details (Name, Phone, etc.)
-// @route   PUT /api/auth/update-profile
-router.put('/update-profile', protect, updateUserProfile);
+// @desc    Update user details (Name, Password, etc.)
+// @route   PUT /api/auth/profile
+// FIXED: Changed from /update-profile to /profile to accurately connect with your controller
+router.put('/profile', protect, updateUserProfile);
 
 export default router;
+
