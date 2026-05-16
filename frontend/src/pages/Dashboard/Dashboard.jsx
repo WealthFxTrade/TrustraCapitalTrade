@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '@/context/AuthContext';
 import api, { API_ENDPOINTS } from '@/api/api';
-import { SOCKET_URL } from '@/constants/api'; // PRODUCTION FIX: Imported correctly from constants instead of api client instance
+import { SOCKET_URL } from '@/constants/api';
 import toast from 'react-hot-toast';
 
 import Deposit from './Deposit';
@@ -19,7 +19,7 @@ import {
   Wallet,
   ArrowUpCircle,
   History,
-  User as UserIcon
+  User as UserIcon,
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -29,7 +29,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Core financial states
+  // Financial Data
   const [principal, setPrincipal] = useState(0);
   const [availableBalance, setAvailableBalance] = useState(0);
   const [accruedROI, setAccruedROI] = useState(0);
@@ -40,7 +40,7 @@ export default function Dashboard() {
   const isSyncing = useRef(false);
   const socketRef = useRef(null);
 
-  // Fetch user stats
+  // Sync Dashboard Data
   const syncNodeData = useCallback(async (showLoading = true) => {
     if (isSyncing.current) return;
     isSyncing.current = true;
@@ -52,6 +52,7 @@ export default function Dashboard() {
 
       if (res.data?.success) {
         const data = res.data;
+
         setPrincipal(Number(data.principal || 0));
         setAvailableBalance(Number(data.availableBalance || 0));
         setAccruedROI(Number(data.accruedROI || 0));
@@ -66,9 +67,8 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("Dashboard Sync Error:", err);
-      const errorMsg = err.response?.data?.message || err.message || 'Failed to synchronize vault';
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to synchronize data';
       setError(errorMsg);
-
       if (document.visibilityState === 'visible') {
         toast.error(errorMsg);
       }
@@ -83,8 +83,6 @@ export default function Dashboard() {
     if (!user?._id && !user?.id) return;
 
     const userId = user._id || user.id;
-
-    // Centralized mapping layer logic connects securely across different hosting provider roots
     const socketUrl = import.meta.env.VITE_SOCKET_URL || SOCKET_URL;
 
     socketRef.current = io(socketUrl, {
@@ -92,11 +90,12 @@ export default function Dashboard() {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
     });
 
     socketRef.current.on('connect', () => {
+      console.log('🔌 Connected to Real-time Vault Stream');
       socketRef.current.emit('join', userId);
-      console.log('🔌 Connected to Vault Live Stream');
     });
 
     socketRef.current.on('balanceUpdate', (data) => {
@@ -107,11 +106,9 @@ export default function Dashboard() {
         setAccruedROI(Number(data.balances.TOTAL_PROFIT || 0));
         setPrincipal(Number(data.balances.INVESTED || 0));
       }
-      if (data.message) {
-        toast.success(data.message, { icon: '💰' });
-      }
-      // Refresh full data context in background layer
-      syncNodeData(false);
+      if (data.message) toast.success(data.message, { icon: '💰' });
+
+      syncNodeData(false); // Background refresh
     });
 
     socketRef.current.on('connect_error', (err) => {
@@ -125,11 +122,11 @@ export default function Dashboard() {
     };
   }, [user, syncNodeData]);
 
-  // Initial load + periodic background sync
+  // Initial Load + Auto Refresh
   useEffect(() => {
     if (user) {
       syncNodeData(true);
-      const interval = setInterval(() => syncNodeData(false), 60000); // sync every 60 seconds
+      const interval = setInterval(() => syncNodeData(false), 45000); // 45 seconds
       return () => clearInterval(interval);
     }
   }, [user, syncNodeData]);
@@ -145,9 +142,9 @@ export default function Dashboard() {
   const renderTabContent = () => {
     if (loading && transactions.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center h-64">
-          <Loader2 className="w-10 h-10 animate-spin text-emerald-500 mb-4" />
-          <p className="text-gray-500">Synchronizing with Blockchain...</p>
+        <div className="flex flex-col items-center justify-center py-20">
+          <Loader2 className="w-12 h-12 animate-spin text-emerald-500 mb-4" />
+          <p className="text-gray-400">Synchronizing with Blockchain Nodes...</p>
         </div>
       );
     }
@@ -158,24 +155,22 @@ export default function Dashboard() {
       case 'Withdraw':  return <Withdrawal balances={currentBalances} refreshBalances={syncNodeData} />;
       case 'Ledger':    return <Ledger transactions={transactions} refreshBalances={syncNodeData} />;
       case 'Profile':   return <Profile balances={currentBalances} refreshSession={refreshSession} />;
-      default:          return <div className="p-4 text-center text-gray-500">Tab target execution panel unavailable.</div>;
+      default:          return <div className="p-12 text-center text-gray-500">Tab content not available</div>;
     }
   };
 
-  // Global exception display handler
   if (error && !loading) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center p-8">
+      <div className="min-h-screen bg-[#020408] flex items-center justify-center p-6">
         <div className="text-center max-w-md">
-          <p className="text-red-400 text-6xl mb-6">⚠️</p>
-          <h2 className="text-2xl font-bold mb-4">Failed to load dashboard</h2>
-          <p className="text-gray-400 mb-8">{error}</p>
+          <p className="text-6xl mb-6">⚠️</p>
+          <h2 className="text-2xl font-bold mb-4 text-white">Dashboard Sync Failed</h2>
+          <p className="text-red-400 mb-8">{error}</p>
           <button
-            type="button"
             onClick={() => syncNodeData(true)}
-            className="px-8 py-4 bg-white text-black font-bold rounded-2xl flex items-center gap-3 mx-auto hover:bg-gray-200 transition"
+            className="px-8 py-4 bg-white text-black font-bold rounded-2xl flex items-center gap-3 mx-auto hover:bg-gray-200 transition-all"
           >
-            <RefreshCw className="w-5 h-5" /> Retry Sync
+            <RefreshCw className="w-5 h-5" /> Retry Connection
           </button>
         </div>
       </div>
@@ -183,62 +178,63 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-4 lg:p-8">
+    <div className="min-h-screen bg-[#020408] text-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Top Financial Metric Cards */}
+        {/* Balance Overview Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Available EUR</p>
-            <p className="text-3xl font-black">€{availableBalance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+          <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Available</p>
+            <p className="text-3xl font-black mt-2">€{availableBalance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
           </div>
-          <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
-            <p className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-1">Total Profit</p>
-            <p className="text-3xl font-black text-emerald-400">€{accruedROI.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+
+          <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
+            <p className="text-xs font-bold text-emerald-500 uppercase tracking-widest">Total Profit</p>
+            <p className="text-3xl font-black text-emerald-400 mt-2">€{accruedROI.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
           </div>
-          <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Principal</p>
-            <p className="text-3xl font-black">€{principal.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+
+          <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Invested</p>
+            <p className="text-3xl font-black mt-2">€{principal.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
           </div>
-          <div className="p-6 bg-white/5 border border-white/10 rounded-3xl">
-            <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-1">Bitcoin</p>
-            <p className="text-3xl font-black">{btcBalance.toFixed(8)} BTC</p>
+
+          <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
+            <p className="text-xs font-bold text-orange-500 uppercase tracking-widest">Bitcoin</p>
+            <p className="text-3xl font-black mt-2">{btcBalance.toFixed(8)} BTC</p>
           </div>
         </div>
 
-        {/* Tab Sub-Navigation System Controls */}
-        <div className="flex overflow-x-auto gap-2 mb-8 pb-2 no-scrollbar">
+        {/* Tab Navigation */}
+        <div className="flex overflow-x-auto gap-2 mb-8 pb-3 no-scrollbar border-b border-white/10">
           {[
             { id: 'Invest',    icon: LayoutDashboard, label: 'Invest' },
-            { id: 'Deposit',   icon: Wallet,         label: 'Deposit' },
-            { id: 'Withdraw',  icon: ArrowUpCircle,  label: 'Withdraw' },
-            { id: 'Ledger',    icon: History,        label: 'Ledger' },
-            { id: 'Profile',   icon: UserIcon,       label: 'Profile' },
+            { id: 'Deposit',   icon: Wallet,          label: 'Deposit' },
+            { id: 'Withdraw',  icon: ArrowUpCircle,   label: 'Withdraw' },
+            { id: 'Ledger',    icon: History,         label: 'Ledger' },
+            { id: 'Profile',   icon: UserIcon,        label: 'Profile' },
           ].map((tab) => {
-            const IconComponent = tab.icon;
+            const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
-                type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-3 rounded-full text-sm font-bold transition-all whitespace-nowrap ${
+                className={`flex items-center gap-2.5 px-6 py-3 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all ${
                   activeTab === tab.id
                     ? 'bg-white text-black shadow-lg'
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                    : 'bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white'
                 }`}
               >
-                <IconComponent className="w-4 h-4" />
+                <Icon className="w-4 h-4" />
                 {tab.label}
               </button>
             );
           })}
         </div>
 
-        {/* Core Content Dynamic Target Container Pane */}
-        <div className="w-full bg-white/5 border border-white/10 rounded-3xl p-6 lg:p-8">
+        {/* Tab Content */}
+        <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6 md:p-8 min-h-[60vh]">
           {renderTabContent()}
         </div>
       </div>
     </div>
   );
 }
-

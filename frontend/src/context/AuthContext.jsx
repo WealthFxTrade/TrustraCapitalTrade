@@ -1,7 +1,8 @@
 // src/context/AuthContext.jsx
-import React, { createContext, useContext, useReducer, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { API_ENDPOINTS } from '@/api/api';
+import toast from 'react-hot-toast';
 
 const AuthContext = createContext();
 
@@ -46,23 +47,18 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const isInitializing = useRef(false);
 
-  // Helper to clear all fallback browser tokens cleanly
   const clearTokens = useCallback(() => {
     localStorage.removeItem('trustra_token');
     localStorage.removeItem('trustra_remember');
     sessionStorage.removeItem('trustra_token');
   }, []);
 
-  // Initialize auth session on app load
   const initAuth = useCallback(async () => {
     if (isInitializing.current) return;
     isInitializing.current = true;
 
-    // Dual fallbacks: Support local dev environment configurations alongside secure cross-origin cookies
-    const token = localStorage.getItem('trustra_token') ||
-                 sessionStorage.getItem('trustra_token');
+    const token = localStorage.getItem('trustra_token') || sessionStorage.getItem('trustra_token');
 
-    // If no explicit tracking tokens exist, immediately set initialization complete and stop execution
     if (!token) {
       dispatch({ type: 'SET_INITIALIZED' });
       isInitializing.current = false;
@@ -71,7 +67,6 @@ export function AuthProvider({ children }) {
 
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
-
       if (data?.success && data?.user) {
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
       } else {
@@ -79,11 +74,9 @@ export function AuthProvider({ children }) {
         dispatch({ type: 'AUTH_LOGOUT' });
       }
     } catch (error) {
-      console.error('Trustra platform session validation failed:', error);
       clearTokens();
       dispatch({ type: 'AUTH_LOGOUT' });
     } finally {
-      // PRODUCTION FIX: Single consolidated checkpoint to prevent dispatch cycle collisions
       dispatch({ type: 'SET_INITIALIZED' });
       isInitializing.current = false;
     }
@@ -93,79 +86,66 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
-  // Login Function
   const login = useCallback(async (credentials) => {
     dispatch({ type: 'AUTH_START' });
+    const toastId = toast.loading('Verifying credentials...');
 
     try {
       const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, {
-        email: credentials.email.trim(),
+        email: credentials.email.trim().toLowerCase(),
         password: credentials.password,
       });
 
-      if (data?.success && data?.user) {
-        // Handle "Remember Me" data configurations
-        const remember = credentials.remember === true;
-        
-        // PRODUCTION FIX: Ensure storage write blocks execute completely 
-        // before dispatching success notifications to avoid race conditions with interceptors
+      if (data?.success && data?.token && data?.user) {
+        const remember = credentials.rememberMe === true;
+
         if (remember) {
-          localStorage.setItem('trustra_remember', 'true');
           localStorage.setItem('trustra_token', data.token);
+          localStorage.setItem('trustra_remember', 'true');
         } else {
           sessionStorage.setItem('trustra_token', data.token);
         }
 
         dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
+        toast.success('Access Granted', { id: toastId });
         return { success: true };
       }
 
-      dispatch({ type: 'AUTH_ERROR' });
-      return {
-        success: false,
-        message: data?.message || 'Invalid credentials.'
-      };
+      toast.error(data?.message || 'Invalid credentials', { id: toastId });
+      return { success: false, message: data?.message };
     } catch (error) {
-      dispatch({ type: 'AUTH_ERROR' });
-      return {
-        success: false,
-        message: error.response?.data?.message || 'Invalid email or access token.'
-      };
+      const message = error.response?.data?.message || 'Invalid email or access token.';
+      toast.error(message, { id: toastId });
+      return { success: false, message };
     }
   }, []);
 
-  // Logout Function
   const logout = useCallback(async () => {
     try {
-      // Wipes cookies directly on the backend infrastructure nodes
-      await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {
-        console.warn("Backend cookie termination unreachable, flushing local storage");
-      });
-    } catch (err) {
-      console.warn("Logout request dropped due to unexpected transport failure.");
+      await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {});
     } finally {
-      // Flush client data vectors completely
       clearTokens();
       dispatch({ type: 'AUTH_LOGOUT' });
       navigate('/login', { replace: true });
+      toast.success('Logged out successfully');
     }
   }, [navigate, clearTokens]);
 
-  const refreshSession = useCallback(() => initAuth(), [initAuth]);
-
-  const authValue = useMemo(() => ({
+  const value = useMemo(() => ({
     ...state,
     login,
     logout,
-    refreshSession,
-  }), [state, login, logout, refreshSession]);
+  }), [state, login, logout]);
 
   return (
-    <AuthContext.Provider value={authValue}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
-
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  return context;
+};

@@ -2,14 +2,14 @@
 import React from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, initialized, user } = useAuth();
+  const { isAuthenticated, initialized, loading, user } = useAuth();
   const location = useLocation();
 
-  // Wait for auth check only if accessing protected route
-  if (!initialized) {
+  // Show loading while checking auth status
+  if (!initialized || loading) {
     return (
       <div className="min-h-screen bg-[#020408] flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -24,11 +24,20 @@ const ProtectedRoute = ({ children }) => {
 
   // Not authenticated → redirect to login
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    return (
+      <Navigate
+        to="/login"
+        state={{ from: location }}
+        replace
+      />
+    );
   }
 
-  // Admin safety redirect if user is admin
-  if ((user?.role === 'admin' || user?.role === 'superadmin') && location.pathname.startsWith('/dashboard')) {
+  // Auto redirect admin users away from regular dashboard
+  if (
+    (user?.role === 'admin' || user?.role === 'superadmin') &&
+    location.pathname.startsWith('/dashboard')
+  ) {
     return <Navigate to="/admin/dashboard" replace />;
   }
 

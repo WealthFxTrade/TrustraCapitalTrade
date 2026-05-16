@@ -1,14 +1,23 @@
 // src/constants/api.js
-
 /**
  * Trustra Capital - Centralized API Configuration
- * Production-ready with fallback safety
+ * Production-ready with environment-based fallbacks
  */
 
-const BACKEND_URL = 'https://trustracapitaltrade-backend.onrender.com';
+const getBackendBase = () => {
+  // Priority 1: Environment variable (Recommended)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/$/, ''); // Remove trailing slash if present
+  }
 
-export const API_BASE_URL = `${BACKEND_URL}/api`;
-export const SOCKET_URL = BACKEND_URL;
+  // Priority 2: Production fallback
+  return 'https://trustracapitaltrade-backend.onrender.com/api';
+};
+
+/** Main API Configuration */
+export const API_BASE_URL = getBackendBase();
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 
+                         'https://trustracapitaltrade-backend.onrender.com';
 
 /**
  * API Endpoints
@@ -20,7 +29,6 @@ export const API_ENDPOINTS = {
     LOGOUT: '/auth/logout',
     PROFILE: '/auth/profile',
     REFRESH: '/auth/refresh',
-    // PRODUCTION REALIGNMENT FIX: Aligned paths to match updated production route descriptors
     FORGOT_PASSWORD: '/auth/forgotpassword',
     RESET_PASSWORD: '/auth/resetpassword',
   },
@@ -63,23 +71,23 @@ export const API_ENDPOINTS = {
 };
 
 /**
- * Get API Base URL (production-safe override system)
+ * Get current API Base URL (used by axios instance)
  */
-export const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-  return API_BASE_URL;
-};
+export const getApiBaseUrl = () => API_BASE_URL;
 
 /**
- * Debug helper
+ * Debug helper - Call this in development to verify config
  */
 export const logApiConfig = () => {
-  console.log('Trustra API Config:', {
-    baseURL: getApiBaseUrl(),
-    socketURL: SOCKET_URL,
-    mode: import.meta.env.MODE,
-  });
+  console.group('🔧 Trustra API Configuration');
+  console.log('Mode          :', import.meta.env.MODE);
+  console.log('API Base URL  :', API_BASE_URL);
+  console.log('Socket URL    :', SOCKET_URL);
+  console.log('VITE_API_URL  :', import.meta.env.VITE_API_URL || 'Not set (using fallback)');
+  console.groupEnd();
 };
 
+// Auto-log in development
+if (import.meta.env.DEV) {
+  logApiConfig();
+}
