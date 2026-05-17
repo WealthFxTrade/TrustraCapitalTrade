@@ -1,79 +1,147 @@
 // config/db.js
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 
-dotenv.config(); // ✅ ensure env is loaded here
+import mongoose from 'mongoose';
 
 const options = {
   family: 4,
-  serverSelectionTimeoutMS: 5000,
+
+  serverSelectionTimeoutMS: 30000,
+
   socketTimeoutMS: 45000,
+
+  connectTimeoutMS: 30000,
+
   maxPoolSize: 10,
+
   retryWrites: true,
+
   autoIndex: process.env.NODE_ENV !== 'production',
 };
 
 let isConnected = false;
 
-const connectDB = async (retries = 3, baseDelay = 2000) => {
-  const MONGO_URI = process.env.MONGO_URI; // ✅ move INSIDE function
+const connectDB = async (
+  retries = 5,
+  baseDelay = 3000
+) => {
+  const MONGO_URI = process.env.MONGO_URI;
 
   if (!MONGO_URI) {
-    throw new Error('❌ MONGO_URI is missing in .env');
+    throw new Error(
+      '❌ MONGO_URI is missing in environment'
+    );
   }
 
-  // Fast path
-  if (isConnected && mongoose.connection.readyState === 1) {
-    console.log('📡 [Ledger] Already connected to MongoDB');
+  if (
+    isConnected &&
+    mongoose.connection.readyState === 1
+  ) {
+    console.log(
+      '📡 [Ledger] Already connected to MongoDB'
+    );
+
     return;
   }
 
-  for (let attempt = 1; attempt <= retries; attempt++) {
+  for (
+    let attempt = 1;
+    attempt <= retries;
+    attempt++
+  ) {
     try {
-      console.log(`📡 [Ledger] Connecting... (attempt ${attempt}/${retries})`);
+      console.log(
+        `📡 [Ledger] Connecting... (${attempt}/${retries})`
+      );
 
-      await mongoose.connect(MONGO_URI, options);
+      await mongoose.connect(
+        MONGO_URI,
+        options
+      );
 
       isConnected = true;
-      console.log(`✅ [Ledger] Connected to ${mongoose.connection.host}`);
+
+      console.log(
+        `✅ [Ledger] Connected: ${mongoose.connection.host}`
+      );
 
       setupEventListeners();
-      return;
 
+      return;
     } catch (error) {
-      console.error(`❌ [Ledger] Attempt ${attempt} failed: ${error.message}`);
+      console.error(
+        `❌ [Ledger] Attempt ${attempt} failed:`,
+        error.message
+      );
 
       if (attempt === retries) {
-        console.error('🔥 [Ledger] All retries exhausted.');
+        console.error(
+          '🔥 [Ledger] All connection retries failed.'
+        );
+
         throw error;
       }
 
-      const delay = baseDelay * Math.pow(2, attempt - 1);
-      console.log(`🔄 [Ledger] Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const delay =
+        baseDelay * Math.pow(2, attempt - 1);
+
+      console.log(
+        `🔄 [Ledger] Retrying in ${delay}ms...`
+      );
+
+      await new Promise((resolve) =>
+        setTimeout(resolve, delay)
+      );
     }
   }
 };
 
 const setupEventListeners = () => {
-  if (mongoose.connection.listenerCount('disconnected') > 0) return;
+  if (
+    mongoose.connection.listenerCount(
+      'disconnected'
+    ) > 0
+  ) {
+    return;
+  }
 
-  mongoose.connection.on('disconnected', () => {
-    isConnected = false;
-    console.warn('⚠️ [Ledger] MongoDB disconnected. Reconnecting...');
-    connectDB(5, 3000).catch(err =>
-      console.error('[Ledger] Reconnect failed:', err.message)
-    );
-  });
+  mongoose.connection.on(
+    'disconnected',
+    () => {
+      isConnected = false;
 
-  mongoose.connection.on('error', (err) => {
-    console.error('❌ [Ledger] MongoDB error:', err.message);
-  });
+      console.warn(
+        '⚠️ [Ledger] MongoDB disconnected.'
+      );
 
-  mongoose.connection.on('reconnected', () => {
-    isConnected = true;
-    console.log('✅ [Ledger] MongoDB reconnected');
-  });
+      connectDB().catch((err) =>
+        console.error(
+          '❌ Reconnect failed:',
+          err.message
+        )
+      );
+    }
+  );
+
+  mongoose.connection.on(
+    'reconnected',
+    () => {
+      isConnected = true;
+
+      console.log(
+        '✅ [Ledger] MongoDB reconnected'
+      );
+    }
+  );
+
+  mongoose.connection.on(
+    'error',
+    (err) => {
+      console.error(
+        '❌ [Ledger] MongoDB error:',
+        err.message
+      );
+    }
+  );
 };
 
 export default connectDB;

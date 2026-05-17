@@ -1,100 +1,213 @@
 // src/api/api.js
-import axios from 'axios';
-import { getApiBaseUrl, API_ENDPOINTS } from '@/constants/api';
 
+import axios from 'axios';
+
+import {
+  getApiBaseUrl,
+  API_ENDPOINTS,
+} from '@/constants/api';
+
+/**
+ * ============================================
+ * AXIOS INSTANCE
+ * ============================================
+ */
 const api = axios.create({
   baseURL: getApiBaseUrl(),
-  withCredentials: true,        // Important for cookies + credentials
+
+  withCredentials: true,
+
   timeout: 15000,
+
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-/* =============================================
-   REQUEST INTERCEPTOR
-   ============================================= */
+/**
+ * ============================================
+ * REQUEST INTERCEPTOR
+ * ============================================
+ * Automatically attaches auth token
+ * ============================================
+ */
 api.interceptors.request.use(
   (config) => {
-    // Support both localStorage and sessionStorage (Remember Me)
-    const token = localStorage.getItem('trustra_token') ||
-                  sessionStorage.getItem('trustra_token');
+    const localToken =
+      localStorage.getItem('trustra_token');
+
+    const sessionToken =
+      sessionStorage.getItem('trustra_token');
+
+    const token = localToken || sessionToken;
 
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+      config.headers.Authorization =
+        `Bearer ${token}`;
     }
 
     return config;
   },
-  (error) => Promise.reject(error)
+
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
-/* =============================================
-   RESPONSE INTERCEPTOR
-   ============================================= */
+/**
+ * ============================================
+ * RESPONSE INTERCEPTOR
+ * ============================================
+ * Handles:
+ *  - Token persistence
+ *  - Session expiration
+ *  - Redirect protection
+ * ============================================
+ */
 api.interceptors.response.use(
   (response) => {
-    // Auto-save new token if backend returns one
+    /**
+     * Save new token if returned
+     */
     if (response.data?.token) {
-      const isRememberMe = localStorage.getItem('trustra_remember') === 'true';
+      const rememberMe =
+        localStorage.getItem('trustra_remember') === 'true';
 
-      if (isRememberMe) {
-        localStorage.setItem('trustra_token', response.data.token);
+      if (rememberMe) {
+        localStorage.setItem(
+          'trustra_token',
+          response.data.token
+        );
       } else {
-        sessionStorage.setItem('trustra_token', response.data.token);
+        sessionStorage.setItem(
+          'trustra_token',
+          response.data.token
+        );
       }
     }
+
     return response;
   },
 
   async (error) => {
     const originalRequest = error.config;
 
-    // Handle Token Expiration / Unauthorized
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    /**
+     * Handle unauthorized responses
+     */
+    if (
+      error.response?.status === 401 &&
+      !originalRequest?._retry
+    ) {
       originalRequest._retry = true;
 
-      console.warn('🔐 Auth token expired or invalid');
-
-      // Clear all tokens
+      /**
+       * Clear stored auth
+       */
       localStorage.removeItem('trustra_token');
       localStorage.removeItem('trustra_remember');
+
       sessionStorage.removeItem('trustra_token');
 
-      const currentPath = window.location.pathname;
-      const publicPaths = ['/login', '/apply', '/forgotpassword'];
+      /**
+       * Prevent redirect loop
+       */
+      const currentPath =
+        window.location.pathname;
 
-      if (!publicPaths.includes(currentPath)) {
-        window.dispatchEvent(new CustomEvent('auth-expired'));
-        window.location.href = '/login?reason=session_expired';
+      const publicPaths = [
+        '/',
+        '/login',
+        '/register',
+        '/forgotpassword',
+      ];
+
+      const isPublicPage =
+        publicPaths.includes(currentPath);
+
+      if (!isPublicPage) {
+        window.location.href =
+          '/login?reason=session_expired';
       }
+    }
+
+    /**
+     * Network / timeout logging
+     */
+    if (!error.response) {
+      console.error(
+        'Network Error: Backend unreachable'
+      );
+    }
+
+    if (error.code === 'ECONNABORTED') {
+      console.error(
+        'Request Timeout: Server took too long to respond'
+      );
     }
 
     return Promise.reject(error);
   }
 );
 
-/* =============================================
-   Helper Functions
-   ============================================= */
-export const setAuthToken = (token, rememberMe = false) => {
+/**
+ * ============================================
+ * AUTH TOKEN HELPERS
+ * ============================================
+ */
+export const setAuthToken = (
+  token,
+  rememberMe = false
+) => {
+  if (!token) {
+    return;
+  }
+
   if (rememberMe) {
-    localStorage.setItem('trustra_token', token);
-    localStorage.setItem('trustra_remember', 'true');
+    localStorage.setItem(
+      'trustra_token',
+      token
+    );
+
+    localStorage.setItem(
+      'trustra_remember',
+      'true'
+    );
+
+    sessionStorage.removeItem(
+      'trustra_token'
+    );
   } else {
-    sessionStorage.setItem('trustra_token', token);
+    sessionStorage.setItem(
+      'trustra_token',
+      token
+    );
+
+    localStorage.removeItem(
+      'trustra_token'
+    );
   }
 };
 
 export const clearAuthToken = () => {
   localStorage.removeItem('trustra_token');
-  localStorage.removeItem('trustra_remember');
-  sessionStorage.removeItem('trustra_token');
+
+  localStorage.removeItem(
+    'trustra_remember'
+  );
+
+  sessionStorage.removeItem(
+    'trustra_token'
+  );
 };
 
-export const isAuthenticated = () => {
-  return !!(localStorage.getItem('trustra_token') || sessionStorage.getItem('trustra_token'));
-};
-
+/**
+ * ============================================
+ * EXPORTS
+ * ============================================
+ */
 export default api;
-export { API_ENDPOINTS };
+
+export {
+  API_ENDPOINTS,
+};

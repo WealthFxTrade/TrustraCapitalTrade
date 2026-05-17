@@ -1,10 +1,19 @@
-// src/context/AuthContext.jsx
-import React, { createContext, useContext, useReducer, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
+
 import { useNavigate } from 'react-router-dom';
-import api, { API_ENDPOINTS } from '@/api/api';
 import toast from 'react-hot-toast';
 
-const AuthContext = createContext();
+import api, { API_ENDPOINTS } from '@/api/api';
+
+const AuthContext = createContext(null);
 
 const initialState = {
   user: null,
@@ -16,27 +25,35 @@ const initialState = {
 function authReducer(state, action) {
   switch (action.type) {
     case 'AUTH_START':
-      return { ...state, loading: true };
-    case 'AUTH_SUCCESS':
       return {
         ...state,
+        loading: true,
+      };
+
+    case 'AUTH_SUCCESS':
+      return {
         user: action.payload.user,
         isAuthenticated: true,
         initialized: true,
         loading: false,
       };
+
     case 'AUTH_LOGOUT':
+    case 'AUTH_ERROR':
       return {
-        ...state,
         user: null,
         isAuthenticated: false,
         initialized: true,
         loading: false,
       };
-    case 'AUTH_ERROR':
-      return { ...state, loading: false };
+
     case 'SET_INITIALIZED':
-      return { ...state, initialized: true, loading: false };
+      return {
+        ...state,
+        initialized: true,
+        loading: false,
+      };
+
     default:
       return state;
   }
@@ -44,6 +61,7 @@ function authReducer(state, action) {
 
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
+
   const navigate = useNavigate();
   const isInitializing = useRef(false);
 
@@ -57,7 +75,9 @@ export function AuthProvider({ children }) {
     if (isInitializing.current) return;
     isInitializing.current = true;
 
-    const token = localStorage.getItem('trustra_token') || sessionStorage.getItem('trustra_token');
+    const token =
+      localStorage.getItem('trustra_token') ||
+      sessionStorage.getItem('trustra_token');
 
     if (!token) {
       dispatch({ type: 'SET_INITIALIZED' });
@@ -65,16 +85,25 @@ export function AuthProvider({ children }) {
       return;
     }
 
+    dispatch({ type: 'AUTH_START' });
+
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
-      if (data?.success && data?.user) {
-        dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
+
+      const user =
+        data?.user ||
+        data?.data?.user ||
+        data;
+
+      if (user) {
+        dispatch({
+          type: 'AUTH_SUCCESS',
+          payload: { user },
+        });
       } else {
-        clearTokens();
         dispatch({ type: 'AUTH_LOGOUT' });
       }
     } catch (error) {
-      clearTokens();
       dispatch({ type: 'AUTH_LOGOUT' });
     } finally {
       dispatch({ type: 'SET_INITIALIZED' });
@@ -88,54 +117,82 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (credentials) => {
     dispatch({ type: 'AUTH_START' });
-    const toastId = toast.loading('Verifying credentials...');
+
+    const toastId = toast.loading('Signing in...');
 
     try {
-      const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, {
-        email: credentials.email.trim().toLowerCase(),
-        password: credentials.password,
-      });
-
-      if (data?.success && data?.token && data?.user) {
-        const remember = credentials.rememberMe === true;
-
-        if (remember) {
-          localStorage.setItem('trustra_token', data.token);
-          localStorage.setItem('trustra_remember', 'true');
-        } else {
-          sessionStorage.setItem('trustra_token', data.token);
+      const { data } = await api.post(
+        API_ENDPOINTS.AUTH.LOGIN,
+        {
+          email: credentials.email.trim().toLowerCase(),
+          password: credentials.password,
         }
+      );
 
-        dispatch({ type: 'AUTH_SUCCESS', payload: { user: data.user } });
-        toast.success('Access Granted', { id: toastId });
-        return { success: true };
+      const user = data?.user || data?.data?.user;
+      const token = data?.token;
+
+      if (!user) {
+        dispatch({ type: 'AUTH_ERROR' });
+        toast.error('Login failed', { id: toastId });
+        return { success: false };
       }
 
-      toast.error(data?.message || 'Invalid credentials', { id: toastId });
-      return { success: false, message: data?.message };
+      if (token) {
+        if (credentials.rememberMe) {
+          localStorage.setItem('trustra_token', token);
+          localStorage.setItem('trustra_remember', 'true');
+        } else {
+          sessionStorage.setItem('trustra_token', token);
+        }
+      }
+
+      dispatch({
+        type: 'AUTH_SUCCESS',
+        payload: { user },
+      });
+
+      dispatch({ type: 'SET_INITIALIZED' });
+
+      toast.success('Login successful', { id: toastId });
+
+      return { success: true };
     } catch (error) {
-      const message = error.response?.data?.message || 'Invalid email or access token.';
-      toast.error(message, { id: toastId });
-      return { success: false, message };
+      dispatch({ type: 'AUTH_ERROR' });
+
+      toast.error(
+        error?.response?.data?.message || 'Authentication error',
+        { id: toastId }
+      );
+
+      return { success: false };
     }
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {});
-    } finally {
-      clearTokens();
-      dispatch({ type: 'AUTH_LOGOUT' });
-      navigate('/login', { replace: true });
-      toast.success('Logged out successfully');
-    }
+      await api.post(API_ENDPOINTS.AUTH.LOGOUT);
+    } catch (e) {}
+
+    clearTokens();
+
+    dispatch({ type: 'AUTH_LOGOUT' });
+    dispatch({ type: 'SET_INITIALIZED' });
+
+    navigate('/login', { replace: true });
+
+    toast.success('Logged out');
   }, [navigate, clearTokens]);
 
-  const value = useMemo(() => ({
-    ...state,
-    login,
-    logout,
-  }), [state, login, logout]);
+  const value = useMemo(
+    () => ({
+      ...state,
+      login,
+      logout,
+      refreshSession: initAuth,
+    }),
+    [state, login, logout, initAuth]
+  );
 
   return (
     <AuthContext.Provider value={value}>
@@ -146,6 +203,8 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
   return context;
 };

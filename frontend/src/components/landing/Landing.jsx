@@ -80,7 +80,11 @@ const LandingPage = () => {
   };
 
   if (!initialized) {
-    return <div className="min-h-screen bg-[#020408]" />;
+    return (
+      <div className="min-h-screen bg-[#020408] flex items-center justify-center">
+        <div className="text-emerald-500 text-xl">Initializing platform...</div>
+      </div>
+    );
   }
 
   return (
@@ -93,7 +97,7 @@ const LandingPage = () => {
         scrolled ? 'bg-[#020408]/95 backdrop-blur-xl border-b border-white/5 py-4' : 'bg-transparent py-6 md:py-8'
       }`}>
         <div className="max-w-7xl mx-auto px-6 lg:px-12 flex justify-between items-center">
-          <div 
+          <div
             className="flex items-center gap-3 cursor-pointer group"
             onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           >
@@ -118,7 +122,7 @@ const LandingPage = () => {
             <a href="#branches" className="text-sm font-medium hover:text-emerald-400 transition-colors">Global</a>
             <Link to="/login" className="text-sm font-medium hover:text-emerald-400 transition-colors">Client Terminal</Link>
 
-            <button 
+            <button
               onClick={() => navigate('/register')}
               className="px-8 py-3 bg-white text-black font-bold rounded-2xl hover:bg-emerald-500 hover:text-white transition-all"
             >
@@ -145,7 +149,7 @@ const LandingPage = () => {
                 <a href="#plans" onClick={() => setMenuOpen(false)} className="text-lg">Investment Plans</a>
                 <a href="#branches" onClick={() => setMenuOpen(false)} className="text-lg">Global Presence</a>
                 <Link to="/login" onClick={() => setMenuOpen(false)} className="text-lg">Client Login</Link>
-                <button 
+                <button
                   onClick={() => { navigate('/register'); setMenuOpen(false); }}
                   className="mt-4 py-4 bg-emerald-500 text-black font-bold rounded-2xl"
                 >
@@ -217,8 +221,13 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* ROI CALCULATOR */}
-      <RoiCalculator />
+      {/* ROI CALCULATOR SECTION */}
+      <section className="py-20 bg-[#0a0c10] text-center">
+        <div className="max-w-4xl mx-auto px-6">
+          <h2 className="text-4xl font-black text-white mb-4">ROI Calculator</h2>
+          <p className="text-slate-400">Interactive investment calculator coming soon...</p>
+        </div>
+      </section>
 
       {/* PLANS SECTION */}
       <section id="plans" className="py-20 md:py-32 px-6 bg-[#05070a]">
