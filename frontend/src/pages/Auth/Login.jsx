@@ -16,14 +16,13 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // Redirect after login (from ProtectedRoute)
+  // Redirect after successful login
   const from = location.state?.from?.pathname || '/dashboard';
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Clear field-specific error when user types
+
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -31,7 +30,7 @@ export default function Login() {
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.email.trim()) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
@@ -39,7 +38,7 @@ export default function Login() {
     }
 
     if (!formData.password.trim()) {
-      newErrors.password = 'Access token is required';
+      newErrors.password = 'Password is required';
     }
 
     setErrors(newErrors);
@@ -48,7 +47,7 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm() || loading) return;
 
     setLoading(true);
     const toastId = toast.loading('Establishing secure encrypted session...');
@@ -57,28 +56,23 @@ export default function Login() {
       const result = await login({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        rememberMe: false, // You can add rememberMe later
+        rememberMe: false,
       });
 
       if (result?.success) {
         toast.success('Access Granted. Welcome back.', { id: toastId });
         setTimeout(() => {
           navigate(from, { replace: true });
-        }, 600);
-      } else {
-        const errorMsg = result?.message || 'Invalid credentials';
-        toast.error(errorMsg, { id: toastId });
-        
-        setErrors({ auth: errorMsg });
-        
-        // Security: Clear password on failed login
-        setFormData(prev => ({ ...prev, password: '' }));
+        }, 800);
       }
     } catch (err) {
-      console.error(err);
-      const msg = 'Network error. Please check your connection.';
-      toast.error(msg, { id: toastId });
-      setErrors({ auth: msg });
+      console.error('Login Error:', err);
+      const message = err?.response?.data?.message || 'Invalid credentials';
+      
+      toast.error(message, { id: toastId });
+      setErrors({ auth: message });
+      
+      // Clear password field on failure
       setFormData(prev => ({ ...prev, password: '' }));
     } finally {
       setLoading(false);
@@ -98,7 +92,6 @@ export default function Login() {
           >
             <Zap className="text-emerald-500" size={34} />
           </motion.div>
-
           <h1 className="text-4xl font-black tracking-tighter text-white">
             Trustra <span className="text-emerald-500">Capital</span>
           </h1>
@@ -122,7 +115,7 @@ export default function Login() {
         {/* Login Card */}
         <div className="bg-[#0a0c10] border border-white/5 rounded-3xl p-8 md:p-10 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
-
+            
             {/* Email Field */}
             <div className="space-y-2">
               <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">
@@ -140,7 +133,6 @@ export default function Login() {
                     errors.email ? 'border-red-500' : 'border-white/10'
                   }`}
                   placeholder="your@email.com"
-                  required
                 />
               </div>
               {errors.email && <p className="text-red-500 text-xs ml-1">{errors.email}</p>}
@@ -163,12 +155,11 @@ export default function Login() {
                     errors.password ? 'border-red-500' : 'border-white/10'
                   }`}
                   placeholder="••••••••"
-                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -176,11 +167,10 @@ export default function Login() {
               {errors.password && <p className="text-red-500 text-xs ml-1">{errors.password}</p>}
             </div>
 
-            {/* Bottom Row */}
-            <div className="flex items-center justify-between text-sm pt-2">
-              <Link 
-                to="/forgotpassword" 
-                className="text-emerald-500 hover:text-emerald-400 font-medium transition-colors"
+            <div className="flex justify-end">
+              <Link
+                to="/forgotpassword"
+                className="text-emerald-500 hover:text-emerald-400 text-sm font-medium transition-colors"
               >
                 Recover Access
               </Link>
@@ -208,8 +198,8 @@ export default function Login() {
 
           {/* Sign Up Link */}
           <div className="text-center mt-8 pt-6 border-t border-white/5">
-            <Link 
-              to="/apply" 
+            <Link
+              to="/register"
               className="text-gray-400 hover:text-white text-sm transition-colors"
             >
               New to Trustra Capital? <span className="text-emerald-500 font-semibold">Apply for an Account</span>

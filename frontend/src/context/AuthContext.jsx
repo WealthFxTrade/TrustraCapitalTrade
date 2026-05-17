@@ -26,10 +26,7 @@ const initialState = {
 function authReducer(state, action) {
   switch (action.type) {
     case 'AUTH_START':
-      return {
-        ...state,
-        loading: true,
-      };
+      return { ...state, loading: true };
 
     case 'AUTH_SUCCESS':
       return {
@@ -62,7 +59,6 @@ function authReducer(state, action) {
 
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
-
   const navigate = useNavigate();
   const isInitializing = useRef(false);
 
@@ -76,9 +72,7 @@ export function AuthProvider({ children }) {
     if (isInitializing.current) return;
     isInitializing.current = true;
 
-    const token =
-      localStorage.getItem('trustra_token') ||
-      sessionStorage.getItem('trustra_token');
+    const token = localStorage.getItem('trustra_token') || sessionStorage.getItem('trustra_token');
 
     if (!token) {
       dispatch({ type: 'SET_INITIALIZED' });
@@ -90,17 +84,10 @@ export function AuthProvider({ children }) {
 
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
-
-      const user =
-        data?.user ||
-        data?.data?.user ||
-        data;
+      const user = data?.user || data?.data?.user || data;
 
       if (user) {
-        dispatch({
-          type: 'AUTH_SUCCESS',
-          payload: { user },
-        });
+        dispatch({ type: 'AUTH_SUCCESS', payload: { user } });
       } else {
         dispatch({ type: 'AUTH_LOGOUT' });
       }
@@ -116,35 +103,29 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
-  // ==================== IMPROVED LOGIN FUNCTION ====================
+  // ====================== LOGIN ======================
   const login = useCallback(async (credentials) => {
     dispatch({ type: 'AUTH_START' });
-
     const toastId = toast.loading('Signing in...');
 
     try {
-      // Debug logs for production troubleshooting
       console.log('🚀 Login Attempt Started');
-      console.log('📍 Environment Mode:', import.meta.env.MODE);
-      console.log('🔗 VITE_API_URL:', import.meta.env.VITE_API_URL);
-      console.log('📧 Email:', credentials.email.trim().toLowerCase());
+      console.log('📍 Mode:', import.meta.env.MODE);
+      console.log('🔗 API URL:', import.meta.env.VITE_API_URL);
 
-      const { data } = await api.post(
-        API_ENDPOINTS.AUTH.LOGIN,
-        {
-          email: credentials.email.trim().toLowerCase(),
-          password: credentials.password,
-        }
-      );
+      const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, {
+        email: credentials.email.trim().toLowerCase(),
+        password: credentials.password,
+      });
 
-      console.log('✅ Login Response Received:', data);
+      console.log('✅ Login Response:', data);
 
       const user = data?.user || data?.data?.user;
       const token = data?.token;
 
       if (!user) {
         dispatch({ type: 'AUTH_ERROR' });
-        toast.error('Login failed - No user returned', { id: toastId });
+        toast.error('Login failed', { id: toastId });
         return { success: false };
       }
 
@@ -157,61 +138,63 @@ export function AuthProvider({ children }) {
         }
       }
 
-      dispatch({
-        type: 'AUTH_SUCCESS',
-        payload: { user },
-      });
-
-      dispatch({ type: 'SET_INITIALIZED' });
-
+      dispatch({ type: 'AUTH_SUCCESS', payload: { user } });
       toast.success('Login successful', { id: toastId });
       return { success: true };
 
     } catch (error) {
-      console.error('❌ Login Error Details:', {
-        status: error?.response?.status,
-        message: error?.response?.data?.message,
-        fullError: error?.response?.data
-      });
-
+      console.error('❌ Login Error:', error?.response?.data || error);
       dispatch({ type: 'AUTH_ERROR' });
 
-      const errorMsg =
-        error?.response?.data?.message ||
-        error?.response?.data?.error ||
-        'Invalid credentials';
-
-      toast.error(errorMsg, { id: toastId });
+      const message = error?.response?.data?.message || 'Invalid credentials';
+      toast.error(message, { id: toastId });
       return { success: false };
+    }
+  }, []);
+
+  // ====================== SIGNUP ======================
+  const signup = useCallback(async (payload) => {
+    const toastId = toast.loading('Creating your account...');
+
+    try {
+      console.log('🚀 Signup Attempt:', payload.email);
+
+      const { data } = await api.post(API_ENDPOINTS.AUTH.REGISTER, payload);
+
+      console.log('✅ Signup Response:', data);
+
+      toast.success('Account created successfully!', { id: toastId });
+
+      return { success: true, data };
+
+    } catch (error) {
+      console.error('❌ Signup Error:', error?.response?.data || error);
+
+      const message = error?.response?.data?.message || 'Registration failed';
+      toast.error(message, { id: toastId });
+
+      return { success: false, message };
     }
   }, []);
 
   const logout = useCallback(async () => {
     try {
       await api.post(API_ENDPOINTS.AUTH.LOGOUT);
-    } catch (e) {
-      console.warn('Logout API call failed, clearing local tokens anyway');
-    }
+    } catch (e) {}
 
     clearTokens();
-
     dispatch({ type: 'AUTH_LOGOUT' });
-    dispatch({ type: 'SET_INITIALIZED' });
-
     navigate('/login', { replace: true });
-
     toast.success('Logged out');
   }, [navigate, clearTokens]);
 
-  const value = useMemo(
-    () => ({
-      ...state,
-      login,
-      logout,
-      refreshSession: initAuth,
-    }),
-    [state, login, logout, initAuth]
-  );
+  const value = useMemo(() => ({
+    ...state,
+    login,
+    signup,        // ← Now available
+    logout,
+    refreshSession: initAuth,
+  }), [state, login, signup, logout, initAuth]);
 
   return (
     <AuthContext.Provider value={value}>
