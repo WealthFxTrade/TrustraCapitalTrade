@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import React, {
   createContext,
   useContext,
@@ -109,18 +110,25 @@ export function AuthProvider({ children }) {
       dispatch({ type: 'SET_INITIALIZED' });
       isInitializing.current = false;
     }
-  }, [clearTokens]);
+  }, []);
 
   useEffect(() => {
     initAuth();
   }, [initAuth]);
 
+  // ==================== IMPROVED LOGIN FUNCTION ====================
   const login = useCallback(async (credentials) => {
     dispatch({ type: 'AUTH_START' });
 
     const toastId = toast.loading('Signing in...');
 
     try {
+      // Debug logs for production troubleshooting
+      console.log('🚀 Login Attempt Started');
+      console.log('📍 Environment Mode:', import.meta.env.MODE);
+      console.log('🔗 VITE_API_URL:', import.meta.env.VITE_API_URL);
+      console.log('📧 Email:', credentials.email.trim().toLowerCase());
+
       const { data } = await api.post(
         API_ENDPOINTS.AUTH.LOGIN,
         {
@@ -129,12 +137,14 @@ export function AuthProvider({ children }) {
         }
       );
 
+      console.log('✅ Login Response Received:', data);
+
       const user = data?.user || data?.data?.user;
       const token = data?.token;
 
       if (!user) {
         dispatch({ type: 'AUTH_ERROR' });
-        toast.error('Login failed', { id: toastId });
+        toast.error('Login failed - No user returned', { id: toastId });
         return { success: false };
       }
 
@@ -155,16 +165,23 @@ export function AuthProvider({ children }) {
       dispatch({ type: 'SET_INITIALIZED' });
 
       toast.success('Login successful', { id: toastId });
-
       return { success: true };
+
     } catch (error) {
+      console.error('❌ Login Error Details:', {
+        status: error?.response?.status,
+        message: error?.response?.data?.message,
+        fullError: error?.response?.data
+      });
+
       dispatch({ type: 'AUTH_ERROR' });
 
-      toast.error(
-        error?.response?.data?.message || 'Authentication error',
-        { id: toastId }
-      );
+      const errorMsg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        'Invalid credentials';
 
+      toast.error(errorMsg, { id: toastId });
       return { success: false };
     }
   }, []);
@@ -172,7 +189,9 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     try {
       await api.post(API_ENDPOINTS.AUTH.LOGOUT);
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Logout API call failed, clearing local tokens anyway');
+    }
 
     clearTokens();
 
