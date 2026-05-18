@@ -1,149 +1,102 @@
 // src/api/api.js
 
 import axios from 'axios';
-
-import {
-  getApiBaseUrl,
-  API_ENDPOINTS,
-} from '@/constants/api';
+import { getApiBaseUrl, API_ENDPOINTS } from '@/constants/api';
 
 /**
- * ============================================
+ * ==============================
+ * TOKEN STORAGE KEYS
+ * ==============================
+ */
+const TOKEN_KEY = 'trustra_token';
+const REMEMBER_KEY = 'trustra_remember';
+
+/**
+ * ==============================
  * AXIOS INSTANCE
- * ============================================
+ * ==============================
  */
 const api = axios.create({
   baseURL: getApiBaseUrl(),
-
+  timeout: 20000,
   withCredentials: true,
-
-  timeout: 15000,
-
   headers: {
     'Content-Type': 'application/json',
+    Accept: 'application/json',
   },
 });
 
 /**
- * ============================================
+ * ==============================
+ * GET TOKEN (SAFE SINGLE SOURCE)
+ * ==============================
+ */
+const getToken = () => {
+  return (
+    localStorage.getItem(TOKEN_KEY) ||
+    sessionStorage.getItem(TOKEN_KEY)
+  );
+};
+
+/**
+ * ==============================
  * REQUEST INTERCEPTOR
- * ============================================
- * Automatically attaches auth token
- * ============================================
+ * ==============================
  */
 api.interceptors.request.use(
   (config) => {
-    const localToken =
-      localStorage.getItem('trustra_token');
-
-    const sessionToken =
-      sessionStorage.getItem('trustra_token');
-
-    const token = localToken || sessionToken;
+    const token = getToken();
 
     if (token) {
-      config.headers.Authorization =
-        `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
   },
-
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 /**
- * ============================================
+ * ==============================
  * RESPONSE INTERCEPTOR
- * ============================================
- * Handles:
- *  - Token persistence
- *  - Session expiration
- *  - Redirect protection
- * ============================================
+ * ==============================
  */
 api.interceptors.response.use(
   (response) => {
-    /**
-     * Save new token if returned
-     */
-    if (response.data?.token) {
-      const rememberMe =
-        localStorage.getItem('trustra_remember') === 'true';
+    const newToken = response?.data?.token;
 
-      if (rememberMe) {
-        localStorage.setItem(
-          'trustra_token',
-          response.data.token
-        );
+    if (newToken) {
+      const remember =
+        localStorage.getItem(REMEMBER_KEY) === 'true';
+
+      if (remember) {
+        localStorage.setItem(TOKEN_KEY, newToken);
       } else {
-        sessionStorage.setItem(
-          'trustra_token',
-          response.data.token
-        );
+        sessionStorage.setItem(TOKEN_KEY, newToken);
       }
     }
 
     return response;
   },
+  (error) => {
+    const status = error?.response?.status;
 
-  async (error) => {
-    const originalRequest = error.config;
+    if (status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REMEMBER_KEY);
+      sessionStorage.removeItem(TOKEN_KEY);
 
-    /**
-     * Handle unauthorized responses
-     */
-    if (
-      error.response?.status === 401 &&
-      !originalRequest?._retry
-    ) {
-      originalRequest._retry = true;
-
-      /**
-       * Clear stored auth
-       */
-      localStorage.removeItem('trustra_token');
-      localStorage.removeItem('trustra_remember');
-
-      sessionStorage.removeItem('trustra_token');
-
-      /**
-       * Prevent redirect loop
-       */
-      const currentPath =
-        window.location.pathname;
-
-      const publicPaths = [
-        '/',
-        '/login',
-        '/register',
-        '/forgotpassword',
-      ];
-
-      const isPublicPage =
-        publicPaths.includes(currentPath);
-
-      if (!isPublicPage) {
-        window.location.href =
-          '/login?reason=session_expired';
+      if (!['/login', '/', '/register'].includes(window.location.pathname)) {
+        window.location.replace('/login?session=expired');
       }
     }
 
-    /**
-     * Network / timeout logging
-     */
     if (!error.response) {
-      console.error(
-        'Network Error: Backend unreachable'
-      );
+      console.error('Backend unreachable');
     }
 
     if (error.code === 'ECONNABORTED') {
-      console.error(
-        'Request Timeout: Server took too long to respond'
-      );
+      console.error('Request timeout');
     }
 
     return Promise.reject(error);
@@ -151,63 +104,28 @@ api.interceptors.response.use(
 );
 
 /**
- * ============================================
- * AUTH TOKEN HELPERS
- * ============================================
+ * ==============================
+ * AUTH HELPERS
+ * ==============================
  */
-export const setAuthToken = (
-  token,
-  rememberMe = false
-) => {
-  if (!token) {
-    return;
-  }
+export const setAuthToken = (token, remember = false) => {
+  if (!token) return;
 
-  if (rememberMe) {
-    localStorage.setItem(
-      'trustra_token',
-      token
-    );
-
-    localStorage.setItem(
-      'trustra_remember',
-      'true'
-    );
-
-    sessionStorage.removeItem(
-      'trustra_token'
-    );
+  if (remember) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(REMEMBER_KEY, 'true');
+    sessionStorage.removeItem(TOKEN_KEY);
   } else {
-    sessionStorage.setItem(
-      'trustra_token',
-      token
-    );
-
-    localStorage.removeItem(
-      'trustra_token'
-    );
+    sessionStorage.setItem(TOKEN_KEY, token);
+    localStorage.removeItem(TOKEN_KEY);
   }
 };
 
 export const clearAuthToken = () => {
-  localStorage.removeItem('trustra_token');
-
-  localStorage.removeItem(
-    'trustra_remember'
-  );
-
-  sessionStorage.removeItem(
-    'trustra_token'
-  );
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(REMEMBER_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
 };
 
-/**
- * ============================================
- * EXPORTS
- * ============================================
- */
+export { API_ENDPOINTS };
 export default api;
-
-export {
-  API_ENDPOINTS,
-};

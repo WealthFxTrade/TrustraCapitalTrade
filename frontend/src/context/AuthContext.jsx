@@ -1,4 +1,5 @@
 // src/context/AuthContext.jsx
+
 import React, {
   createContext,
   useContext,
@@ -8,10 +9,11 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
-import api, { API_ENDPOINTS } from '@/api/api';
+import api, { API_ENDPOINTS, setAuthToken, clearAuthToken } from '@/api/api';
 
 const AuthContext = createContext(null);
 
@@ -22,21 +24,20 @@ const initialState = {
   loading: false,
 };
 
-function authReducer(state, action) {
+function reducer(state, action) {
   switch (action.type) {
-    case 'AUTH_START':
+    case 'START':
       return { ...state, loading: true };
 
-    case 'AUTH_SUCCESS':
+    case 'SUCCESS':
       return {
-        user: action.payload.user,
+        user: action.payload,
         isAuthenticated: true,
         initialized: true,
         loading: false,
       };
 
-    case 'AUTH_LOGOUT':
-    case 'AUTH_ERROR':
+    case 'LOGOUT':
       return {
         user: null,
         isAuthenticated: false,
@@ -44,7 +45,7 @@ function authReducer(state, action) {
         loading: false,
       };
 
-    case 'SET_INITIALIZED':
+    case 'INIT':
       return { ...state, initialized: true, loading: false };
 
     default:
@@ -53,151 +54,115 @@ function authReducer(state, action) {
 }
 
 export function AuthProvider({ children }) {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState);
   const navigate = useNavigate();
-  const isInitializing = useRef(false);
+  const initLock = useRef(false);
 
-  const clearTokens = useCallback(() => {
-    localStorage.removeItem('trustra_token');
-    localStorage.removeItem('trustra_remember');
-    sessionStorage.removeItem('trustra_token');
-  }, []);
-
-  // Initialize Auth (Check existing token)
   const initAuth = useCallback(async () => {
-    if (isInitializing.current) return;
-    isInitializing.current = true;
+    if (initLock.current) return;
+    initLock.current = true;
 
-    const token = localStorage.getItem('trustra_token') || sessionStorage.getItem('trustra_token');
+    const token =
+      localStorage.getItem('trustra_token') ||
+      sessionStorage.getItem('trustra_token');
 
     if (!token) {
-      dispatch({ type: 'SET_INITIALIZED' });
-      isInitializing.current = false;
+      dispatch({ type: 'INIT' });
+      initLock.current = false;
       return;
     }
 
-    dispatch({ type: 'AUTH_START' });
+    setAuthToken(token);
 
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
 
-      const user = data?.user || data?.data?.user || data;
+      const user = data?.user || data;
 
-      if (user?._id || user?.id) {
-        dispatch({ type: 'AUTH_SUCCESS', payload: { user } });
+      if (user?.id || user?._id) {
+        dispatch({ type: 'SUCCESS', payload: user });
       } else {
-        clearTokens();
-        dispatch({ type: 'AUTH_LOGOUT' });
+        clearAuthToken();
+        dispatch({ type: 'LOGOUT' });
       }
-    } catch (error) {
-      console.warn('Token validation failed');
-      clearTokens();
-      dispatch({ type: 'AUTH_LOGOUT' });
+    } catch {
+      clearAuthToken();
+      dispatch({ type: 'LOGOUT' });
     } finally {
-      dispatch({ type: 'SET_INITIALIZED' });
-      isInitializing.current = false;
+      dispatch({ type: 'INIT' });
+      initLock.current = false;
     }
-  }, [clearTokens]);
+  }, []);
 
   useEffect(() => {
     initAuth();
   }, [initAuth]);
 
-  // ====================== LOGIN ======================
   const login = useCallback(async (credentials) => {
-    dispatch({ type: 'AUTH_START' });
-    const toastId = toast.loading('Establishing secure encrypted session...');
+    dispatch({ type: 'START' });
+
+    const toastId = toast.loading('Authenticating...');
 
     try {
-      const payload = {
-        email: credentials.email.trim().toLowerCase(),
-        password: credentials.password,
-      };
+      const { data } = await api.post(
+        API_ENDPOINTS.AUTH.LOGIN,
+        {
+          email: credentials.email,
+          password: credentials.password,
+        }
+      );
 
-      const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, payload);
+      const token = data?.token;
+      const user = data?.user;
 
-      // Support multiple common response structures
-      const user = data?.user || data?.data?.user || data?.payload?.user;
-      const token = data?.token || data?.data?.token || data?.accessToken;
+      if (!token || !user) throw new Error('Invalid response');
 
-      if (!user || !token) {
-        throw new Error('Invalid response from server');
-      }
+      setAuthToken(token, credentials.rememberMe);
 
-      // Store token
-      if (credentials.rememberMe) {
-        localStorage.setItem('trustra_token', token);
-        localStorage.setItem('trustra_remember', 'true');
-      } else {
-        sessionStorage.setItem('trustra_token', token);
-      }
+      dispatch({ type: 'SUCCESS', payload: user });
 
-      dispatch({ type: 'AUTH_SUCCESS', payload: { user } });
-      toast.success('Access Granted. Welcome back.', { id: toastId });
+      toast.success('Welcome back', { id: toastId });
 
-      return { success: true, user };
+      navigate('/dashboard');
 
-    } catch (error) {
-      console.error('❌ Login Error:', error?.response?.data || error);
+      return { success: true };
+    } catch (err) {
+      clearAuthToken();
+      dispatch({ type: 'LOGOUT' });
 
-      dispatch({ type: 'AUTH_ERROR' });
-      clearTokens();
+      toast.error(err?.message || 'Login failed', { id: toastId });
 
-      const serverMessage = error?.response?.data?.message || error?.message || 'Invalid credentials';
-
-      // Better user messages
-      let userMessage = serverMessage;
-      if (serverMessage.toLowerCase().includes('verify')) {
-        userMessage = 'Please verify your email address before logging in.';
-      }
-
-      toast.error(userMessage, { id: toastId });
-      return { success: false, message: userMessage };
+      return { success: false };
     }
-  }, [clearTokens]);
-
-  // ====================== SIGNUP ======================
-  const signup = useCallback(async (payload) => {
-    const toastId = toast.loading('Creating your account...');
-
-    try {
-      const { data } = await api.post(API_ENDPOINTS.AUTH.REGISTER, payload);
-
-      toast.success('Account created successfully! Please verify your email.', { id: toastId });
-      return { success: true, data };
-    } catch (error) {
-      const message = error?.response?.data?.message || 'Registration failed';
-      toast.error(message, { id: toastId });
-      return { success: false, message };
-    }
-  }, []);
+  }, [navigate]);
 
   const logout = useCallback(async () => {
     try {
-      await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {});
-    } catch (e) {}
+      await api.post(API_ENDPOINTS.AUTH.LOGOUT);
+    } catch {}
 
-    clearTokens();
-    dispatch({ type: 'AUTH_LOGOUT' });
-    navigate('/login', { replace: true });
-    toast.success('Logged out successfully');
-  }, [navigate, clearTokens]);
+    clearAuthToken();
+    dispatch({ type: 'LOGOUT' });
+
+    navigate('/login');
+  }, [navigate]);
 
   const value = useMemo(() => ({
     ...state,
     login,
-    signup,
     logout,
     refreshSession: initAuth,
-  }), [state, login, signup, logout, initAuth]);
+  }), [state, login, logout, initAuth]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('AuthProvider missing');
+  return ctx;
 };
