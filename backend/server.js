@@ -18,7 +18,6 @@ import { Server } from 'socket.io';
 /**
  * =========================
  * DATABASE CONNECTION
- * (your improved retry DB file)
  * =========================
  */
 import connectDB from './config/db.js';
@@ -106,7 +105,6 @@ app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-
   'https://trustracapitaltrade.online',
   'https://www.trustracapitaltrade.online',
   'https://trustra-capital-trade.vercel.app',
@@ -131,7 +129,9 @@ const isAllowedOrigin = (origin) => {
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) return callback(null, true);
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
       return callback(new Error(`CORS blocked: ${origin}`));
     },
     credentials: true,
@@ -148,7 +148,9 @@ app.options('*', cors());
 const io = new Server(server, {
   cors: {
     origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) return callback(null, true);
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
       return callback(new Error('Socket CORS blocked'));
     },
     credentials: true,
@@ -178,17 +180,18 @@ app.use('/api', apiRoutes);
 
 /**
  * =========================
- * HEALTH CHECK
+ * HEALTH CHECK (FIXED)
  * =========================
+ * IMPORTANT: frontend uses /api/health
  */
-app.get('/health', (req, res) => {
-  res.json({
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    success: true,
     status: 'ok',
-    db:
-      mongoose.connection.readyState === 1
-        ? 'connected'
-        : 'disconnected',
+    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
     env: NODE_ENV,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -211,7 +214,7 @@ app.use((err, req, res, next) => {
 
 /**
  * =========================
- * START SERVER (FIXED)
+ * START SERVER
  * =========================
  */
 const startServer = async () => {
@@ -225,9 +228,7 @@ const startServer = async () => {
     server.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${NODE_ENV}`);
-      console.log(
-        `🔗 Health: http://localhost:${PORT}/health`
-      );
+      console.log(`🔗 Health check: /api/health`);
     });
   } catch (err) {
     console.error('❌ Failed to start server:', err.message);
@@ -243,7 +244,7 @@ startServer();
  * =========================
  */
 process.on('SIGINT', async () => {
-  console.log('🛑 Shutting down...');
+  console.log('🛑 Shutting down server...');
 
   await mongoose.connection.close();
 
