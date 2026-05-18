@@ -8,7 +8,6 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -46,11 +45,7 @@ function authReducer(state, action) {
       };
 
     case 'SET_INITIALIZED':
-      return {
-        ...state,
-        initialized: true,
-        loading: false,
-      };
+      return { ...state, initialized: true, loading: false };
 
     default:
       return state;
@@ -68,6 +63,7 @@ export function AuthProvider({ children }) {
     sessionStorage.removeItem('trustra_token');
   }, []);
 
+  // Initialize Auth (Check existing token)
   const initAuth = useCallback(async () => {
     if (isInitializing.current) return;
     isInitializing.current = true;
@@ -84,20 +80,24 @@ export function AuthProvider({ children }) {
 
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
+
       const user = data?.user || data?.data?.user || data;
 
-      if (user) {
+      if (user?._id || user?.id) {
         dispatch({ type: 'AUTH_SUCCESS', payload: { user } });
       } else {
+        clearTokens();
         dispatch({ type: 'AUTH_LOGOUT' });
       }
     } catch (error) {
+      console.warn('Token validation failed');
+      clearTokens();
       dispatch({ type: 'AUTH_LOGOUT' });
     } finally {
       dispatch({ type: 'SET_INITIALIZED' });
       isInitializing.current = false;
     }
-  }, []);
+  }, [clearTokens]);
 
   useEffect(() => {
     initAuth();
@@ -106,101 +106,92 @@ export function AuthProvider({ children }) {
   // ====================== LOGIN ======================
   const login = useCallback(async (credentials) => {
     dispatch({ type: 'AUTH_START' });
-    const toastId = toast.loading('Signing in...');
+    const toastId = toast.loading('Establishing secure encrypted session...');
 
     try {
-      console.log('🚀 Login Attempt Started');
-      console.log('📍 Mode:', import.meta.env.MODE);
-      console.log('🔗 API URL:', import.meta.env.VITE_API_URL);
-
-      const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, {
+      const payload = {
         email: credentials.email.trim().toLowerCase(),
         password: credentials.password,
-      });
+      };
 
-      console.log('✅ Login Response:', data);
+      const { data } = await api.post(API_ENDPOINTS.AUTH.LOGIN, payload);
 
-      const user = data?.user || data?.data?.user;
-      const token = data?.token;
+      // Support multiple common response structures
+      const user = data?.user || data?.data?.user || data?.payload?.user;
+      const token = data?.token || data?.data?.token || data?.accessToken;
 
-      if (!user) {
-        dispatch({ type: 'AUTH_ERROR' });
-        toast.error('Login failed', { id: toastId });
-        return { success: false };
+      if (!user || !token) {
+        throw new Error('Invalid response from server');
       }
 
-      if (token) {
-        if (credentials.rememberMe) {
-          localStorage.setItem('trustra_token', token);
-          localStorage.setItem('trustra_remember', 'true');
-        } else {
-          sessionStorage.setItem('trustra_token', token);
-        }
+      // Store token
+      if (credentials.rememberMe) {
+        localStorage.setItem('trustra_token', token);
+        localStorage.setItem('trustra_remember', 'true');
+      } else {
+        sessionStorage.setItem('trustra_token', token);
       }
 
       dispatch({ type: 'AUTH_SUCCESS', payload: { user } });
-      toast.success('Login successful', { id: toastId });
-      return { success: true };
+      toast.success('Access Granted. Welcome back.', { id: toastId });
+
+      return { success: true, user };
 
     } catch (error) {
       console.error('❌ Login Error:', error?.response?.data || error);
-      dispatch({ type: 'AUTH_ERROR' });
 
-      const message = error?.response?.data?.message || 'Invalid credentials';
-      toast.error(message, { id: toastId });
-      return { success: false };
+      dispatch({ type: 'AUTH_ERROR' });
+      clearTokens();
+
+      const serverMessage = error?.response?.data?.message || error?.message || 'Invalid credentials';
+
+      // Better user messages
+      let userMessage = serverMessage;
+      if (serverMessage.toLowerCase().includes('verify')) {
+        userMessage = 'Please verify your email address before logging in.';
+      }
+
+      toast.error(userMessage, { id: toastId });
+      return { success: false, message: userMessage };
     }
-  }, []);
+  }, [clearTokens]);
 
   // ====================== SIGNUP ======================
   const signup = useCallback(async (payload) => {
     const toastId = toast.loading('Creating your account...');
 
     try {
-      console.log('🚀 Signup Attempt:', payload.email);
-
       const { data } = await api.post(API_ENDPOINTS.AUTH.REGISTER, payload);
 
-      console.log('✅ Signup Response:', data);
-
-      toast.success('Account created successfully!', { id: toastId });
-
+      toast.success('Account created successfully! Please verify your email.', { id: toastId });
       return { success: true, data };
-
     } catch (error) {
-      console.error('❌ Signup Error:', error?.response?.data || error);
-
       const message = error?.response?.data?.message || 'Registration failed';
       toast.error(message, { id: toastId });
-
       return { success: false, message };
     }
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      await api.post(API_ENDPOINTS.AUTH.LOGOUT);
+      await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {});
     } catch (e) {}
 
     clearTokens();
     dispatch({ type: 'AUTH_LOGOUT' });
     navigate('/login', { replace: true });
-    toast.success('Logged out');
+    toast.success('Logged out successfully');
   }, [navigate, clearTokens]);
 
   const value = useMemo(() => ({
     ...state,
     login,
-    signup,        // ← Now available
+    signup,
     logout,
     refreshSession: initAuth,
   }), [state, login, signup, logout, initAuth]);
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {

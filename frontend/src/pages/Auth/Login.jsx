@@ -16,7 +16,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  // Redirect after successful login
   const from = location.state?.from?.pathname || '/dashboard';
 
   const handleChange = (e) => {
@@ -39,6 +38,8 @@ export default function Login() {
 
     if (!formData.password.trim()) {
       newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
     }
 
     setErrors(newErrors);
@@ -56,24 +57,34 @@ export default function Login() {
       const result = await login({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        rememberMe: false,
       });
 
       if (result?.success) {
         toast.success('Access Granted. Welcome back.', { id: toastId });
         setTimeout(() => {
           navigate(from, { replace: true });
-        }, 800);
+        }, 600);
       }
     } catch (err) {
       console.error('Login Error:', err);
-      const message = err?.response?.data?.message || 'Invalid credentials';
-      
-      toast.error(message, { id: toastId });
+
+      let message = 'Invalid credentials';
+
+      if (err?.response?.data?.message) {
+        message = err.response.data.message;
+      } else if (err?.message) {
+        message = err.message;
+      }
+
+      // Better user feedback
+      if (message.toLowerCase().includes('verify') || message.toLowerCase().includes('email not verified')) {
+        toast.error("Please verify your email address before logging in.", { id: toastId });
+      } else {
+        toast.error(message, { id: toastId });
+      }
+
       setErrors({ auth: message });
-      
-      // Clear password field on failure
-      setFormData(prev => ({ ...prev, password: '' }));
+      setFormData(prev => ({ ...prev, password: '' })); // Clear password on failure
     } finally {
       setLoading(false);
     }
@@ -115,7 +126,7 @@ export default function Login() {
         {/* Login Card */}
         <div className="bg-[#0a0c10] border border-white/5 rounded-3xl p-8 md:p-10 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
-            
+
             {/* Email Field */}
             <div className="space-y-2">
               <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">
@@ -160,6 +171,7 @@ export default function Login() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                  disabled={loading}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
@@ -176,7 +188,6 @@ export default function Login() {
               </Link>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
@@ -196,7 +207,6 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Sign Up Link */}
           <div className="text-center mt-8 pt-6 border-t border-white/5">
             <Link
               to="/register"

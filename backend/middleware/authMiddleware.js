@@ -8,18 +8,14 @@ import { ApiError } from './errorMiddleware.js';
  * ============================================================================
  * PROTECT MIDDLEWARE - Production Grade
  * ============================================================================
- * Validates JWT token from cross-origin cookie context or authorization header
  */
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  // ── TOKEN EXTRACTION ──
-  // Priority parsing path: Cross-origin secure cookie context → Authorization Bearer string
+  // Priority: Cookie → Authorization Header
   if (req.cookies?.trustra_token) {
     token = req.cookies.trustra_token;
   } else if (req.headers.authorization?.startsWith('Bearer ')) {
-    // PRODUCTION REALIGNMENT FIX: Added the array index [1] selector context
-    // This extracts the raw token payload string from the "Bearer <token>" header value
     token = req.headers.authorization.split(' ')[1];
   }
 
@@ -29,23 +25,18 @@ export const protect = asyncHandler(async (req, res, next) => {
 
   let decoded;
 
-  // ── JWT VERIFICATION ──
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
-    console.error(`[AUTH] JWT verification failed: ${err.message}`);
+    console.error(`[AUTH] JWT Error: ${err.message}`);
 
-    // PRODUCTION COOKIE FLUSH FIX:
-    // This signature matches our login/register configuration exactly.
-    // It guarantees browsers drop the token over Vercel/Render networks.
-    if (err.name === 'TokenExpiredError' || err.name === 'JsonWebTokenError') {
-      res.clearCookie('trustra_token', {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        path: '/',
-      });
-    }
+    // Clear invalid/expired cookie
+    res.clearCookie('trustra_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+    });
 
     const message = err.name === 'TokenExpiredError'
       ? 'Session expired. Please log in again.'
@@ -54,56 +45,44 @@ export const protect = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, message);
   }
 
-  // ── USER VALIDATION ──
-  // PRODUCTION MIGRATION FIX: Removed the `.lean()` mapping block context.
-  // Downstream controller update methods rely natively on active mongoose model hooks.
+  // Fetch user
   const user = await User.findById(decoded.id)
-    .select('-password -twoFactorSecret -sessions');
+    .select('-password -resetPasswordToken -resetPasswordExpire');
 
   if (!user) {
-    console.warn(`[AUTH] User profile absent for token footprint ID: ${decoded.id}`);
-
-    // PRODUCTION COOKIE FLUSH FIX:
-    // Ensures clean session invalidation across distinct domain infrastructures.
     res.clearCookie('trustra_token', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       path: '/',
     });
-
-    throw new ApiError(401, 'Session invalid. Please log in again.');
+    throw new ApiError(401, 'User not found. Please log in again.');
   }
 
-  // ── PRODUCTION SECURITY FIX: TOKEN VERSION ENFORCEMENT ──
-  // Checks token session versions against live user data properties.
-  // Instantly revokes access if a password change incremented tokenVersion.
+  // Token Version Check (Important for password change logout)
   const currentTokenVersion = decoded.version || 0;
-  const liveUserTokenVersion = user.tokenVersion || 0;
+  const liveTokenVersion = user.tokenVersion || 0;
 
-  if (currentTokenVersion < liveUserTokenVersion) {
-    console.warn(`[AUTH] Token version mismatch for user ${user._id}. Revoking session states.`);
-    
+  if (currentTokenVersion < liveTokenVersion) {
     res.clearCookie('trustra_token', {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       path: '/',
     });
-
-    throw new ApiError(401, 'Session invalidated due to credential modifications. Please log in again.');
+    throw new ApiError(401, 'Session invalidated. Please log in again.');
   }
 
-  // ── CHECK ACCOUNT STATUS ──
+  // Account Status Checks
   if (!user.isActive) {
-    throw new ApiError(403, 'Account is deactivated');
+    throw new ApiError(403, 'Your account has been deactivated.');
   }
 
   if (user.isBanned) {
-    throw new ApiError(403, 'Account is banned');
+    throw new ApiError(403, 'Your account has been banned.');
   }
 
-  // ── ATTACH USER TO REQUEST ──
+  // Attach user to request
   req.user = user;
   next();
 });
@@ -112,17 +91,13 @@ export const protect = asyncHandler(async (req, res, next) => {
  * ============================================================================
  * ADMIN MIDDLEWARE
  * ============================================================================
- * Restricts access to admin and superadmin roles
  */
-// PRODUCTION FIX: Wrapped inside asyncHandler to safely pass execution errors to errorMiddleware
 export const admin = asyncHandler(async (req, res, next) => {
   if (!req.user) {
     throw new ApiError(401, 'Authentication required');
   }
 
-  const authorizedRoles = ['admin', 'superadmin'];
-
-  if (!authorizedRoles.includes(req.user.role)) {
+  if (!['admin', 'superadmin'].includes(req.user.role)) {
     throw new ApiError(403, 'Admin access required');
   }
 
@@ -131,10 +106,9 @@ export const admin = asyncHandler(async (req, res, next) => {
 
 /**
  * ============================================================================
- * OPTIONAL: SUPER ADMIN ONLY
+ * SUPER ADMIN MIDDLEWARE
  * ============================================================================
  */
-// PRODUCTION FIX: Wrapped inside asyncHandler to safely protect root admin route executions
 export const superAdmin = asyncHandler(async (req, res, next) => {
   if (!req.user) {
     throw new ApiError(401, 'Authentication required');
@@ -146,4 +120,3 @@ export const superAdmin = asyncHandler(async (req, res, next) => {
 
   next();
 });
-
