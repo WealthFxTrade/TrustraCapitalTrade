@@ -1,57 +1,80 @@
 // src/constants/api.js
 
+/**
+ * Removes trailing slashes and trims spaces
+ */
 const normalizeUrl = (url) => {
-  if (!url || typeof url !== 'string') return '';
-  return url.replace(/\/+$/, '');
+  if (!url || typeof url !== 'string') {
+    return '';
+  }
+
+  return url.replace(/\/+$/, '').trim();
 };
 
+/**
+ * Detect development environment
+ */
 const IS_DEV = import.meta.env.MODE === 'development';
 
 /**
- * ==============================
- * BACKEND BASE URL
- * ==============================
- * ALWAYS USE FULL API URL (NO MIXING WITH /api proxy)
+ * BACKEND API BASE URL
  */
 export const getApiBaseUrl = () => {
-  // Explicit override (highest priority)
+  /**
+   * Use environment variable if provided
+   */
   if (import.meta.env.VITE_API_URL) {
     return normalizeUrl(import.meta.env.VITE_API_URL);
   }
 
-  // DEV → local backend directly (IMPORTANT FIX)
+  /**
+   * Development fallback
+   */
   if (IS_DEV) {
     return 'http://localhost:10000/api';
   }
 
-  // PROD backend
+  /**
+   * Production fallback
+   */
   return 'https://trustracapitaltrade-backend.onrender.com/api';
 };
 
 /**
- * ==============================
- * BASE URL
- * ==============================
+ * SOCKET SERVER URL
+ */
+export const getSocketUrl = () => {
+  /**
+   * Use environment variable if provided
+   */
+  if (import.meta.env.VITE_SOCKET_URL) {
+    return normalizeUrl(import.meta.env.VITE_SOCKET_URL);
+  }
+
+  /**
+   * Development fallback
+   */
+  if (IS_DEV) {
+    return 'http://localhost:10000';
+  }
+
+  /**
+   * Production fallback
+   */
+  return 'https://trustracapitaltrade-backend.onrender.com';
+};
+
+/**
+ * RESOLVED URL CONSTANTS
+ * These are the actual exported constants
+ * used throughout the frontend
  */
 export const API_BASE_URL = getApiBaseUrl();
 
-/**
- * ==============================
- * SOCKET URL
- * ==============================
- */
-export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL
-  ? normalizeUrl(import.meta.env.VITE_SOCKET_URL)
-  : (
-      IS_DEV
-        ? 'http://localhost:10000'
-        : 'https://trustracapitaltrade-backend.onrender.com'
-    );
+export const SOCKET_URL = getSocketUrl();
 
 /**
- * ==============================
  * API ENDPOINTS
- * ==============================
  */
 export const API_ENDPOINTS = {
   AUTH: {
@@ -63,6 +86,9 @@ export const API_ENDPOINTS = {
     FORGOT_PASSWORD: '/auth/forgotpassword',
     RESET_PASSWORD: '/auth/resetpassword',
     RESEND_VERIFICATION: '/auth/resend-verification',
+    AUTHORIZE_SESSION: '/auth/authorize-session',
+    ESTABLISH_SESSION: '/auth/establish-session',
+    VERIFY_SESSION: '/auth/verify-session',
   },
 
   USER: {
@@ -80,20 +106,9 @@ export const API_ENDPOINTS = {
     HEALTH: '/admin/health',
     METRICS: '/admin/metrics',
     USERS: '/admin/users',
-
-    GET_USER_DETAIL: (id) => `/admin/users/${id}`,
-    UPDATE_USER_BALANCE: (id) => `/admin/users/${id}/balances`,
-    UPDATE_USER_VERIFY: (id) => `/admin/users/${id}/verify`,
-
     KYC_PENDING: '/admin/kyc/pending',
-    KYC_UPDATE: (id) => `/admin/kyc/${id}`,
-
     DEPOSITS_PENDING: '/admin/deposits/pending',
-    UPDATE_DEPOSIT_STATUS: (id) => `/admin/deposits/${id}/status`,
-
     WITHDRAWALS_PENDING: '/admin/withdrawals/pending',
-    APPROVE_WITHDRAWAL: (id) => `/admin/withdrawals/${id}/approve`,
-    REJECT_WITHDRAWAL: (id) => `/admin/withdrawals/${id}/reject`,
   },
 
   PUBLIC: {
@@ -103,13 +118,18 @@ export const API_ENDPOINTS = {
 };
 
 /**
- * ==============================
- * EXPORT
- * ==============================
+ * DEFAULT EXPORT
  */
-export default {
+const apiConfig = {
+  IS_DEV,
+
+  getApiBaseUrl,
+  getSocketUrl,
+
   API_BASE_URL,
   SOCKET_URL,
+
   API_ENDPOINTS,
-  getApiBaseUrl,
 };
+
+export default apiConfig;

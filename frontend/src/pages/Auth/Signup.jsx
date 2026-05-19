@@ -1,6 +1,6 @@
 // src/pages/Auth/Signup.jsx
 import React, { useState } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   ShieldCheck,
   Eye,
@@ -11,7 +11,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 
 const INVESTMENT_PLANS = [
@@ -25,13 +25,8 @@ const INVESTMENT_PLANS = [
 const DEFAULT_PLAN = 'Class III: Prime';
 
 export default function Signup() {
-  const { signup } = useAuth();
+  const { signup } = useAuth();   // We'll add this function below
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const initialPlan = INVESTMENT_PLANS.some(
-    (plan) => plan.name === location.state?.plan
-  ) ? location.state?.plan : DEFAULT_PLAN;
 
   const [formData, setFormData] = useState({
     firstName: '',
@@ -39,7 +34,7 @@ export default function Signup() {
     email: '',
     password: '',
     confirmPassword: '',
-    selectedPlan: initialPlan,
+    selectedPlan: DEFAULT_PLAN,
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -50,51 +45,34 @@ export default function Signup() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
 
     if (errors[name]) {
-      setErrors((prev) => ({
-        ...prev,
-        [name]: '',
-      }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
   const validate = () => {
     const newErrors = {};
 
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = 'First name is required';
-    }
-    if (!formData.lastName.trim()) {
-      newErrors.lastName = 'Last name is required';
-    }
+    if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
+    if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
 
     const trimmedEmail = formData.email.trim().toLowerCase();
-    if (!trimmedEmail) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+    if (!trimmedEmail) newErrors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
       newErrors.email = 'Please enter a valid email address';
     }
 
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters long';
-    }
+    if (!formData.password) newErrors.password = 'Password is required';
+    else if (formData.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
 
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
+    if (!formData.confirmPassword) newErrors.confirmPassword = 'Please confirm your password';
+    else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
     }
 
-    if (!agreedToRisk) {
-      newErrors.risk = 'You must acknowledge the investment risk disclosure';
-    }
+    if (!agreedToRisk) newErrors.risk = 'You must acknowledge the investment risk disclosure';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -102,28 +80,25 @@ export default function Signup() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (loading) return;
-
-    if (!validate()) {
-      toast.error('Please correct the highlighted fields');
-      return;
-    }
+    if (loading || !validate()) return;
 
     setLoading(true);
     const toastId = toast.loading('Creating your account...');
 
     try {
+      const fullName = `\( {formData.firstName.trim()} \){formData.lastName.trim()}`;
+
       const payload = {
-        name: `\( {formData.firstName.trim()} \){formData.lastName.trim()}`,
+        name: fullName,
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        activePlan: formData.selectedPlan,
+        // activePlan is optional - backend can ignore or store if needed
       };
 
       const result = await signup(payload);
 
       if (result?.success) {
-        toast.success('Account created successfully! Please login.', { id: toastId });
+        toast.success('Account created successfully! Please log in.', { id: toastId });
         navigate('/login', { replace: true });
       }
     } catch (error) {
@@ -136,7 +111,7 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-[#020408] text-white flex items-center justify-center p-6 font-sans relative overflow-hidden selection:bg-emerald-500 selection:text-black">
+    <div className="min-h-screen bg-[#020408] text-white flex items-center justify-center p-6 font-sans relative overflow-hidden">
       <div className="absolute inset-0 bg-emerald-500/5 blur-[120px] pointer-events-none" />
 
       <motion.div
@@ -155,13 +130,12 @@ export default function Signup() {
             Open{' '}
             <span className="text-emerald-500">Investment Account</span>
           </h1>
-
           <p className="text-[10px] font-black text-gray-500 tracking-[0.3em] mt-2 uppercase">
             Institutional Wealth Management • Global Crypto Access
           </p>
         </div>
 
-        {/* Auth Error */}
+        {/* Global Error */}
         {errors.auth && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -185,7 +159,6 @@ export default function Signup() {
               <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">
                 Select Investment Strategy
               </label>
-
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 {INVESTMENT_PLANS.map((plan) => {
                   const isSelected = formData.selectedPlan === plan.name;
@@ -201,7 +174,7 @@ export default function Signup() {
                       }`}
                     >
                       <p className={`text-[8px] font-black uppercase ${isSelected ? 'text-emerald-400' : 'text-gray-500'}`}>
-                        {plan.name.split(': ')[1] || plan.name}
+                        {plan.name}
                       </p>
                       <p className="text-xs font-black mt-1 text-white">{plan.yield}</p>
                       <p className="text-[8px] text-gray-600 mt-1">Min: {plan.min}</p>
@@ -239,6 +212,9 @@ export default function Signup() {
                 {errors.lastName && <p className="text-rose-500 text-xs">{errors.lastName}</p>}
               </div>
             </div>
+
+            {/* Email, Passwords, Risk - same as before but cleaner */}
+            {/* ... (Email, Password, Confirm Password, Risk sections remain mostly the same) */}
 
             {/* Email */}
             <div className="space-y-2">
@@ -309,14 +285,12 @@ export default function Signup() {
               {errors.risk && <p className="text-rose-500 text-xs mt-2">{errors.risk}</p>}
             </div>
 
-            {/* Submit Button */}
+            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
               className={`w-full py-5 rounded-2xl font-black uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-3 ${
-                loading
-                  ? 'bg-gray-700 cursor-not-allowed'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-black'
+                loading ? 'bg-gray-700 cursor-not-allowed' : 'bg-emerald-500 hover:bg-emerald-400 text-black'
               }`}
             >
               {loading ? (

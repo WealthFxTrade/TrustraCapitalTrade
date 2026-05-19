@@ -1,24 +1,16 @@
 // src/api/api.js
-
 import axios from 'axios';
 import { getApiBaseUrl, API_ENDPOINTS } from '@/constants/api';
 
-/**
- * ==============================
- * TOKEN STORAGE KEYS
- * ==============================
- */
 const TOKEN_KEY = 'trustra_token';
 const REMEMBER_KEY = 'trustra_remember';
 
 /**
- * ==============================
  * AXIOS INSTANCE
- * ==============================
  */
 const api = axios.create({
   baseURL: getApiBaseUrl(),
-  timeout: 20000,
+  timeout: 15000,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -27,28 +19,24 @@ const api = axios.create({
 });
 
 /**
- * ==============================
- * GET TOKEN (SAFE SINGLE SOURCE)
- * ==============================
+ * GET TOKEN
  */
 const getToken = () => {
-  return (
-    localStorage.getItem(TOKEN_KEY) ||
-    sessionStorage.getItem(TOKEN_KEY)
-  );
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
 };
 
 /**
- * ==============================
  * REQUEST INTERCEPTOR
- * ==============================
  */
 api.interceptors.request.use(
   (config) => {
     const token = getToken();
-
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    if (import.meta.env.DEV) {
+      console.log(`🚀 \( {config.method?.toUpperCase()} \){config.url}`, config.data || '');
     }
 
     return config;
@@ -57,57 +45,48 @@ api.interceptors.request.use(
 );
 
 /**
- * ==============================
  * RESPONSE INTERCEPTOR
- * ==============================
  */
 api.interceptors.response.use(
   (response) => {
-    const newToken = response?.data?.token;
-
+    // Handle new token returned from backend
+    const newToken = response?.data?.token || response?.data?.accessToken;
     if (newToken) {
-      const remember =
-        localStorage.getItem(REMEMBER_KEY) === 'true';
-
+      const remember = localStorage.getItem(REMEMBER_KEY) === 'true';
       if (remember) {
         localStorage.setItem(TOKEN_KEY, newToken);
       } else {
         sessionStorage.setItem(TOKEN_KEY, newToken);
       }
     }
-
     return response;
   },
   (error) => {
     const status = error?.response?.status;
+    const url = error?.config?.url;
+
+    console.error(`❌ API Error [\( {status}] \){url}`, error.response?.data || error.message);
 
     if (status === 401) {
-      localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem(REMEMBER_KEY);
-      sessionStorage.removeItem(TOKEN_KEY);
-
+      clearAuthToken();
       if (!['/login', '/', '/register'].includes(window.location.pathname)) {
         window.location.replace('/login?session=expired');
       }
     }
 
-    if (!error.response) {
-      console.error('Backend unreachable');
+    if (status === 404) {
+      console.warn(`🔍 404 Not Found → ${url}. Check backend route.`);
     }
 
-    if (error.code === 'ECONNABORTED') {
-      console.error('Request timeout');
+    if (!error.response) {
+      console.error('🌐 Network Error - Backend unreachable or CORS issue');
     }
 
     return Promise.reject(error);
   }
 );
 
-/**
- * ==============================
- * AUTH HELPERS
- * ==============================
- */
+/* ====================== AUTH HELPERS ====================== */
 export const setAuthToken = (token, remember = false) => {
   if (!token) return;
 
@@ -126,6 +105,8 @@ export const clearAuthToken = () => {
   localStorage.removeItem(REMEMBER_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
 };
+
+export const isAuthenticated = () => !!getToken();
 
 export { API_ENDPOINTS };
 export default api;

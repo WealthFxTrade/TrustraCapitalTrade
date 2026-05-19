@@ -1,5 +1,4 @@
 // src/context/AuthContext.jsx
-
 import React, {
   createContext,
   useContext,
@@ -13,7 +12,8 @@ import React, {
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
-import api, { API_ENDPOINTS, setAuthToken, clearAuthToken } from '@/api/api';
+import api, { API_ENDPOINTS } from '@/api/api';
+import { setAuthToken, clearAuthToken } from '@/api/api';
 
 const AuthContext = createContext(null);
 
@@ -58,34 +58,29 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const initLock = useRef(false);
 
+  // Initialize Auth (Check existing session)
   const initAuth = useCallback(async () => {
     if (initLock.current) return;
     initLock.current = true;
 
-    const token =
-      localStorage.getItem('trustra_token') ||
-      sessionStorage.getItem('trustra_token');
-
+    const token = localStorage.getItem('trustra_token') || sessionStorage.getItem('trustra_token');
     if (!token) {
       dispatch({ type: 'INIT' });
       initLock.current = false;
       return;
     }
 
-    setAuthToken(token);
-
     try {
       const { data } = await api.get(API_ENDPOINTS.AUTH.PROFILE);
-
       const user = data?.user || data;
 
-      if (user?.id || user?._id) {
+      if (user?._id || user?.id) {
         dispatch({ type: 'SUCCESS', payload: user });
       } else {
         clearAuthToken();
         dispatch({ type: 'LOGOUT' });
       }
-    } catch {
+    } catch (err) {
       clearAuthToken();
       dispatch({ type: 'LOGOUT' });
     } finally {
@@ -98,14 +93,15 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
+  // ==================== MAIN LOGIN (ESTABLISH SESSION) ====================
   const login = useCallback(async (credentials) => {
     dispatch({ type: 'START' });
 
-    const toastId = toast.loading('Authenticating...');
+    const toastId = toast.loading('Establishing secure encrypted session...');
 
     try {
       const { data } = await api.post(
-        API_ENDPOINTS.AUTH.LOGIN,
+        API_ENDPOINTS.AUTH.ESTABLISH_SESSION,   // ← Changed to new endpoint
         {
           email: credentials.email,
           password: credentials.password,
@@ -115,36 +111,41 @@ export function AuthProvider({ children }) {
       const token = data?.token;
       const user = data?.user;
 
-      if (!token || !user) throw new Error('Invalid response');
+      if (!token || !user) {
+        throw new Error('Invalid server response');
+      }
 
-      setAuthToken(token, credentials.rememberMe);
+      // Remember user by default (you can add rememberMe checkbox later)
+      setAuthToken(token, true);
 
       dispatch({ type: 'SUCCESS', payload: user });
 
-      toast.success('Welcome back', { id: toastId });
+      toast.success('Access Granted. Welcome back.', { id: toastId });
 
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
 
-      return { success: true };
+      return { success: true, data };
     } catch (err) {
+      console.error('Login Error:', err);
+
       clearAuthToken();
       dispatch({ type: 'LOGOUT' });
 
-      toast.error(err?.message || 'Login failed', { id: toastId });
+      const message = err?.response?.data?.message || err?.message || 'Invalid credentials';
+      toast.error(message, { id: toastId });
 
-      return { success: false };
+      return { success: false, message };
     }
   }, [navigate]);
 
   const logout = useCallback(async () => {
     try {
-      await api.post(API_ENDPOINTS.AUTH.LOGOUT);
-    } catch {}
-
-    clearAuthToken();
-    dispatch({ type: 'LOGOUT' });
-
-    navigate('/login');
+      await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {});
+    } finally {
+      clearAuthToken();
+      dispatch({ type: 'LOGOUT' });
+      navigate('/login');
+    }
   }, [navigate]);
 
   const value = useMemo(() => ({
@@ -163,6 +164,6 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('AuthProvider missing');
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 };

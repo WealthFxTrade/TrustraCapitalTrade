@@ -30,17 +30,11 @@ export default function Login() {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email';
-    }
+    if (!formData.email.trim()) newErrors.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Please enter a valid email';
 
-    if (!formData.password.trim()) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
+    if (!formData.password.trim()) newErrors.password = 'Access Token is required';
+    else if (formData.password.length < 6) newErrors.password = 'Access Token must be at least 6 characters';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -63,28 +57,21 @@ export default function Login() {
         toast.success('Access Granted. Welcome back.', { id: toastId });
         setTimeout(() => {
           navigate(from, { replace: true });
-        }, 600);
+        }, 800);
       }
     } catch (err) {
       console.error('Login Error:', err);
 
-      let message = 'Invalid credentials';
+      let message = err?.response?.data?.message || err?.message || 'Invalid credentials';
 
-      if (err?.response?.data?.message) {
-        message = err.response.data.message;
-      } else if (err?.message) {
-        message = err.message;
-      }
+      toast.error(message, { id: toastId });
 
-      // Better user feedback
-      if (message.toLowerCase().includes('verify') || message.toLowerCase().includes('email not verified')) {
-        toast.error("Please verify your email address before logging in.", { id: toastId });
-      } else {
-        toast.error(message, { id: toastId });
+      if (message.toLowerCase().includes('verify') || message.toLowerCase().includes('not verified')) {
+        toast.error("Please verify your email before logging in.", { id: toastId });
       }
 
       setErrors({ auth: message });
-      setFormData(prev => ({ ...prev, password: '' })); // Clear password on failure
+      setFormData(prev => ({ ...prev, password: '' })); // Clear password
     } finally {
       setLoading(false);
     }
@@ -93,7 +80,6 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-[#020408] flex items-center justify-center px-4">
       <div className="w-full max-w-md space-y-8">
-
         {/* Branding */}
         <div className="text-center space-y-3">
           <motion.div
@@ -126,8 +112,7 @@ export default function Login() {
         {/* Login Card */}
         <div className="bg-[#0a0c10] border border-white/5 rounded-3xl p-8 md:p-10 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
-
-            {/* Email Field */}
+            {/* Email */}
             <div className="space-y-2">
               <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">
                 Security Identity (Email)
@@ -149,7 +134,7 @@ export default function Login() {
               {errors.email && <p className="text-red-500 text-xs ml-1">{errors.email}</p>}
             </div>
 
-            {/* Password Field */}
+            {/* Password */}
             <div className="space-y-2">
               <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">
                 Access Token (Password)
@@ -180,10 +165,7 @@ export default function Login() {
             </div>
 
             <div className="flex justify-end">
-              <Link
-                to="/forgotpassword"
-                className="text-emerald-500 hover:text-emerald-400 text-sm font-medium transition-colors"
-              >
+              <Link to="/forgotpassword" className="text-emerald-500 hover:text-emerald-400 text-sm font-medium transition-colors">
                 Recover Access
               </Link>
             </div>
@@ -208,10 +190,7 @@ export default function Login() {
           </form>
 
           <div className="text-center mt-8 pt-6 border-t border-white/5">
-            <Link
-              to="/register"
-              className="text-gray-400 hover:text-white text-sm transition-colors"
-            >
+            <Link to="/register" className="text-gray-400 hover:text-white text-sm transition-colors">
               New to Trustra Capital? <span className="text-emerald-500 font-semibold">Apply for an Account</span>
             </Link>
           </div>
