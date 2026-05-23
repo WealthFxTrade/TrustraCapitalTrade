@@ -9,39 +9,29 @@ import {
   forgotPassword,
   resetPassword,
   refreshSession,
-  authorizeSession,      // ← NEW
-  establishSession,      // ← NEW
-  verifySession,         // ← NEW
+  authorizeSession,
+  establishSession,
+  verifySession,
 } from '../controllers/authController.js';
 
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-/* ====================== PUBLIC ROUTES ====================== */
-
-// Registration
+// Public routes
 router.post('/register', registerUser);
-
-// Standard Login
 router.post('/login', loginUser);
 
-// Custom Session Authorization (used by your frontend)
 router.post('/authorize-session', authorizeSession);
 router.post('/establish-session', establishSession);
 router.post('/verify-session', verifySession);
 
-// Logout
 router.post('/logout', logoutUser);
-
-// Password Recovery
 router.post('/forgotpassword', forgotPassword);
 router.put('/resetpassword/:resettoken', resetPassword);
-
-// Token Refresh
 router.post('/refresh', refreshSession);
 
-/* ====================== PROTECTED ROUTES ====================== */
+// Protected routes
 router.get('/profile', protect, getUserProfile);
 router.put('/profile', protect, updateUserProfile);
 

@@ -30,11 +30,17 @@ export default function Login() {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.email.trim()) newErrors.email = 'Email is required';
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Please enter a valid email';
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email';
+    }
 
-    if (!formData.password.trim()) newErrors.password = 'Access Token is required';
-    else if (formData.password.length < 6) newErrors.password = 'Access Token must be at least 6 characters';
+    if (!formData.password.trim()) {
+      newErrors.password = 'Access Token is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Access Token must be at least 6 characters';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -47,10 +53,14 @@ export default function Login() {
     setLoading(true);
     const toastId = toast.loading('Establishing secure encrypted session...');
 
+    // Create AbortController for manual timeout control
+    const controller = new AbortController();
+
     try {
       const result = await login({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
+        signal: controller.signal,
       });
 
       if (result?.success) {
@@ -62,16 +72,25 @@ export default function Login() {
     } catch (err) {
       console.error('Login Error:', err);
 
-      let message = err?.response?.data?.message || err?.message || 'Invalid credentials';
+      let message = 'Session establishment failed. Please try again.';
+
+      if (err.name === 'AbortError' || err.message?.toLowerCase().includes('timeout')) {
+        message = 'Request timeout. The server is taking too long. Please try again.';
+      } else if (err?.response?.data?.message) {
+        message = err.response.data.message;
+      } else if (err?.message) {
+        message = err.message;
+      }
 
       toast.error(message, { id: toastId });
 
-      if (message.toLowerCase().includes('verify') || message.toLowerCase().includes('not verified')) {
-        toast.error("Please verify your email before logging in.", { id: toastId });
+      if (message.toLowerCase().includes('verify') || 
+          message.toLowerCase().includes('not verified')) {
+        toast.error("Please verify your email before logging in.");
       }
 
       setErrors({ auth: message });
-      setFormData(prev => ({ ...prev, password: '' })); // Clear password
+      setFormData(prev => ({ ...prev, password: '' })); // Clear password field
     } finally {
       setLoading(false);
     }
@@ -97,7 +116,7 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Global Error */}
+        {/* Global Error Display */}
         {errors.auth && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
@@ -112,7 +131,7 @@ export default function Login() {
         {/* Login Card */}
         <div className="bg-[#0a0c10] border border-white/5 rounded-3xl p-8 md:p-10 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email */}
+            {/* Email Field */}
             <div className="space-y-2">
               <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">
                 Security Identity (Email)
@@ -134,7 +153,7 @@ export default function Login() {
               {errors.email && <p className="text-red-500 text-xs ml-1">{errors.email}</p>}
             </div>
 
-            {/* Password */}
+            {/* Password / Access Token Field */}
             <div className="space-y-2">
               <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 ml-1">
                 Access Token (Password)
@@ -165,7 +184,10 @@ export default function Login() {
             </div>
 
             <div className="flex justify-end">
-              <Link to="/forgotpassword" className="text-emerald-500 hover:text-emerald-400 text-sm font-medium transition-colors">
+              <Link 
+                to="/forgotpassword" 
+                className="text-emerald-500 hover:text-emerald-400 text-sm font-medium transition-colors"
+              >
                 Recover Access
               </Link>
             </div>
@@ -178,7 +200,7 @@ export default function Login() {
               {loading ? (
                 <>
                   <Loader2 className="animate-spin" size={18} />
-                  AUTHORIZING SESSION...
+                  ESTABLISHING SECURE SESSION...
                 </>
               ) : (
                 <>
@@ -190,7 +212,10 @@ export default function Login() {
           </form>
 
           <div className="text-center mt-8 pt-6 border-t border-white/5">
-            <Link to="/register" className="text-gray-400 hover:text-white text-sm transition-colors">
+            <Link 
+              to="/register" 
+              className="text-gray-400 hover:text-white text-sm transition-colors"
+            >
               New to Trustra Capital? <span className="text-emerald-500 font-semibold">Apply for an Account</span>
             </Link>
           </div>

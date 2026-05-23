@@ -1,5 +1,4 @@
 // backend/server.js
-
 import './env.js';
 
 import express from 'express';
@@ -11,150 +10,103 @@ import morgan from 'morgan';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { Server } from 'socket.io';
 
-/**
- * =========================
- * DATABASE CONNECTION
- * =========================
- */
 import connectDB from './config/db.js';
 
-/**
- * =========================
- * ROUTES
- * =========================
- */
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import investmentRoutes from './routes/investmentRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import apiRoutes from './routes/apiRoutes.js';
 
-/**
- * =========================
- * PATH SETUP
- * =========================
- */
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { notFound, errorHandler } from './middleware/errorMiddleware.js';
 
-/**
- * =========================
- * APP + SERVER
- * =========================
- */
 const app = express();
 const server = http.createServer(app);
 
-/**
- * =========================
- * ENV
- * =========================
- */
 const PORT = process.env.PORT || 10000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-/**
- * =========================
- * SECURITY
- * =========================
- */
+/* ================= SECURITY ================= */
 app.use(helmet({ contentSecurityPolicy: false }));
 app.set('trust proxy', 1);
 
-/**
- * =========================
- * RATE LIMITERS
- * =========================
- */
+/* ================= RATE LIMIT ================= */
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 15,
-  message: {
-    success: false,
-    message: 'Too many login attempts. Try again later.',
-  },
+  message: { success: false, message: 'Too many login attempts. Try again later.' },
 });
 
 app.use(globalLimiter);
 
-/**
- * =========================
- * MIDDLEWARE
- * =========================
- */
+/* ================= MIDDLEWARE ================= */
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+const requestTimeout = (ms = 90000) => (req, res, next) => {
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      console.warn(`⏰ Request timeout: ${req.method} ${req.url}`);
+      res.status(408).json({
+        success: false,
+        message: 'Request timeout. Please try again.'
+      });
+      req.destroy();
+    }
+  }, ms);
+
+  res.on('finish', () => clearTimeout(timer));
+  next();
+};
+
+app.use(requestTimeout(90000));
+
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-/**
- * =========================
- * CORS CONFIG
- * =========================
- */
+/* ================= CORS ================= */
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'https://trustracapitaltrade.online',
   'https://www.trustracapitaltrade.online',
   'https://trustra-capital-trade.vercel.app',
-  'https://trustracapitaltrade-backend.onrender.com',
 ];
 
-const isAllowedOrigin = (origin) => {
-  if (!origin) return true;
-  if (allowedOrigins.includes(origin)) return true;
-
-  if (
-    origin.startsWith('http://192.168.') ||
-    origin.startsWith('http://172.') ||
-    origin.startsWith('http://10.')
-  ) {
-    return true;
-  }
-
-  return false;
-};
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error(`CORS blocked: ${origin}`));
-    },
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: (origin, callback) => {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      origin.startsWith('http://192.168.') ||
+      origin.startsWith('http://172.') ||
+      origin.startsWith('http://10.')
+    ) {
+      return callback(null, true);
+    }
+    callback(new Error(`CORS blocked: ${origin}`));
+  },
+  credentials: true,
+}));
 
 app.options('*', cors());
 
-/**
- * =========================
- * SOCKET.IO
- * =========================
- */
+/* ================= SOCKET.IO ================= */
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error('Socket CORS blocked'));
-    },
-    credentials: true,
-  },
+    origin: allowedOrigins,
+    credentials: true
+  }
 });
 
 io.on('connection', (socket) => {
@@ -167,23 +119,14 @@ io.on('connection', (socket) => {
 
 app.set('io', io);
 
-/**
- * =========================
- * ROUTES
- * =========================
- */
+/* ================= ROUTES ================= */
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/investments', investmentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', apiRoutes);
 
-/**
- * =========================
- * HEALTH CHECK (FIXED)
- * =========================
- * IMPORTANT: frontend uses /api/health
- */
+/* ================= HEALTH ================= */
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
@@ -195,41 +138,30 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-/**
- * =========================
- * ERROR HANDLER
- * =========================
- */
-app.use((err, req, res, next) => {
-  console.error('SERVER ERROR:', err);
+/* ================= ERROR HANDLERS ================= */
+app.use(notFound);
+app.use(errorHandler);
 
-  res.status(err.statusCode || 500).json({
-    success: false,
-    message:
-      NODE_ENV === 'production'
-        ? 'Internal server error'
-        : err.message,
-  });
-});
-
-/**
- * =========================
- * START SERVER
- * =========================
- */
+/* ================= START SERVER ================= */
 const startServer = async () => {
   try {
     console.log('📡 Connecting to MongoDB...');
-
     await connectDB();
 
-    console.log('🚀 Starting HTTP server...');
+    server.timeout = 120000;
+    server.keepAliveTimeout = 65000;
+    server.headersTimeout = 70000;
+    server.requestTimeout = 90000;
 
     server.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
-      console.log(`🌍 Environment: ${NODE_ENV}`);
-      console.log(`🔗 Health check: /api/health`);
+      console.log('====================================');
+      console.log('🚀 Trustra Capital Backend Started');
+      console.log('====================================');
+
+      console.log(`✅ Running on port ${PORT} [${NODE_ENV}]`);
+      console.log('🔗 Health Check: /api/health');
     });
+
   } catch (err) {
     console.error('❌ Failed to start server:', err.message);
     process.exit(1);
@@ -238,18 +170,12 @@ const startServer = async () => {
 
 startServer();
 
-/**
- * =========================
- * SAFE SHUTDOWN
- * =========================
- */
+/* ================= GRACEFUL SHUTDOWN ================= */
 process.on('SIGINT', async () => {
   console.log('🛑 Shutting down server...');
-
   await mongoose.connection.close();
-
   server.close(() => {
-    console.log('Server closed');
+    console.log('✅ Server closed gracefully');
     process.exit(0);
   });
 });

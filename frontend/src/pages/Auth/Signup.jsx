@@ -25,7 +25,7 @@ const INVESTMENT_PLANS = [
 const DEFAULT_PLAN = 'Class III: Prime';
 
 export default function Signup() {
-  const { signup } = useAuth();   // We'll add this function below
+  const { signup } = useAuth();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -85,6 +85,9 @@ export default function Signup() {
     setLoading(true);
     const toastId = toast.loading('Creating your account...');
 
+    // AbortController for timeout protection
+    const controller = new AbortController();
+
     try {
       const fullName = `\( {formData.firstName.trim()} \){formData.lastName.trim()}`;
 
@@ -92,17 +95,29 @@ export default function Signup() {
         name: fullName,
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        // activePlan is optional - backend can ignore or store if needed
       };
 
-      const result = await signup(payload);
+      const result = await signup(payload, controller.signal);
 
       if (result?.success) {
         toast.success('Account created successfully! Please log in.', { id: toastId });
-        navigate('/login', { replace: true });
+        setTimeout(() => {
+          navigate('/login', { replace: true });
+        }, 1200);
       }
     } catch (error) {
-      const message = error?.response?.data?.message || 'Registration failed. Please try again.';
+      console.error('Registration Error:', error);
+
+      let message = 'Registration failed. Please try again.';
+
+      if (error.name === 'AbortError' || error.message?.includes('timeout')) {
+        message = 'Request timeout. Please check your connection and try again.';
+      } else if (error?.response?.data?.message) {
+        message = error.response.data.message;
+      } else if (error?.message) {
+        message = error.message;
+      }
+
       toast.error(message, { id: toastId });
       setErrors({ auth: message });
     } finally {
@@ -193,6 +208,7 @@ export default function Signup() {
                   name="firstName"
                   value={formData.firstName}
                   onChange={handleChange}
+                  disabled={loading}
                   className={`w-full bg-white/5 border ${errors.firstName ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 text-sm focus:border-emerald-500 outline-none`}
                   placeholder="Ikenna"
                 />
@@ -206,15 +222,13 @@ export default function Signup() {
                   name="lastName"
                   value={formData.lastName}
                   onChange={handleChange}
+                  disabled={loading}
                   className={`w-full bg-white/5 border ${errors.lastName ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 text-sm focus:border-emerald-500 outline-none`}
                   placeholder="Prince"
                 />
                 {errors.lastName && <p className="text-rose-500 text-xs">{errors.lastName}</p>}
               </div>
             </div>
-
-            {/* Email, Passwords, Risk - same as before but cleaner */}
-            {/* ... (Email, Password, Confirm Password, Risk sections remain mostly the same) */}
 
             {/* Email */}
             <div className="space-y-2">
@@ -224,6 +238,7 @@ export default function Signup() {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
+                disabled={loading}
                 className={`w-full bg-white/5 border ${errors.email ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 text-sm focus:border-emerald-500 outline-none`}
                 placeholder="kayblizz2015@gmail.com"
               />
@@ -240,10 +255,16 @@ export default function Signup() {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
+                    disabled={loading}
                     className={`w-full bg-white/5 border ${errors.password ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 pr-12 text-sm focus:border-emerald-500 outline-none`}
                     placeholder="Secure password"
                   />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowPassword(!showPassword)} 
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
+                    disabled={loading}
+                  >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
@@ -258,10 +279,16 @@ export default function Signup() {
                     name="confirmPassword"
                     value={formData.confirmPassword}
                     onChange={handleChange}
+                    disabled={loading}
                     className={`w-full bg-white/5 border ${errors.confirmPassword ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 pr-12 text-sm focus:border-emerald-500 outline-none`}
                     placeholder="Confirm password"
                   />
-                  <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)} 
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
+                    disabled={loading}
+                  >
                     {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
@@ -277,6 +304,7 @@ export default function Signup() {
                   checked={agreedToRisk}
                   onChange={(e) => setAgreedToRisk(e.target.checked)}
                   className="mt-1 accent-emerald-500"
+                  disabled={loading}
                 />
                 <span className="text-[13px] text-gray-400 leading-relaxed">
                   I acknowledge the Investment Risk Disclosure. Cryptocurrency investments are subject to market volatility and liquidity risks. I confirm that I am at least 18 years old.
@@ -285,7 +313,7 @@ export default function Signup() {
               {errors.risk && <p className="text-rose-500 text-xs mt-2">{errors.risk}</p>}
             </div>
 
-            {/* Submit */}
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}

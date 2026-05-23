@@ -1,49 +1,79 @@
 // backend/middleware/errorMiddleware.js
 
 /**
- * Custom operational API error class structure
+ * Custom Operational Error Class
  */
 export class ApiError extends Error {
   constructor(statusCode, message) {
     super(message);
     this.statusCode = statusCode;
+    this.isOperational = true;           // Mark as expected error
     Error.captureStackTrace(this, this.constructor);
   }
 }
 
 /**
- * @desc    Catch-all middleware for missing resource endpoints
+ * @desc    404 Not Found Handler
  */
 export const notFound = (req, res, next) => {
-  res.status(404).json({
-    success: false,
-    message: `Route not found: ${req.originalUrl}`,
-  });
+  const error = new ApiError(404, `Route not found: ${req.originalUrl}`);
+  next(error);
 };
 
 /**
- * @desc    Global application error pipeline filter
- *          Ensures low-level engineering diagnostics do not leak to public clients
+ * @desc    Global Error Handler Middleware
+ *          Catches all errors and sends safe responses to client
  */
 export const errorHandler = (err, req, res, next) => {
-  // Always log full engineering traces locally on your Render terminal log view
-  console.error('SYSTEM EXCEPTION TRACKER:', {
+  let statusCode = err.statusCode || 500;
+  let message = err.message;
+
+  // Log full error details for debugging (visible in Render logs)
+  console.error('🚨 SYSTEM ERROR:', {
     timestamp: new Date().toISOString(),
+    method: req.method,
+    url: req.originalUrl,
+    statusCode,
     message: err.message,
-    stack: err.stack
+    stack: err.stack,
+    body: process.env.NODE_ENV === 'development' ? req.body : undefined,
   });
 
-  const statusCode = err.statusCode || 500;
-  
-  // PRODUCTION PROTECTION: Mask system execution strings completely from live users
-  const fallbackMessage = statusCode === 500 
-    ? 'An unexpected error occurred within our institutional platform. Please try again later.' 
-    : err.message;
+  // Mongoose duplicate key error
+  if (err.code === 11000) {
+    statusCode = 400;
+    message = 'Duplicate field value entered';
+  }
 
+  // Mongoose validation error
+  if (err.name === 'ValidationError') {
+    statusCode = 400;
+    message = Object.values(err.errors).map(val => val.message).join(', ');
+  }
+
+  // JWT errors (already handled in middleware, but safety net)
+  if (err.name === 'JsonWebTokenError') {
+    statusCode = 401;
+    message = 'Invalid token';
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    statusCode = 401;
+    message = 'Session expired. Please log in again.';
+  }
+
+  // Final safe response
   res.status(statusCode).json({
     success: false,
-    message: process.env.NODE_ENV === 'production' ? fallbackMessage : err.message,
-    stack: process.env.NODE_ENV === 'production' ? undefined : err.stack,
+    message: process.env.NODE_ENV === 'production' 
+      ? (statusCode === 500 
+          ? 'An unexpected error occurred. Our team has been notified.' 
+          : message)
+      : message,
+    // Only expose stack trace in development
+    ...(process.env.NODE_ENV === 'development' && { 
+      stack: err.stack,
+      errorType: err.name 
+    }),
   });
 };
-

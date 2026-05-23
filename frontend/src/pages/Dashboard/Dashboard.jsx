@@ -62,7 +62,14 @@ export default function Dashboard() {
     setError(null);
 
     try {
-      const res = await api.get(API_ENDPOINTS.USER.STATS);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+      const res = await api.get(API_ENDPOINTS.USER.STATS, {
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
 
       if (res.data?.success) {
         const data = res.data;
@@ -82,7 +89,12 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("Dashboard Sync Error:", err);
-      const errorMsg = err?.response?.data?.message || err.message || 'Failed to synchronize data';
+
+      let errorMsg = 'Failed to synchronize data';
+      if (err.name === 'AbortError') errorMsg = 'Request timeout';
+      else if (err?.response?.data?.message) errorMsg = err.response.data.message;
+      else if (err.message) errorMsg = err.message;
+
       setError(errorMsg);
 
       if (document.visibilityState === 'visible') {
@@ -99,9 +111,8 @@ export default function Dashboard() {
     if (!user?._id && !user?.id) return;
 
     const userId = user._id || user.id;
-    const socketUrl = SOCKET_URL;
 
-    socketRef.current = io(socketUrl, {
+    socketRef.current = io(SOCKET_URL, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -147,6 +158,7 @@ export default function Dashboard() {
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
   }, [user, syncNodeData]);
@@ -159,14 +171,16 @@ export default function Dashboard() {
 
     intervalRef.current = setInterval(() => {
       syncNodeData(false);
-    }, 45000); // every 45 seconds
+    }, 45000); // Auto-refresh every 45 seconds
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
     };
   }, [user, syncNodeData]);
 
-  // ====================== CURRENT BALANCES ======================
+  // ====================== COMPUTED BALANCES ======================
   const currentBalances = useMemo(() => ({
     EUR: availableBalance,
     ROI: accruedROI,
@@ -203,7 +217,7 @@ export default function Dashboard() {
     }
   };
 
-  // Error State
+  // Global Error State
   if (error && !loading) {
     return (
       <div className="min-h-screen bg-[#020408] flex items-center justify-center p-6">
@@ -226,7 +240,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-[#020408] text-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
             <p className="text-gray-500 text-sm flex items-center gap-2 mt-1">
@@ -238,7 +252,7 @@ export default function Dashboard() {
           <button
             onClick={() => syncNodeData(true)}
             disabled={loading}
-            className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-sm font-medium transition-all disabled:opacity-50"
+            className="flex items-center gap-2 px-6 py-3 bg-white/5 hover:bg-white/10 rounded-2xl text-sm font-medium transition-all disabled:opacity-50 self-start sm:self-auto"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh

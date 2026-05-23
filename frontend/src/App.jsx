@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -34,37 +35,35 @@ import {
 function App() {
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster 
+        position="top-right" 
+        toastOptions={{
+          duration: 4000,
+          success: { duration: 3000 },
+          error: { duration: 5000 },
+        }}
+      />
 
       <Routes>
-
-        {/* =========================
-            PUBLIC ROUTES
-        ========================= */}
+        {/* ========================= PUBLIC ROUTES ========================= */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Signup />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
         <Route path="/resetpassword" element={<ResetPassword />} />
 
-        {/* =========================
-            PROTECTED USER AREA
-        ========================= */}
+        {/* ========================= PROTECTED USER AREA ========================= */}
         <Route element={<ProtectedRoute />}>
           <Route element={<MainLayout />}>
-
             <Route path="/dashboard" element={<UserDashboard />} />
             <Route path="/dashboard/deposit" element={<Deposit />} />
             <Route path="/dashboard/withdrawal" element={<Withdrawal />} />
             <Route path="/dashboard/profile" element={<UserProfile />} />
             <Route path="/dashboard/ledger" element={<Ledger />} />
 
-            {/* =========================
-                ADMIN AREA (NESTED SAFELY)
-            ========================= */}
+            {/* ========================= ADMIN AREA (Nested) ========================= */}
             <Route element={<AdminRoute />}>
               <Route element={<AdminLayout />}>
-
                 <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="/admin/dashboard" element={<AdminOverview />} />
                 <Route path="/admin/users" element={<AdminUserTable />} />
@@ -74,21 +73,16 @@ function App() {
                 <Route path="/admin/kyc" element={<KycVerificationQueue />} />
                 <Route path="/admin/settings" element={<AdminSettings />} />
                 <Route path="/admin/health" element={<SystemHealth />} />
-
               </Route>
             </Route>
-
           </Route>
         </Route>
 
-        {/* =========================
-            FALLBACK
-        ========================= */}
+        {/* ========================= FALLBACK ========================= */}
         <Route path="*" element={<Navigate to="/" replace />} />
-
       </Routes>
     </>
   );
 }
 
-export default App;	
+export default App;

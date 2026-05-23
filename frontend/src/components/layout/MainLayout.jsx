@@ -24,7 +24,7 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
   // Menu items based on role
   const menuItems = isAdmin ? [
@@ -48,7 +48,7 @@ export default function MainLayout() {
 
   const handleLogout = async () => {
     if (!window.confirm('Are you sure you want to terminate this session?')) return;
-    
+
     try {
       await logout();
     } catch (err) {
@@ -56,7 +56,8 @@ export default function MainLayout() {
     }
   };
 
-  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path + '/');
+  const isActive = (path) => 
+    location.pathname === path || location.pathname.startsWith(path + '/');
 
   return (
     <div className="min-h-screen bg-[#020408] text-slate-200 flex overflow-hidden font-sans">
@@ -64,7 +65,7 @@ export default function MainLayout() {
       <aside className="hidden lg:flex flex-col w-72 bg-[#05070a] border-r border-white/5 sticky top-0 h-screen overflow-y-auto z-50">
         <div className="p-8">
           {/* Logo */}
-          <div 
+          <div
             className="flex items-center gap-3 mb-12 cursor-pointer group"
             onClick={() => navigate(isAdmin ? '/admin/dashboard' : '/dashboard')}
           >
@@ -85,30 +86,33 @@ export default function MainLayout() {
               {isAdmin ? 'MANAGEMENT PROTOCOL' : 'CORE PROTOCOL'}
             </p>
 
-            {menuItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`flex items-center justify-between px-5 py-4 rounded-2xl text-sm font-semibold transition-all group ${
-                  isActive(item.path)
-                    ? `${accentBg} text-black shadow-xl`
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <div className="flex items-center gap-4">
-                  <item.icon 
-                    size={20} 
-                    className={isActive(item.path) ? 'text-black' : 'text-slate-500 group-hover:text-white'} 
-                  />
-                  {item.label}
-                </div>
-                {isActive(item.path) && <ChevronRight size={16} className="opacity-70" />}
-              </Link>
-            ))}
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`flex items-center justify-between px-5 py-4 rounded-2xl text-sm font-semibold transition-all group ${
+                    isActive(item.path)
+                      ? `${accentBg} text-black shadow-xl`
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center gap-4">
+                    <Icon
+                      size={20}
+                      className={isActive(item.path) ? 'text-black' : 'text-slate-500 group-hover:text-white'}
+                    />
+                    {item.label}
+                  </div>
+                  {isActive(item.path) && <ChevronRight size={16} className="opacity-70" />}
+                </Link>
+              );
+            })}
           </nav>
         </div>
 
-        {/* Logout at bottom */}
+        {/* Logout */}
         <div className="mt-auto p-8">
           <button
             onClick={handleLogout}
@@ -147,8 +151,8 @@ export default function MainLayout() {
             <div
               onClick={() => navigate(isAdmin ? '/admin/settings' : '/dashboard/profile')}
               className={`h-10 w-10 rounded-2xl border flex items-center justify-center font-bold cursor-pointer hover:scale-105 transition-all ${
-                isAdmin 
-                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-400' 
+                isAdmin
+                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-400'
                   : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
               }`}
             >
@@ -177,19 +181,22 @@ export default function MainLayout() {
           </div>
 
           <nav className="flex-1 space-y-2">
-            {menuItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`flex items-center gap-4 p-5 rounded-3xl text-lg font-medium transition-all ${
-                  isActive(item.path) ? 'bg-emerald-500 text-black' : 'bg-white/5 text-white'
-                }`}
-              >
-                <item.icon size={24} />
-                {item.label}
-              </Link>
-            ))}
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center gap-4 p-5 rounded-3xl text-lg font-medium transition-all ${
+                    isActive(item.path) ? 'bg-emerald-500 text-black' : 'bg-white/5 text-white'
+                  }`}
+                >
+                  <Icon size={24} />
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <button

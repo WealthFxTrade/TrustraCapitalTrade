@@ -4,21 +4,68 @@ import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 
 /**
- * 📊 ROI DAILY YIELD RATES
- * Keys match the 'activePlan' string criteria managed on models/User.js.
- * Rates map to: (Monthly Target / 30 Days).
+ * 📊 ROI RATES (Annual %)
+ * These are the official target annual rates per tier.
  */
-const ROI_DAILY_RATES = {
-  'Tier I: Entry': 0.002,          // ~6% Monthly
-  'Tier II: Core': 0.0035,         // ~10.5% Monthly
-  'Tier III: Prime': 0.0045,       // ~13.5% Monthly
-  'Tier IV: Institutional': 0.006, // ~18% Monthly
-  'Tier V: Sovereign': 0.008       // ~24% Monthly
+const ROI_ANNUAL_RATES = {
+  'Tier I: Entry': 6,
+  'Tier II: Core': 10.5,
+  'Tier III: Prime': 13.5,
+  'Tier IV: Institutional': 18,
+  'Tier V: Sovereign': 24,
 };
 
 /**
- * 🪐 CORE DISTRIBUTION LOGIC
- * Iterates through all active investors and credits daily yield.
+ * Calculate projected profit for frontend & admin use
+ */
+export const calculateProfit = ({
+  amount = 0,
+  plan = 'Tier III: Prime',
+  durationMonths = 12,
+  compounding = 'daily'   // daily, monthly, yearly
+}) => {
+  if (amount <= 0) {
+    throw new Error('Investment amount must be greater than zero');
+  }
+
+  const annualRate = ROI_ANNUAL_RATES[plan] || 13.5;
+  const rate = annualRate / 100;
+
+  let finalAmount = amount;
+  let totalProfit = 0;
+  let monthlyProfit = 0;
+
+  if (compounding === 'daily') {
+    const dailyRate = rate / 365;
+    finalAmount = amount * Math.pow(1 + dailyRate, durationMonths * 30.4167); // avg days in month
+  } 
+  else if (compounding === 'monthly') {
+    const monthlyRate = rate / 12;
+    finalAmount = amount * Math.pow(1 + monthlyRate, durationMonths);
+  } 
+  else {
+    // yearly
+    finalAmount = amount * Math.pow(1 + rate, durationMonths / 12);
+  }
+
+  totalProfit = finalAmount - amount;
+  monthlyProfit = totalProfit / durationMonths;
+
+  return {
+    initialInvestment: Number(amount.toFixed(2)),
+    finalAmount: Number(finalAmount.toFixed(2)),
+    totalProfit: Number(totalProfit.toFixed(2)),
+    monthlyProfit: Number(monthlyProfit.toFixed(2)),
+    annualRate,
+    plan,
+    durationMonths,
+    effectiveAPY: annualRate,
+    compounding
+  };
+};
+
+/**
+ * 🪐 CORE DAILY YIELD DISTRIBUTION
  */
 export const runYieldDistribution = async (io) => {
   const sessionDate = new Date().toISOString().split('T')[0];
@@ -26,7 +73,6 @@ export const runYieldDistribution = async (io) => {
   console.log(`🌘 [ROI ENGINE] STARTING DISTRIBUTION FOR: ${sessionDate}`);
 
   try {
-    // 1. Fetch only active, unbanned users with a valid plan
     const users = await User.find({
       isActive: true,
       isBanned: false,
@@ -34,108 +80,96 @@ export const runYieldDistribution = async (io) => {
     });
 
     if (users.length === 0) {
-      console.log('🌘 [ROI ENGINE] No active nodes found for distribution.');
+      console.log('🌘 [ROI ENGINE] No active investors found.');
       return;
     }
 
+    let processed = 0;
+
     for (const user of users) {
       try {
-        // 2. PRODUCTION FIX: Corrected property access syntax from Map .get() to standard nested keys
         const principal = user.balances?.INVESTED || 0;
-        if (principal <= 0) continue;
+        if (principal <= 100) continue; // Skip dust
 
-        // 3. Idempotency Check: Prevent double payout for the same day
+        // Idempotency check
         const alreadyPaid = await Transaction.exists({
           user: user._id,
           type: 'yield',
           'metadata.sessionDate': sessionDate
         });
 
-        if (alreadyPaid) {
-          console.log(`⏩ [ROI ENGINE] Skipping ${user.email} - Already paid today.`);
-          continue;
-        }
+        if (alreadyPaid) continue;
 
-        // 4. Calculate Yield based on Tier
-        const rate = ROI_DAILY_RATES[user.activePlan] || 0.001; // Default to 0.1% if plan unknown
-        const yieldAmount = principal * rate;
-        const rounded = Number(yieldAmount.toFixed(2));
+        const annualRate = ROI_ANNUAL_RATES[user.activePlan] || 13.5;
+        const dailyRate = annualRate / 365 / 100;
+        const yieldAmount = Number((principal * dailyRate).toFixed(2));
 
-        if (rounded <= 0) continue;
+        if (yieldAmount <= 0) continue;
 
-        // 5. Atomic Balance Update
-        // Credits Available Balance (EUR) and updates Total Profit tracker
+        // Atomic update
         const updatedUser = await User.findByIdAndUpdate(
           user._id,
           {
             $inc: {
-              'balances.EUR': rounded,
-              'balances.TOTAL_PROFIT': rounded
+              'balances.EUR': yieldAmount,
+              'balances.TOTAL_PROFIT': yieldAmount,
             }
           },
           { new: true }
         );
 
-        if (!updatedUser) {
-          console.error(`❌ [ROI ENGINE] Failed to update user node state: ${user._id}`);
-          continue;
-        }
+        if (!updatedUser) continue;
 
-        // 6. Record the Ledger Entry
+        // Record transaction
         await Transaction.create({
           user: user._id,
           type: 'yield',
-          amount: rounded,
+          amount: yieldAmount,
           currency: 'EUR',
           status: 'completed',
-          description: `Daily Yield Payout: ${user.activePlan}`,
+          description: `Daily Yield • ${user.activePlan}`,
           metadata: {
             sessionDate,
-            rate,
+            rate: dailyRate,
             principal,
-            plan: user.activePlan
+            plan: user.activePlan,
+            annualRate
           }
         });
 
-        // 7. Push Real-time Update via Socket.io
+        // Real-time update
         if (io) {
-          // PRODUCTION FIX: Removed broken Object.fromEntries mapping call.
-          // Directly mirrors the payload serialization engine used across Dashboard.jsx
           io.to(user._id.toString()).emit('balanceUpdate', {
             balances: {
               EUR: updatedUser.balances.EUR,
-              BTC: updatedUser.balances.BTC,
-              ETH: updatedUser.balances.ETH,
               TOTAL_PROFIT: updatedUser.balances.TOTAL_PROFIT,
-              INVESTED: updatedUser.balances.INVESTED
+              INVESTED: updatedUser.balances.INVESTED,
             },
-            message: `💰 Daily Yield Credited: +€${rounded.toLocaleString('de-DE', { minimumFractionDigits: 2 })}`
+            message: `💰 Daily Yield Credited: +€${yieldAmount}`
           });
         }
-        
+
+        processed++;
       } catch (userError) {
-        // PRODUCTION HARDENING: Isolated internal loop catch prevents 
-        // a single corrupt user record from crashing the entire batch process.
-        console.error(`❌ [ROI ENGINE ERROR] Processing skipped for user node ${user._id}:`, userError);
+        console.error(`❌ [ROI ENGINE] User ${user._id} failed:`, userError.message);
       }
     }
 
-    console.log(`✅ [ROI ENGINE] DISTRIBUTION COMPLETE FOR ${sessionDate}`);
+    console.log(`✅ [ROI ENGINE] DISTRIBUTION COMPLETE → ${processed} users processed`);
   } catch (err) {
-    console.error('❌ [ROI ENGINE FATAL BATCH SYSTEM EXCEPTION]:', err);
+    console.error('❌ [ROI ENGINE FATAL]:', err);
   }
 };
 
 /**
- * ⚙️ ENGINE INITIALIZATION
- * Schedules the distribution at 00:00 (Midnight) Server Time.
+ * Initialize Daily Cron Job
  */
 export const initRioEngine = (io) => {
-  console.log('⚙️ ROI ENGINE INITIALIZED (Daily @ 00:00)');
+  console.log('⚙️ ROI Engine Initialized (Daily @ 00:00 UTC)');
 
-  // Standard Daily Cron Schedule
   cron.schedule('0 0 * * *', () => {
     runYieldDistribution(io);
+  }, {
+    timezone: "UTC"
   });
 };
-

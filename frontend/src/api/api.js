@@ -6,11 +6,11 @@ const TOKEN_KEY = 'trustra_token';
 const REMEMBER_KEY = 'trustra_remember';
 
 /**
- * AXIOS INSTANCE
+ * AXIOS INSTANCE - Production Optimized
  */
 const api = axios.create({
   baseURL: getApiBaseUrl(),
-  timeout: 15000,
+  timeout: 60000,                    // Default timeout increased (was 15000)
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -19,7 +19,7 @@ const api = axios.create({
 });
 
 /**
- * GET TOKEN
+ * Get current auth token from storage
  */
 const getToken = () => {
   return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
@@ -35,13 +35,16 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // Development logging only
     if (import.meta.env.DEV) {
       console.log(`🚀 \( {config.method?.toUpperCase()} \){config.url}`, config.data || '');
     }
 
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
 /**
@@ -49,7 +52,7 @@ api.interceptors.request.use(
  */
 api.interceptors.response.use(
   (response) => {
-    // Handle new token returned from backend
+    // Auto update token if backend returns a new one
     const newToken = response?.data?.token || response?.data?.accessToken;
     if (newToken) {
       const remember = localStorage.getItem(REMEMBER_KEY) === 'true';
@@ -67,15 +70,18 @@ api.interceptors.response.use(
 
     console.error(`❌ API Error [\( {status}] \){url}`, error.response?.data || error.message);
 
+    // Handle 401 Unauthorized
     if (status === 401) {
       clearAuthToken();
-      if (!['/login', '/', '/register'].includes(window.location.pathname)) {
+      if (!['/login', '/', '/register'].some(path => 
+        window.location.pathname.startsWith(path)
+      )) {
         window.location.replace('/login?session=expired');
       }
     }
 
     if (status === 404) {
-      console.warn(`🔍 404 Not Found → ${url}. Check backend route.`);
+      console.warn(`🔍 404 Not Found → ${url}`);
     }
 
     if (!error.response) {
@@ -87,6 +93,10 @@ api.interceptors.response.use(
 );
 
 /* ====================== AUTH HELPERS ====================== */
+
+/**
+ * Set authentication token
+ */
 export const setAuthToken = (token, remember = false) => {
   if (!token) return;
 
@@ -100,12 +110,18 @@ export const setAuthToken = (token, remember = false) => {
   }
 };
 
+/**
+ * Clear all authentication tokens
+ */
 export const clearAuthToken = () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REMEMBER_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
 };
 
+/**
+ * Check if user is authenticated
+ */
 export const isAuthenticated = () => !!getToken();
 
 export { API_ENDPOINTS };

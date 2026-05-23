@@ -8,7 +8,6 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -58,7 +57,7 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const initLock = useRef(false);
 
-  // Initialize Auth (Check existing session)
+  // Initialize Auth - Check for existing valid session
   const initAuth = useCallback(async () => {
     if (initLock.current) return;
     initLock.current = true;
@@ -93,7 +92,7 @@ export function AuthProvider({ children }) {
     initAuth();
   }, [initAuth]);
 
-  // ==================== MAIN LOGIN (ESTABLISH SESSION) ====================
+  // ==================== LOGIN ====================
   const login = useCallback(async (credentials) => {
     dispatch({ type: 'START' });
 
@@ -101,10 +100,14 @@ export function AuthProvider({ children }) {
 
     try {
       const { data } = await api.post(
-        API_ENDPOINTS.AUTH.ESTABLISH_SESSION,   // ← Changed to new endpoint
+        API_ENDPOINTS.AUTH.ESTABLISH_SESSION,
         {
           email: credentials.email,
           password: credentials.password,
+        },
+        {
+          timeout: 90000,
+          signal: credentials.signal,
         }
       );
 
@@ -115,7 +118,6 @@ export function AuthProvider({ children }) {
         throw new Error('Invalid server response');
       }
 
-      // Remember user by default (you can add rememberMe checkbox later)
       setAuthToken(token, true);
 
       dispatch({ type: 'SUCCESS', payload: user });
@@ -131,13 +133,72 @@ export function AuthProvider({ children }) {
       clearAuthToken();
       dispatch({ type: 'LOGOUT' });
 
-      const message = err?.response?.data?.message || err?.message || 'Invalid credentials';
+      let message = 'Invalid credentials';
+
+      if (err.name === 'AbortError' || err.message?.toLowerCase().includes('timeout')) {
+        message = 'Request timeout. Please check your connection and try again.';
+      } else if (err?.response?.data?.message) {
+        message = err.response.data.message;
+      } else if (err?.message) {
+        message = err.message;
+      }
+
       toast.error(message, { id: toastId });
 
       return { success: false, message };
     }
   }, [navigate]);
 
+  // ==================== SIGNUP / REGISTER ====================
+  const signup = useCallback(async (userData, signal) => {
+    dispatch({ type: 'START' });
+
+    const toastId = toast.loading('Creating your account...');
+
+    try {
+      const { data } = await api.post(
+        API_ENDPOINTS.AUTH.REGISTER,
+        userData,
+        {
+          timeout: 60000,
+          signal: signal,
+        }
+      );
+
+      const token = data?.token;
+      const user = data?.user;
+
+      if (token && user) {
+        setAuthToken(token, true);
+        dispatch({ type: 'SUCCESS', payload: user });
+        toast.success('Account created successfully!', { id: toastId });
+        navigate('/dashboard', { replace: true });
+      } else {
+        toast.success('Account created successfully! Please log in.', { id: toastId });
+      }
+
+      return { success: true, data };
+    } catch (err) {
+      console.error('Signup Error:', err);
+
+      let message = 'Registration failed. Please try again.';
+
+      if (err.name === 'AbortError' || err.message?.includes('timeout')) {
+        message = 'Request timeout. Please try again.';
+      } else if (err?.response?.data?.message) {
+        message = err.response.data.message;
+      } else if (err?.message) {
+        message = err.message;
+      }
+
+      toast.error(message, { id: toastId });
+      dispatch({ type: 'LOGOUT' });
+
+      return { success: false, message };
+    }
+  }, [navigate]);
+
+  // ==================== LOGOUT ====================
   const logout = useCallback(async () => {
     try {
       await api.post(API_ENDPOINTS.AUTH.LOGOUT).catch(() => {});
@@ -151,9 +212,10 @@ export function AuthProvider({ children }) {
   const value = useMemo(() => ({
     ...state,
     login,
+    signup,           // ← Added
     logout,
     refreshSession: initAuth,
-  }), [state, login, logout, initAuth]);
+  }), [state, login, signup, logout, initAuth]);
 
   return (
     <AuthContext.Provider value={value}>

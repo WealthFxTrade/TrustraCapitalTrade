@@ -8,7 +8,7 @@ const ProtectedRoute = () => {
   const { isAuthenticated, initialized, user, loading } = useAuth();
   const location = useLocation();
 
-  // Still initializing authentication
+  // 1. Still initializing auth → Show loading
   if (!initialized || loading) {
     return (
       <div className="min-h-screen bg-[#020408] flex items-center justify-center">
@@ -20,7 +20,7 @@ const ProtectedRoute = () => {
     );
   }
 
-  // Not logged in → redirect to login
+  // 2. Not authenticated → Redirect to login with return path
   if (!isAuthenticated || !user) {
     return (
       <Navigate
@@ -31,20 +31,20 @@ const ProtectedRoute = () => {
     );
   }
 
-  // ====================== ADMIN REDIRECTION ======================
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // 3. Role-based redirection logic
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
-  // Redirect admins away from user dashboard
-  if (isAdmin && location.pathname.startsWith('/dashboard')) {
+  // Redirect admins trying to access user dashboard
+  if (isAdmin && location.pathname.startsWith('/dashboard') && !location.pathname.startsWith('/dashboard/profile')) {
     return <Navigate to="/admin/dashboard" replace />;
   }
 
-  // Redirect non-admins away from admin routes (optional but recommended)
+  // Redirect regular users trying to access admin routes
   if (!isAdmin && location.pathname.startsWith('/admin')) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // Authorized user → render child routes
+  // 4. Authorized user → Render child routes
   return <Outlet />;
 };
 

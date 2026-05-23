@@ -1,7 +1,6 @@
 // backend/controllers/authController.js
 import asyncHandler from 'express-async-handler';
 import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
 import User from '../models/User.js';
 import { deriveBtcAddress } from '../utils/bitcoinUtils.js';
 
@@ -27,23 +26,15 @@ const setSecureAuthCookie = (res, token) => {
   });
 };
 
-/* ====================== AUTHORIZE SESSION (New) ====================== */
+/* ====================== AUTHORIZE SESSION ====================== */
 export const authorizeSession = asyncHandler(async (req, res) => {
   const { email } = req.body;
+  if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
 
-  if (!email) {
-    return res.status(400).json({ success: false, message: 'Email is required' });
-  }
+  const user = await User.findOne({ email: email.trim().toLowerCase() });
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const user = await User.findOne({ email: normalizedEmail });
-
-  if (!user) {
+  if (!user || !user.isActive || user.isBanned) {
     return res.status(401).json({ success: false, message: GENERIC_AUTH_ERROR });
-  }
-
-  if (!user.isActive || user.isBanned) {
-    return res.status(401).json({ success: false, message: 'Account is inactive or banned.' });
   }
 
   res.json({
@@ -54,7 +45,7 @@ export const authorizeSession = asyncHandler(async (req, res) => {
   });
 });
 
-/* ====================== ESTABLISH SESSION (New) ====================== */
+/* ====================== ESTABLISH SESSION (Main Login) ====================== */
 export const establishSession = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
@@ -66,6 +57,7 @@ export const establishSession = asyncHandler(async (req, res) => {
   const user = await User.findOne({ email: normalizedEmail }).select('+password');
 
   if (!user) {
+    // Timing attack protection
     const dummy = new User();
     await dummy.matchPassword('dummy').catch(() => {});
     return res.status(401).json({ success: false, message: GENERIC_AUTH_ERROR });
@@ -97,7 +89,10 @@ export const establishSession = asyncHandler(async (req, res) => {
 /* ====================== VERIFY SESSION ====================== */
 export const verifySession = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
-  if (!user) return res.status(401).json({ success: false, message: 'Invalid session' });
+
+  if (!user || !user.isActive || user.isBanned) {
+    return res.status(401).json({ success: false, message: 'Invalid session' });
+  }
 
   res.json({
     success: true,
@@ -106,9 +101,8 @@ export const verifySession = asyncHandler(async (req, res) => {
   });
 });
 
-/* ====================== EXISTING FUNCTIONS (unchanged) ====================== */
+/* ====================== REGISTER ====================== */
 export const registerUser = asyncHandler(async (req, res) => {
-  // ... your existing register code (unchanged)
   const { name, email, password } = req.body;
 
   if (!name || !email || !password) {
@@ -116,12 +110,13 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
 
   const normalizedEmail = email.trim().toLowerCase();
+
   if (await User.findOne({ email: normalizedEmail })) {
-    return res.status(400).json({ success: false, message: 'Registration processing error. Please contact support.' });
+    return res.status(400).json({ success: false, message: 'User already exists' });
   }
 
   const lastUser = await User.findOne().sort({ address_index: -1 });
-  const nextIndex = lastUser?.address_index !== undefined ? lastUser.address_index + 1 : 0;
+  const nextIndex = (lastUser?.address_index ?? -1) + 1;
   const { address } = deriveBtcAddress(nextIndex);
 
   const user = await User.create({
@@ -148,14 +143,18 @@ export const registerUser = asyncHandler(async (req, res) => {
   });
 });
 
-export const loginUser = asyncHandler(async (req, res) => {
-  // Keep your existing login (optional fallback)
-  // ... your existing loginUser code
+export const logoutUser = asyncHandler(async (req, res) => {
+  res.clearCookie('trustra_token');
+  res.json({ success: true, message: 'Logged out successfully' });
 });
 
-export const getUserProfile = asyncHandler(async (req, res) => { /* existing */ });
-export const updateUserProfile = asyncHandler(async (req, res) => { /* existing */ });
-export const logoutUser = asyncHandler(async (req, res) => { /* existing */ });
-export const forgotPassword = asyncHandler(async (req, res) => { /* existing */ });
-export const resetPassword = asyncHandler(async (req, res) => { /* existing */ });
-export const refreshSession = asyncHandler(async (req, res) => { /* existing */ });
+// Stub other functions
+export const loginUser = asyncHandler(async (req, res) => {
+  res.status(410).json({ message: 'Use /establish-session instead' });
+});
+
+export const getUserProfile = asyncHandler(async (req, res) => { /* implement */ });
+export const updateUserProfile = asyncHandler(async (req, res) => { /* implement */ });
+export const forgotPassword = asyncHandler(async (req, res) => { /* implement */ });
+export const resetPassword = asyncHandler(async (req, res) => { /* implement */ });
+export const refreshSession = asyncHandler(async (req, res) => { /* implement */ });

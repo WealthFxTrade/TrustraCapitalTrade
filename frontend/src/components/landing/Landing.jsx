@@ -1,16 +1,17 @@
 // src/components/landing/Landing.jsx
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Zap, Menu, X, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { calculateSimpleROI } from '@/utils/investmentCalculator';
 
 const PLANS = [
-  { id: 'class1', name: 'Class I: Entry', roi: 7, min: 100, desc: 'Diversified Liquidity Access' },
-  { id: 'class2', name: 'Class II: Core', roi: 10, min: 1000, desc: 'Smart Order Routing Logic' },
-  { id: 'class3', name: 'Class III: Prime', roi: 14, min: 5000, desc: 'Priority Execution System' },
-  { id: 'class4', name: 'Class IV: Institutional', roi: 18, min: 15000, desc: 'Advanced Asset Validation' },
-  { id: 'class5', name: 'Class V: Sovereign', roi: 22, min: 50000, desc: 'HFT + Institutional Liquidity' },
+  { id: 'class1', name: 'Tier I: Entry',       roi: 7,  min: 100,  desc: 'Diversified Liquidity Access' },
+  { id: 'class2', name: 'Tier II: Core',       roi: 10, min: 1000, desc: 'Smart Order Routing Logic' },
+  { id: 'class3', name: 'Tier III: Prime',     roi: 14, min: 5000, desc: 'Priority Execution System' },
+  { id: 'class4', name: 'Tier IV: Institutional', roi: 18, min: 15000, desc: 'Advanced Asset Validation' },
+  { id: 'class5', name: 'Tier V: Sovereign',   roi: 22, min: 50000, desc: 'HFT + Institutional Liquidity' },
 ];
 
 const REVIEWS = [
@@ -25,48 +26,68 @@ export default function LandingPage() {
   const { isAuthenticated, initialized } = useAuth();
 
   const [btcPrice, setBtcPrice] = useState(0);
+  const [loadingPrice, setLoadingPrice] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [amount, setAmount] = useState(1000);
-  const [selectedPlan, setSelectedPlan] = useState(PLANS[2]); // Default to Class III
+  const [amount, setAmount] = useState(10000);
+  const [selectedPlan, setSelectedPlan] = useState(PLANS[2]); // Default to Tier III: Prime
   const [result, setResult] = useState(null);
 
   // Live BTC Price
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur');
+        setLoadingPrice(true);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const res = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur',
+          { signal: controller.signal }
+        );
+
+        clearTimeout(timeoutId);
+
+        if (!res.ok) throw new Error('Failed to fetch price');
         const data = await res.json();
         setBtcPrice(data?.bitcoin?.eur || 0);
-      } catch (e) {
-        console.error('Failed to fetch BTC price');
+      } catch (err) {
+        console.error('Failed to fetch BTC price:', err);
+        setBtcPrice(0);
+      } finally {
+        setLoadingPrice(false);
       }
     };
 
     fetchPrice();
     const interval = setInterval(fetchPrice, 60000);
+
     return () => clearInterval(interval);
   }, []);
 
-  // ROI Calculator
+  // ROI Calculator - Using new investmentCalculator
   const calculateROI = () => {
-    const monthly = (amount * selectedPlan.roi) / 100;
-    const yearly = monthly * 12;
+    if (!amount || amount <= 0) return;
+
+    const calcResult = calculateSimpleROI(amount, selectedPlan.name, 1); // 1 year projection
 
     setResult({
-      monthly: monthly.toFixed(2),
-      yearly: yearly.toFixed(2),
-      plan: selectedPlan.name,
+      monthly: calcResult.monthly.toFixed(2),
+      yearly: calcResult.yearly.toFixed(2),
+      total: calcResult.total.toFixed(2),
+      finalAmount: calcResult.finalAmount.toFixed(2),
+      plan: calcResult.plan,
     });
   };
 
   const handleInvest = (planId) => {
     const plan = PLANS.find(p => p.id === planId);
+    const planName = plan?.name || 'Tier III: Prime';
+
     if (isAuthenticated) {
       navigate('/dashboard');
     } else {
-      // Pass plan via state (better than query params)
-      navigate('/register', { 
-        state: { plan: plan?.name || 'Class III: Prime' } 
+      navigate('/register', {
+        state: { selectedPlan: planName }
       });
     }
   };
@@ -92,9 +113,12 @@ export default function LandingPage() {
           <div className="hidden md:flex items-center gap-8 text-sm">
             <a href="#plans" className="hover:text-emerald-400 transition-colors">Investment Plans</a>
             <a href="#calculator" className="hover:text-emerald-400 transition-colors">ROI Calculator</a>
+
             <span className="text-emerald-400 font-medium">
-              BTC €{btcPrice.toLocaleString()}
+              BTC €{btcPrice ? btcPrice.toLocaleString() : '--'}
+              {loadingPrice && <span className="text-xs ml-1">↻</span>}
             </span>
+
             <button
               onClick={() => navigate('/register')}
               className="bg-emerald-500 hover:bg-emerald-400 text-black px-6 py-2.5 rounded-xl font-semibold transition-all"
@@ -103,8 +127,8 @@ export default function LandingPage() {
             </button>
           </div>
 
-          <button 
-            onClick={() => setMenuOpen(!menuOpen)} 
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
             className="md:hidden text-white"
           >
             {menuOpen ? <X size={28} /> : <Menu size={28} />}
@@ -128,7 +152,7 @@ export default function LandingPage() {
 
       {/* HERO */}
       <section className="pt-32 pb-20 px-6 text-center">
-        <motion.h1 
+        <motion.h1
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-5xl md:text-7xl font-black tracking-tighter leading-tight"
@@ -142,14 +166,14 @@ export default function LandingPage() {
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
-          <button 
+          <button
             onClick={() => navigate('/register')}
             className="bg-emerald-500 hover:bg-emerald-400 text-black px-10 py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 transition-all"
           >
             Open Account <ArrowRight />
           </button>
-          
-          <button 
+
+          <button
             onClick={() => navigate('/login')}
             className="border border-white/30 hover:bg-white/5 px-10 py-4 rounded-2xl font-semibold text-lg transition-all"
           >
@@ -171,6 +195,7 @@ export default function LandingPage() {
                 value={amount}
                 onChange={(e) => setAmount(Number(e.target.value))}
                 className="w-full bg-black border border-white/10 rounded-2xl px-6 py-4 text-2xl focus:border-emerald-500 outline-none"
+                min="100"
               />
             </div>
 
@@ -183,13 +208,13 @@ export default function LandingPage() {
               >
                 {PLANS.map((p, i) => (
                   <option key={p.id} value={i}>
-                    {p.name} — {p.roi}% ROI
+                    {p.name} — {p.roi}% Target
                   </option>
                 ))}
               </select>
             </div>
 
-            <button 
+            <button
               onClick={calculateROI}
               className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-bold py-4 rounded-2xl text-lg transition-all"
             >
@@ -197,27 +222,32 @@ export default function LandingPage() {
             </button>
 
             {result && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 className="mt-8 p-6 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-center"
               >
                 <p className="text-emerald-400 text-sm mb-2">Projected Returns — {result.plan}</p>
+                
                 <p className="text-4xl font-bold">€{result.monthly} <span className="text-base font-normal text-gray-400">/ month</span></p>
-                <p className="text-2xl mt-2">€{result.yearly} / year</p>
+                <p className="text-2xl mt-1">€{result.yearly} / year</p>
+                
+                <div className="mt-4 pt-4 border-t border-emerald-500/20">
+                  <p className="text-emerald-400">Total Profit after 1 year: <span className="font-bold">€{result.total}</span></p>
+                </div>
               </motion.div>
             )}
           </div>
         </div>
       </section>
 
-      {/* PLANS */}
+      {/* INVESTMENT PLANS */}
       <section id="plans" className="max-w-7xl mx-auto px-6 pb-24">
         <h2 className="text-4xl font-bold text-center mb-12">Investment Programs</h2>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {PLANS.map((plan) => (
-            <div 
+            <div
               key={plan.id}
               className="bg-[#0a0c10] border border-white/10 hover:border-emerald-500/50 rounded-3xl p-8 transition-all group"
             >
@@ -226,7 +256,9 @@ export default function LandingPage() {
               <p className="text-gray-400 mt-1">Annual Target Return</p>
 
               <p className="mt-6 text-gray-300">{plan.desc}</p>
-              <p className="mt-8 text-sm text-gray-500">Minimum Investment: <span className="text-white font-semibold">€{plan.min.toLocaleString()}</span></p>
+              <p className="mt-8 text-sm text-gray-500">
+                Minimum Investment: <span className="text-white font-semibold">€{plan.min.toLocaleString()}</span>
+              </p>
 
               <button
                 onClick={() => handleInvest(plan.id)}

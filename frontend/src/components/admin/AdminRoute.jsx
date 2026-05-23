@@ -8,7 +8,7 @@ const AdminRoute = () => {
   const { isAuthenticated, initialized, user, loading } = useAuth();
   const location = useLocation();
 
-  // Loading state
+  // Still initializing
   if (!initialized || loading) {
     return (
       <div className="min-h-screen bg-[#020408] flex items-center justify-center">
@@ -33,8 +33,8 @@ const AdminRoute = () => {
     );
   }
 
-  // Not an admin
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // Check admin role
+  const isAdmin = ['admin', 'superadmin'].includes(user?.role);
 
   if (!isAdmin) {
     return (

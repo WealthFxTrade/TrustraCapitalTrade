@@ -12,7 +12,7 @@ import { ApiError } from './errorMiddleware.js';
 export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
-  // Priority: Cookie → Authorization Header
+  // 1. Get token from cookie (preferred) or Authorization header
   if (req.cookies?.trustra_token) {
     token = req.cookies.trustra_token;
   } else if (req.headers.authorization?.startsWith('Bearer ')) {
@@ -30,7 +30,7 @@ export const protect = asyncHandler(async (req, res, next) => {
   } catch (err) {
     console.error(`[AUTH] JWT Error: ${err.message}`);
 
-    // Clear invalid/expired cookie
+    // Clear invalid cookie
     res.clearCookie('trustra_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -45,7 +45,7 @@ export const protect = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, message);
   }
 
-  // Fetch user
+  // 2. Fetch user (exclude sensitive fields)
   const user = await User.findById(decoded.id)
     .select('-password -resetPasswordToken -resetPasswordExpire');
 
@@ -59,7 +59,7 @@ export const protect = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, 'User not found. Please log in again.');
   }
 
-  // Token Version Check (Important for password change logout)
+  // 3. Token Version Check (security - logout all devices on password change)
   const currentTokenVersion = decoded.version || 0;
   const liveTokenVersion = user.tokenVersion || 0;
 
@@ -73,7 +73,7 @@ export const protect = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, 'Session invalidated. Please log in again.');
   }
 
-  // Account Status Checks
+  // 4. Account Status Checks
   if (!user.isActive) {
     throw new ApiError(403, 'Your account has been deactivated.');
   }
