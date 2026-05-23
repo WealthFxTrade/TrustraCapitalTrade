@@ -1,16 +1,65 @@
 // src/api/api.js
-import axios from 'axios';
-import { getApiBaseUrl, API_ENDPOINTS } from '@/constants/api';
 
+import axios from 'axios';
+import { getApiBaseUrl } from '@/constants/api';
+
+/* =========================
+   STORAGE KEYS
+========================= */
 const TOKEN_KEY = 'trustra_token';
 const REMEMBER_KEY = 'trustra_remember';
 
-/**
- * AXIOS INSTANCE - Production Optimized
- */
+/* =========================
+   API CONFIG
+========================= */
+const API_ENDPOINTS = {
+  AUTH: {
+    REGISTER: '/auth/register',
+    LOGIN: '/auth/login',
+    ESTABLISH_SESSION: '/auth/establish-session',
+    AUTHORIZE_SESSION: '/auth/authorize-session',
+    VERIFY_SESSION: '/auth/verify-session',
+    LOGOUT: '/auth/logout',
+    PROFILE: '/auth/profile',
+    REFRESH: '/auth/refresh',
+    FORGOT_PASSWORD: '/auth/forgotpassword',
+    RESET_PASSWORD: '/auth/resetpassword',
+  },
+
+  USER: {
+    PROFILE: '/users/profile',
+    STATS: '/users/stats',
+    TRANSACTIONS: '/users/ledger',
+    COMPOUND: '/users/compound',
+    WITHDRAW: '/users/withdraw',
+    DEPOSIT_ADDRESS: '/users/deposit-address',
+    BALANCE: '/users/balance',
+  },
+
+  ADMIN: {
+    OVERVIEW: '/admin/overview',
+    HEALTH: '/admin/health',
+    METRICS: '/admin/metrics',
+    USERS: '/admin/users',
+    KYC_PENDING: '/admin/kyc/pending',
+    DEPOSITS_PENDING: '/admin/deposits/pending',
+    WITHDRAWALS_PENDING: '/admin/withdrawals/pending',
+  },
+
+  PUBLIC: {
+    MARKET_DATA: '/public/market-data',
+    PRICES: '/public/prices',
+  },
+
+  HEALTH: '/health',
+};
+
+/* =========================
+   AXIOS INSTANCE
+========================= */
 const api = axios.create({
   baseURL: getApiBaseUrl(),
-  timeout: 60000,                    // Default timeout increased (was 15000)
+  timeout: 60000,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -18,85 +67,16 @@ const api = axios.create({
   },
 });
 
-/**
- * Get current auth token from storage
- */
+/* =========================
+   TOKEN HELPERS
+========================= */
 const getToken = () => {
-  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
+  return (
+    localStorage.getItem(TOKEN_KEY) ||
+    sessionStorage.getItem(TOKEN_KEY)
+  );
 };
 
-/**
- * REQUEST INTERCEPTOR
- */
-api.interceptors.request.use(
-  (config) => {
-    const token = getToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    // Development logging only
-    if (import.meta.env.DEV) {
-      console.log(`🚀 \( {config.method?.toUpperCase()} \){config.url}`, config.data || '');
-    }
-
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-/**
- * RESPONSE INTERCEPTOR
- */
-api.interceptors.response.use(
-  (response) => {
-    // Auto update token if backend returns a new one
-    const newToken = response?.data?.token || response?.data?.accessToken;
-    if (newToken) {
-      const remember = localStorage.getItem(REMEMBER_KEY) === 'true';
-      if (remember) {
-        localStorage.setItem(TOKEN_KEY, newToken);
-      } else {
-        sessionStorage.setItem(TOKEN_KEY, newToken);
-      }
-    }
-    return response;
-  },
-  (error) => {
-    const status = error?.response?.status;
-    const url = error?.config?.url;
-
-    console.error(`❌ API Error [\( {status}] \){url}`, error.response?.data || error.message);
-
-    // Handle 401 Unauthorized
-    if (status === 401) {
-      clearAuthToken();
-      if (!['/login', '/', '/register'].some(path => 
-        window.location.pathname.startsWith(path)
-      )) {
-        window.location.replace('/login?session=expired');
-      }
-    }
-
-    if (status === 404) {
-      console.warn(`🔍 404 Not Found → ${url}`);
-    }
-
-    if (!error.response) {
-      console.error('🌐 Network Error - Backend unreachable or CORS issue');
-    }
-
-    return Promise.reject(error);
-  }
-);
-
-/* ====================== AUTH HELPERS ====================== */
-
-/**
- * Set authentication token
- */
 export const setAuthToken = (token, remember = false) => {
   if (!token) return;
 
@@ -110,19 +90,75 @@ export const setAuthToken = (token, remember = false) => {
   }
 };
 
-/**
- * Clear all authentication tokens
- */
 export const clearAuthToken = () => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REMEMBER_KEY);
   sessionStorage.removeItem(TOKEN_KEY);
 };
 
-/**
- * Check if user is authenticated
- */
 export const isAuthenticated = () => !!getToken();
 
+/* =========================
+   REQUEST INTERCEPTOR
+========================= */
+api.interceptors.request.use(
+  (config) => {
+    const token = getToken();
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
+    if (import.meta.env.DEV) {
+      console.log(
+        `🚀 ${config.method?.toUpperCase()} ${config.url}`,
+        config.data || ''
+      );
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+/* =========================
+   RESPONSE INTERCEPTOR
+========================= */
+api.interceptors.response.use(
+  (response) => {
+    const newToken = response?.data?.token || response?.data?.accessToken;
+
+    if (newToken) {
+      const remember = localStorage.getItem(REMEMBER_KEY) === 'true';
+
+      if (remember) {
+        localStorage.setItem(TOKEN_KEY, newToken);
+      } else {
+        sessionStorage.setItem(TOKEN_KEY, newToken);
+      }
+    }
+
+    return response;
+  },
+  (error) => {
+    const status = error?.response?.status;
+
+    console.error(
+      `❌ API ERROR [${status}] ${error?.config?.url}`,
+      error?.response?.data || error.message
+    );
+
+    if (status === 401) {
+      clearAuthToken();
+      window.location.href = '/login';
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+/* =========================
+   EXPORTS
+========================= */
 export { API_ENDPOINTS };
 export default api;

@@ -1,171 +1,91 @@
 // frontend/vite.config.js
 
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "url";
+import { dirname, resolve } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
-
 const __dirname = dirname(__filename);
 
 export default defineConfig(({ mode }) => {
-  const isDev = mode === 'development';
+  const isDev = mode === "development";
 
   return {
-    /**
-     * ============================================
-     * PLUGINS
-     * ============================================
-     */
+    /* ================= PLUGINS ================= */
     plugins: [react()],
 
-    /**
-     * ============================================
-     * PATH ALIASES
-     * ============================================
-     */
+    /* ================= PATH ALIAS ================= */
     resolve: {
       alias: {
-        '@': resolve(__dirname, 'src'),
+        "@": resolve(__dirname, "src"),
       },
     },
 
-    /**
-     * ============================================
-     * DEVELOPMENT SERVER
-     * ============================================
-     */
+    /* ================= DEV SERVER ================= */
     server: {
-      host: '0.0.0.0',
-
+      host: "0.0.0.0",
       port: 5173,
-
       strictPort: true,
 
-      cors: false,
-
       /**
-       * ============================================
-       * API PROXY
-       * ============================================
-       * Frontend:
-       *   /api/auth/login
-       *
-       * Backend:
-       *   http://localhost:10000/api/auth/login
-       * ============================================
+       * DEV ONLY proxy (NOT used in production)
+       * Keeps local development easy
        */
       proxy: {
-        '/api': {
-          target: 'http://localhost:10000',
-
+        "/api": {
+          target: "http://localhost:10000",
           changeOrigin: true,
-
           secure: false,
-
           ws: true,
         },
       },
 
-      /**
-       * ============================================
-       * HOT MODULE RELOAD
-       * ============================================
-       */
       hmr: {
         overlay: true,
       },
     },
 
-    /**
-     * ============================================
-     * PREVIEW SERVER
-     * ============================================
-     */
+    /* ================= PREVIEW ================= */
     preview: {
-      host: '0.0.0.0',
-
+      host: "0.0.0.0",
       port: 4173,
-
       strictPort: true,
     },
 
-    /**
-     * ============================================
-     * BUILD CONFIGURATION
-     * ============================================
-     */
+    /* ================= BUILD ================= */
     build: {
-      /**
-       * Output
-       */
-      outDir: 'dist',
-
-      assetsDir: 'assets',
-
+      outDir: "dist",
+      assetsDir: "assets",
       emptyOutDir: true,
 
-      /**
-       * Optimization
-       */
-      target: 'es2022',
-
-      minify: 'esbuild',
+      target: "es2022",
+      minify: "esbuild",
 
       cssCodeSplit: true,
-
       reportCompressedSize: false,
-
       chunkSizeWarningLimit: 1600,
 
-      /**
-       * Sourcemaps
-       */
       sourcemap: isDev,
 
-      /**
-       * Rollup Optimization
-       */
       rollupOptions: {
         output: {
           manualChunks: {
-            vendor: [
-              'react',
-              'react-dom',
-              'react-router-dom',
-            ],
-
-            ui: [
-              'framer-motion',
-              'lucide-react',
-            ],
-
-            toast: [
-              'react-hot-toast',
-            ],
+            vendor: ["react", "react-dom", "react-router-dom"],
+            ui: ["framer-motion", "lucide-react"],
+            toast: ["react-hot-toast"],
           },
         },
       },
     },
 
-    /**
-     * ============================================
-     * ENVIRONMENT VARIABLES
-     * ============================================
-     */
-    envPrefix: 'VITE_',
+    /* ================= ENV ================= */
+    envPrefix: "VITE_",
 
-    /**
-     * ============================================
-     * GLOBAL DEFINITIONS
-     * ============================================
-     */
+    /* ================= GLOBALS ================= */
     define: {
-      'process.env.NODE_ENV': JSON.stringify(mode),
-
-      global: 'globalThis',
+      "process.env.NODE_ENV": JSON.stringify(mode),
+      global: "globalThis",
     },
   };
 });

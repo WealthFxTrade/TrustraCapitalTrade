@@ -43,7 +43,10 @@ const globalLimiter = rateLimit({
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 15,
-  message: { success: false, message: 'Too many login attempts. Try again later.' },
+  message: {
+    success: false,
+    message: 'Too many login attempts. Try again later.'
+  },
 });
 
 app.use(globalLimiter);
@@ -58,10 +61,12 @@ const requestTimeout = (ms = 90000) => (req, res, next) => {
   const timer = setTimeout(() => {
     if (!res.headersSent) {
       console.warn(`⏰ Request timeout: ${req.method} ${req.url}`);
+
       res.status(408).json({
         success: false,
         message: 'Request timeout. Please try again.'
       });
+
       req.destroy();
     }
   }, ms);
@@ -83,21 +88,24 @@ const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (
-      !origin ||
-      allowedOrigins.includes(origin) ||
-      origin.startsWith('http://192.168.') ||
-      origin.startsWith('http://172.') ||
-      origin.startsWith('http://10.')
-    ) {
-      return callback(null, true);
-    }
-    callback(new Error(`CORS blocked: ${origin}`));
-  },
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        origin.startsWith('http://192.168.') ||
+        origin.startsWith('http://172.') ||
+        origin.startsWith('http://10.')
+      ) {
+        return callback(null, true);
+      }
+
+      callback(new Error(`CORS blocked: ${origin}`));
+    },
+    credentials: true,
+  })
+);
 
 app.options('*', cors());
 
@@ -105,8 +113,8 @@ app.options('*', cors());
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
-    credentials: true
-  }
+    credentials: true,
+  },
 });
 
 io.on('connection', (socket) => {
@@ -126,7 +134,7 @@ app.use('/api/investments', investmentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', apiRoutes);
 
-/* ================= HEALTH ================= */
+/* ================= HEALTH CHECK ================= */
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
@@ -135,6 +143,14 @@ app.get('/api/health', (req, res) => {
     env: NODE_ENV,
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
+  });
+});
+
+/* ================= ROOT ROUTE ================= */
+app.get('/', (req, res) => {
+  res.status(200).json({
+    message: 'Trustra Capital API Running',
+    health: '/api/health'
   });
 });
 
@@ -174,6 +190,7 @@ startServer();
 process.on('SIGINT', async () => {
   console.log('🛑 Shutting down server...');
   await mongoose.connection.close();
+
   server.close(() => {
     console.log('✅ Server closed gracefully');
     process.exit(0);
