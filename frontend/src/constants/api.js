@@ -1,7 +1,12 @@
 // frontend/src/constants/api.js
 
 export const getApiBaseUrl = () => {
-  // 1. Check your defined environment variable first (handles production & local dev smoothly)
+  // 1. If running on Vercel production/preview, use relative routing to leverage your vercel.json rewrites
+  if (import.meta.env.PROD && !import.meta.env.VITE_API_URL?.startsWith('http')) {
+    return '/api';
+  }
+
+  // 2. Respect explicit environment variables if present
   if (import.meta.env.VITE_API_URL) {
     const base = import.meta.env.VITE_API_URL.endsWith('/')
       ? import.meta.env.VITE_API_URL.slice(0, -1)
@@ -9,36 +14,29 @@ export const getApiBaseUrl = () => {
     return base;
   }
 
-  // 2. Legacy fallback check in case VITE_API_BASE is ever used
-  if (import.meta.env.VITE_API_BASE) {
-    const base = import.meta.env.VITE_API_BASE.endsWith('/')
-      ? import.meta.env.VITE_API_BASE.slice(0, -1)
-      : import.meta.env.VITE_API_BASE;
-    return base.endsWith('/api') ? base : `${base}/api`;
-  }
-
-  // 3. Fallback if no env files are loaded/found
+  // 3. Strict local development fallback matching your backend express config
   if (import.meta.env.DEV) {
     return 'http://localhost:10000/api';
   }
+
   return '/api';
 };
 
 export const getSocketUrl = () => {
-  // 1. Trust your .env environment configurations first
+  // 1. Prioritize explicitly defined socket environment variables
   if (import.meta.env.VITE_SOCKET_URL) {
     return import.meta.env.VITE_SOCKET_URL.endsWith('/')
       ? import.meta.env.VITE_SOCKET_URL.slice(0, -1)
       : import.meta.env.VITE_SOCKET_URL;
   }
 
-  // 2. Fallback logic if environment files aren't read yet
-  if (import.meta.env.DEV) {
-    return 'http://localhost:10000';
+  // 2. WebSockets cannot use server-side rewrites; they must connect directly to the backend
+  if (import.meta.env.PROD) {
+    return 'https://trustracapitaltrade-backend.onrender.com';
   }
-  
-  const base = getApiBaseUrl();
-  return base.replace(/\/api$/, '');
+
+  // 3. Local Development fallback
+  return 'http://localhost:10000';
 };
 
 export const SOCKET_URL = getSocketUrl();
