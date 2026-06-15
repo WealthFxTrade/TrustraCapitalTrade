@@ -143,18 +143,76 @@ export const registerUser = asyncHandler(async (req, res) => {
   });
 });
 
+/* ====================== LOGOUT ====================== */
 export const logoutUser = asyncHandler(async (req, res) => {
-  res.clearCookie('trustra_token');
+  res.clearCookie('trustra_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
+  });
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
-// Stub other functions
+/* ====================== DEPRECATED LEGACY LOGIN ====================== */
 export const loginUser = asyncHandler(async (req, res) => {
-  res.status(410).json({ message: 'Use /establish-session instead' });
+  res.status(410).json({ success: false, message: 'Use /establish-session instead' });
 });
 
-export const getUserProfile = asyncHandler(async (req, res) => { /* implement */ });
-export const updateUserProfile = asyncHandler(async (req, res) => { /* implement */ });
-export const forgotPassword = asyncHandler(async (req, res) => { /* implement */ });
-export const resetPassword = asyncHandler(async (req, res) => { /* implement */ });
-export const refreshSession = asyncHandler(async (req, res) => { /* implement */ });
+/* ====================== GET USER PROFILE ====================== */
+export const getUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User profile not found' });
+  }
+
+  res.status(200).json({
+    success: true,
+    user: user.getPublicProfile(),
+  });
+});
+
+/* ====================== UPDATE USER PROFILE ====================== */
+export const updateUserProfile = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user._id);
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: 'User profile not found' });
+  }
+
+  if (req.body.name) user.name = req.body.name;
+  if (req.body.phoneNumber) user.phoneNumber = req.body.phoneNumber;
+
+  const updatedUser = await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Profile updated successfully',
+    user: updatedUser.getPublicProfile(),
+  });
+});
+
+/* ====================== FORGOT PASSWORD ====================== */
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+
+  const user = await User.findOne({ email: email.trim().toLowerCase() });
+  if (!user) {
+    return res.status(200).json({ success: true, message: 'If that email exists, a reset link has been sent.' });
+  }
+
+  // Implementation logic for token generation would go here
+  res.status(501).json({ success: false, message: 'Password recovery module pending configuration.' });
+});
+
+/* ====================== RESET PASSWORD ====================== */
+export const resetPassword = asyncHandler(async (req, res) => {
+  res.status(501).json({ success: false, message: 'Password reset execution link module pending configuration.' });
+});
+
+/* ====================== REFRESH SESSION ====================== */
+export const refreshSession = asyncHandler(async (req, res) => {
+  res.status(501).json({ success: false, message: 'Token refresh rotation layer pending configuration.' });
+});
