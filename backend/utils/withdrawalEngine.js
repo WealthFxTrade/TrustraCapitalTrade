@@ -12,8 +12,9 @@ if (!RPC || !MNEMONIC) {
   throw new Error('Missing critical deployment ETH configuration variables.');
 }
 
-const provider = new ethers.JsonRpcProvider(RPC);
-const wallet = ethers.Wallet.fromPhrase(MNEMONIC).connect(provider);
+// ETHERS V5 SPECIFIC COMPILATION ROUTING FIXES
+const provider = new ethers.providers.JsonRpcProvider(RPC);
+const wallet = ethers.Wallet.fromMnemonic(MNEMONIC).connect(provider);
 
 /**
  * ============================================================================
@@ -24,9 +25,10 @@ const sendETH = async ({ to, amount }) => {
   try {
     // Check wallet balance against transaction cost before broadcasting
     const balance = await provider.getBalance(wallet.address);
-    const parsedAmount = ethers.parseEther(amount.toString());
+    const parsedAmount = ethers.utils.parseEther(amount.toString());
 
-    if (balance < parsedAmount) {
+    // ETHERS V5 FIX: Use BigNumber .lt() method instead of native `<` operator
+    if (balance.lt(parsedAmount)) {
       throw new Error('Platform corporate hot wallet contains insufficient gas funds.');
     }
 
@@ -35,7 +37,7 @@ const sendETH = async ({ to, amount }) => {
       value: parsedAmount,
     });
 
-    // Wait for at least 1 confirmation block block height to settle transaction state securely
+    // Wait for at least 1 confirmation block height to settle transaction state securely
     await tx.wait(1);
 
     console.log('✅ ETH BROADCAST COMPLETED SECURELY:', tx.hash);
@@ -200,4 +202,3 @@ export const processWithdrawal = async (txId, io = null) => {
     throw new ApiError(500, `Automated checkout failed: ${err.message}`);
   }
 };
-

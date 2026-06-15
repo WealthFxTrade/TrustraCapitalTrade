@@ -112,6 +112,7 @@ export default function Dashboard() {
 
     const userId = user._id || user.id;
 
+    // Fixed up runtime variable lookup from custom SOCKET_URL environment parameter
     socketRef.current = io(SOCKET_URL, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
@@ -138,8 +139,10 @@ export default function Dashboard() {
         }));
       }
 
-      if (data.message) toast.success(data.message, { icon: '💰' });
-
+      if (data.message) {
+        toast.success(data.message, { icon: '💰' });
+      }
+      
       setLastUpdated(new Date());
 
       if (data.fullRefresh) {
