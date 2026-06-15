@@ -5,14 +5,14 @@ import Transaction from '../models/Transaction.js';
 
 /**
  * 📊 ROI RATES (Annual %)
- * These are the official target annual rates per tier.
+ * Synchronized perfectly with frontend Tier structures.
  */
 const ROI_ANNUAL_RATES = {
-  'Tier I: Entry': 6,
-  'Tier II: Core': 10.5,
-  'Tier III: Prime': 13.5,
+  'Tier I: Entry': 7,
+  'Tier II: Core': 10,
+  'Tier III: Prime': 14,
   'Tier IV: Institutional': 18,
-  'Tier V: Sovereign': 24,
+  'Tier V: Sovereign': 22,
 };
 
 /**
@@ -22,13 +22,13 @@ export const calculateProfit = ({
   amount = 0,
   plan = 'Tier III: Prime',
   durationMonths = 12,
-  compounding = 'daily'   // daily, monthly, yearly
+  compounding = 'none'   // daily, monthly, none (simple interest matching layout)
 }) => {
   if (amount <= 0) {
     throw new Error('Investment amount must be greater than zero');
   }
 
-  const annualRate = ROI_ANNUAL_RATES[plan] || 13.5;
+  const annualRate = ROI_ANNUAL_RATES[plan] || 14;
   const rate = annualRate / 100;
 
   let finalAmount = amount;
@@ -37,18 +37,23 @@ export const calculateProfit = ({
 
   if (compounding === 'daily') {
     const dailyRate = rate / 365;
-    finalAmount = amount * Math.pow(1 + dailyRate, durationMonths * 30.4167); // avg days in month
-  } 
+    finalAmount = amount * Math.pow(1 + dailyRate, durationMonths * 30.4167);
+  }
   else if (compounding === 'monthly') {
     const monthlyRate = rate / 12;
     finalAmount = amount * Math.pow(1 + monthlyRate, durationMonths);
-  } 
+  }
   else {
-    // yearly
-    finalAmount = amount * Math.pow(1 + rate, durationMonths / 12);
+    // Simple Interest Payout Strategy (Matches live distribution engine mechanics)
+    const yearFraction = durationMonths / 12;
+    totalProfit = amount * rate * yearFraction;
+    finalAmount = amount + totalProfit;
   }
 
-  totalProfit = finalAmount - amount;
+  if (compounding !== 'none') {
+    totalProfit = finalAmount - amount;
+  }
+  
   monthlyProfit = totalProfit / durationMonths;
 
   return {
@@ -66,6 +71,7 @@ export const calculateProfit = ({
 
 /**
  * 🪐 CORE DAILY YIELD DISTRIBUTION
+ * Executed via cron pattern inside global isolated thread layer.
  */
 export const runYieldDistribution = async (io) => {
   const sessionDate = new Date().toISOString().split('T')[0];
@@ -89,9 +95,9 @@ export const runYieldDistribution = async (io) => {
     for (const user of users) {
       try {
         const principal = user.balances?.INVESTED || 0;
-        if (principal <= 100) continue; // Skip dust
+        if (principal <= 100) continue; // Skip account dust thresholds
 
-        // Idempotency check
+        // Idempotency execution protection guard checks
         const alreadyPaid = await Transaction.exists({
           user: user._id,
           type: 'yield',
@@ -100,13 +106,13 @@ export const runYieldDistribution = async (io) => {
 
         if (alreadyPaid) continue;
 
-        const annualRate = ROI_ANNUAL_RATES[user.activePlan] || 13.5;
+        const annualRate = ROI_ANNUAL_RATES[user.activePlan] || 14;
         const dailyRate = annualRate / 365 / 100;
         const yieldAmount = Number((principal * dailyRate).toFixed(2));
 
         if (yieldAmount <= 0) continue;
 
-        // Atomic update
+        // Atomic multi-field asset updates
         const updatedUser = await User.findByIdAndUpdate(
           user._id,
           {
@@ -120,7 +126,7 @@ export const runYieldDistribution = async (io) => {
 
         if (!updatedUser) continue;
 
-        // Record transaction
+        // Record double-entry transaction trail event logs
         await Transaction.create({
           user: user._id,
           type: 'yield',
@@ -137,7 +143,7 @@ export const runYieldDistribution = async (io) => {
           }
         });
 
-        // Real-time update
+        // Broadcast downstream context changes securely to client frames
         if (io) {
           io.to(user._id.toString()).emit('balanceUpdate', {
             balances: {
@@ -145,7 +151,7 @@ export const runYieldDistribution = async (io) => {
               TOTAL_PROFIT: updatedUser.balances.TOTAL_PROFIT,
               INVESTED: updatedUser.balances.INVESTED,
             },
-            message: `💰 Daily Yield Credited: +€${yieldAmount}`
+            message: `💰 Daily Yield Credited: +€${yieldAmount.toLocaleString('de-DE', { minimumFractionDigits: 2 })}`
           });
         }
 
