@@ -1,42 +1,29 @@
 // frontend/src/constants/api.js
 
 export const getApiBaseUrl = () => {
-  // 1. If running on Vercel production/preview, use relative routing to leverage your vercel.json rewrites
-  if (import.meta.env.PROD && !import.meta.env.VITE_API_URL?.startsWith('http')) {
-    return '/api';
+  // Point directly to Render in production to bypass Vercel rewrite issues
+  if (import.meta.env.PROD) {
+    return 'https://trustracapitaltrade-backend.onrender.com/api';
   }
 
-  // 2. Respect explicit environment variables if present
+  // Respect explicit environment variables if present in dev
   if (import.meta.env.VITE_API_URL) {
-    const base = import.meta.env.VITE_API_URL.endsWith('/')
+    return import.meta.env.VITE_API_URL.endsWith('/')
       ? import.meta.env.VITE_API_URL.slice(0, -1)
       : import.meta.env.VITE_API_URL;
-    return base;
   }
 
-  // 3. Strict local development fallback matching your backend express config
-  if (import.meta.env.DEV) {
-    return 'http://localhost:10000/api';
-  }
-
-  return '/api';
+  // Strict local development fallback
+  return 'http://localhost:10000/api';
 };
 
 export const getSocketUrl = () => {
-  // 1. Prioritize explicitly defined socket environment variables
   if (import.meta.env.VITE_SOCKET_URL) {
     return import.meta.env.VITE_SOCKET_URL.endsWith('/')
       ? import.meta.env.VITE_SOCKET_URL.slice(0, -1)
       : import.meta.env.VITE_SOCKET_URL;
   }
-
-  // 2. WebSockets cannot use server-side rewrites; they must connect directly to the backend
-  if (import.meta.env.PROD) {
-    return 'https://trustracapitaltrade-backend.onrender.com';
-  }
-
-  // 3. Local Development fallback
-  return 'http://localhost:10000';
+  return 'https://trustracapitaltrade-backend.onrender.com';
 };
 
 export const SOCKET_URL = getSocketUrl();
@@ -45,9 +32,10 @@ export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: '/auth/register',
     LOGIN: '/auth/login',
-    ESTABLISH_SESSION: '/auth/establish-session',
-    AUTHORIZE_SESSION: '/auth/authorize-session',
-    VERIFY_SESSION: '/auth/verify-session',
+    // FIX: Remapped to point to your standard login endpoint
+    ESTABLISH_SESSION: '/auth/login', 
+    AUTHORIZE_SESSION: '/auth/login',
+    VERIFY_SESSION: '/auth/profile', 
     LOGOUT: '/auth/logout',
     PROFILE: '/auth/profile',
     REFRESH: '/auth/refresh',

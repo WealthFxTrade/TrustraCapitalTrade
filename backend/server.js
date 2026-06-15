@@ -83,7 +83,7 @@ app.use(requestTimeout(90000));
 
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-/* ================= CORS (FIXED + SAFE) ================= */
+/* ================= CORS (FIXED + SAFE EXPLICIT WHITELIST) ================= */
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -93,15 +93,8 @@ const allowedOrigins = [
 ];
 
 const isAllowedOrigin = (origin) => {
-  if (!origin) return true;
-
-  return (
-    allowedOrigins.includes(origin) ||
-    origin.includes('vercel.app') || // FIX: allow preview deployments
-    origin.startsWith('http://192.168.') ||
-    origin.startsWith('http://172.') ||
-    origin.startsWith('http://10.')
-  );
+  if (!origin) return true; // Allow server-to-server or development testing tools like Postman
+  return allowedOrigins.includes(origin);
 };
 
 app.use(
@@ -110,7 +103,7 @@ app.use(
       if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
-      return callback(null, false); // FIX: avoid crashing server
+      return callback(null, false); // Avoid crashing server, explicitly deny unknown sources
     },
     credentials: true,
   })
