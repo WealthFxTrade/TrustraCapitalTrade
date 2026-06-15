@@ -1,12 +1,10 @@
 // frontend/src/constants/api.js
 
 export const getApiBaseUrl = () => {
-  // 1. Force direct absolute connection to Render to completely bypass broken Vercel proxy rewrites
   if (import.meta.env.PROD) {
     return 'https://trustracapitaltrade-backend.onrender.com/api';
   }
 
-  // 2. Respect explicit environment variables if present in development
   if (import.meta.env.VITE_API_URL) {
     const base = import.meta.env.VITE_API_URL.endsWith('/')
       ? import.meta.env.VITE_API_URL.slice(0, -1)
@@ -14,7 +12,6 @@ export const getApiBaseUrl = () => {
     return base;
   }
 
-  // 3. Strict local development fallback matching your backend express configuration
   if (import.meta.env.DEV) {
     return 'http://localhost:10000/api';
   }
@@ -23,19 +20,16 @@ export const getApiBaseUrl = () => {
 };
 
 export const getSocketUrl = () => {
-  // 1. Prioritize explicitly defined socket environment variables
   if (import.meta.env.VITE_SOCKET_URL) {
     return import.meta.env.VITE_SOCKET_URL.endsWith('/')
       ? import.meta.env.VITE_SOCKET_URL.slice(0, -1)
       : import.meta.env.VITE_SOCKET_URL;
   }
 
-  // 2. WebSockets cannot use server-side rewrites; they must connect directly to the backend
   if (import.meta.env.PROD) {
     return 'https://trustracapitaltrade-backend.onrender.com';
   }
 
-  // 3. Local Development fallback
   return 'http://localhost:10000';
 };
 
@@ -45,9 +39,9 @@ export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: '/auth/register',
     LOGIN: '/auth/login',
-    // RE-MAPPED TO DIRECTLY USE YOUR EXPRESS /login AND /profile EXPORT ROUTERS
-    ESTABLISH_SESSION: '/auth/login',
-    AUTHORIZE_SESSION: '/auth/login',
+    // LOCKED TO EXACT ENDPOINT:
+    ESTABLISH_SESSION: '/auth/establish-session',
+    AUTHORIZE_SESSION: '/auth/establish-session',
     VERIFY_SESSION: '/auth/profile',
     LOGOUT: '/auth/logout',
     PROFILE: '/auth/profile',
