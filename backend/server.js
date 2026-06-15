@@ -83,7 +83,7 @@ app.use(requestTimeout(90000));
 
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-/* ================= CORS (FIXED + SAFE EXPLICIT WHITELIST) ================= */
+/* ================= CORS (FIXED + EXPLICIT PREFLIGHT) ================= */
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -97,19 +97,37 @@ const isAllowedOrigin = (origin) => {
   return allowedOrigins.includes(origin);
 };
 
+// 1. Core CORS configuration
 app.use(
   cors({
     origin: (origin, callback) => {
       if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
-      return callback(null, false); // Avoid crashing server, explicitly deny unknown sources
+      return callback(null, false); // Explicitly deny unknown sources safely
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Cookie'],
+    optionsSuccessStatus: 200,
   })
 );
 
-app.options('*', cors());
+// 2. Immediate Interceptor for OPTIONS requests to completely bypass preflight drops
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (isAllowedOrigin(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Cookie');
+  }
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 /* ================= SOCKET.IO (FIXED CORS MATCH) ================= */
 const io = new Server(server, {
