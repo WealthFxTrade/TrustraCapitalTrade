@@ -1,20 +1,14 @@
-/**
- * Trustra Capital Trade - Withdrawal Form Component
- * Fully unshortened, production-ready version with professional UI
- */
-
 import React, { useState, useEffect } from 'react';
 import api from '@/api/api';
 import toast from 'react-hot-toast';
-import { 
-  ArrowUpRight, ShieldCheck, Wallet, Zap, Info, 
-  Loader2, Lock, AlertTriangle, Fingerprint 
+import {
+  ArrowUpRight, ShieldCheck, Wallet, Zap, Info,
+  Loader2, Lock, AlertTriangle, Fingerprint
 } from 'lucide-react';
 
-export default function WithdrawalForm({ onSuccess }) {
+export default function WithdrawalForm({ balances = {}, onSuccess }) {
   const [formData, setFormData] = useState({
     amount: '',
-    asset: 'USDT',
     address: '',
     walletType: 'ROI' // ROI (Yield) or Principal (Main)
   });
@@ -22,30 +16,28 @@ export default function WithdrawalForm({ onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [availableBalance, setAvailableBalance] = useState(0);
 
-  // Fetch available balance when walletType changes
+  // Synchronize balance calculations based on structural keys from the database seed
   useEffect(() => {
-    const fetchLiquidity = async () => {
-      try {
-        const res = await api.get('/user/balances');
-        if (res.data?.success) {
-          const bals = res.data.balances || {};
-          const balance = formData.walletType === 'ROI' 
-            ? (bals.ROI || 0) 
-            : (bals.INVESTED || 0);
-          setAvailableBalance(Number(balance));
-        }
-      } catch (err) {
-        console.error("Balance Sync Interrupted");
-        toast.error("Unable to fetch current balance");
-      }
-    };
+    const b = balances || {};
+    const balance = formData.walletType === 'ROI'
+      ? (b.TOTAL_PROFIT || 0)
+      : (b.EUR || 0);
+    setAvailableBalance(Number(balance));
+  }, [formData.walletType, balances]);
 
-    fetchLiquidity();
-  }, [formData.walletType]);
+  // Helper function to auto-detect if user provided a Crypto Wallet Hash vs Bank IBAN
+  const detectAssetType = (addressString) => {
+    const cleanAddr = addressString.trim().toLowerCase();
+    if (!cleanAddr) return 'EUR';
+    // Match common crypto address formats (0x... for ETH/USDT, bc1... or 1/3... for BTC)
+    if (cleanAddr.startsWith('0x') || cleanAddr.startsWith('bc1') || /^[13][a-km-za-hj-np-z1-9]{25,34}$/.test(cleanAddr)) {
+      return 'USDT'; // Map to stable asset routing for crypto extractions
+    }
+    return 'EUR';
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     const numAmount = parseFloat(formData.amount);
 
     // ── PROTOCOL VALIDATION ──
@@ -61,34 +53,35 @@ export default function WithdrawalForm({ onSuccess }) {
       return toast.error("PROTOCOL REJECTION: Minimum extraction is €50");
     }
 
-    if (formData.asset !== 'EUR' && !formData.address) {
-      return toast.error("Please provide a valid destination wallet address");
+    if (!formData.address.trim()) {
+      return toast.error("Please provide a destination wallet address or SEPA IBAN");
     }
 
     setLoading(true);
     const toastId = toast.loading("Encrypting Withdrawal Signal...");
 
+    // Detect execution protocol routing path
+    const targetAsset = detectAssetType(formData.address);
+
     try {
       const payload = {
         amount: numAmount,
-        asset: formData.asset,
+        asset: targetAsset, 
         walletType: formData.walletType,
-        address: formData.address || null,
+        address: formData.address.trim(),
       };
 
       const res = await api.post('/user/withdrawal', payload);
 
       toast.success(
-        res.data.message || "Extraction Signal Queued Successfully", 
-        { 
+        res.data.message || "Extraction Signal Queued Successfully",
+        {
           id: toastId,
           style: { background: '#065f46', color: '#fff', fontSize: '10px', fontWeight: 'bold' }
         }
       );
 
-      // Reset form after success
       setFormData({ ...formData, amount: '', address: '' });
-
       if (onSuccess) onSuccess();
     } catch (err) {
       toast.error(
@@ -102,7 +95,6 @@ export default function WithdrawalForm({ onSuccess }) {
 
   return (
     <div className="max-w-xl mx-auto bg-[#0a0c10] rounded-[3rem] border border-white/5 shadow-2xl overflow-hidden relative group">
-      {/* Security Decoration */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-1/2 h-1 bg-emerald-500/20 blur-xl group-hover:bg-emerald-500/40 transition-all" />
 
       <div className="p-10 lg:p-12">
@@ -120,7 +112,7 @@ export default function WithdrawalForm({ onSuccess }) {
           <div className="text-right">
             <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-1">Node Liquidity</p>
             <p className="text-xl font-mono font-black text-white italic">
-              €{availableBalance.toLocaleString('de-DE')}
+              €{availableBalance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}
             </p>
           </div>
         </header>
@@ -143,9 +135,9 @@ export default function WithdrawalForm({ onSuccess }) {
                       : 'bg-black/40 border-white/5 text-gray-500 hover:border-emerald-500/30 hover:bg-white/5'
                   }`}
                 >
-                  {type} Vault
+                  {type === 'ROI' ? 'ROI Profit Vault' : 'Available Balance'}
                   <span className="text-[8px] opacity-60 font-bold italic lowercase">
-                    {type === 'ROI' ? 'yield accruals' : 'principal base'}
+                    {type === 'ROI' ? 'yield accruals' : 'withdrawable capital'}
                   </span>
                 </button>
               ))}
@@ -180,17 +172,17 @@ export default function WithdrawalForm({ onSuccess }) {
             </div>
           </div>
 
-          {/* Destination Address */}
+          {/* Destination Address / Bank Details Selector */}
           <div className="bg-black/40 p-8 rounded-[2.5rem] border border-white/5 focus-within:border-emerald-500/30 transition-all">
             <div className="flex justify-between items-center mb-4">
               <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest block">
-                Destination {formData.asset} Wallet
+                Destination Address / Bank IBAN
               </label>
               <Zap size={14} className="text-emerald-500 opacity-40 animate-pulse" />
             </div>
             <input
               type="text"
-              placeholder={`Enter high-integrity destination hash`}
+              placeholder="Enter external crypto wallet address or SEPA IBAN network layout"
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               className="w-full bg-transparent text-sm font-mono focus:outline-none text-emerald-400 placeholder-white/5 tracking-tighter"

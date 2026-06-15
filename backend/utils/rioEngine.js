@@ -53,7 +53,7 @@ export const calculateProfit = ({
   if (compounding !== 'none') {
     totalProfit = finalAmount - amount;
   }
-  
+
   monthlyProfit = totalProfit / durationMonths;
 
   return {
@@ -95,7 +95,7 @@ export const runYieldDistribution = async (io) => {
     for (const user of users) {
       try {
         const principal = user.balances?.INVESTED || 0;
-        if (principal <= 100) continue; // Skip account dust thresholds
+        if (principal < 100) continue; // Skip account dust thresholds (>= €100)
 
         // Idempotency execution protection guard checks
         const alreadyPaid = await Transaction.exists({
@@ -112,12 +112,12 @@ export const runYieldDistribution = async (io) => {
 
         if (yieldAmount <= 0) continue;
 
-        // Atomic multi-field asset updates
+        // FIXED: Increments `balances.ROI` to match dashboard expectation states, instead of orphan metrics tracking
         const updatedUser = await User.findByIdAndUpdate(
           user._id,
           {
             $inc: {
-              'balances.EUR': yieldAmount,
+              'balances.ROI': yieldAmount,
               'balances.TOTAL_PROFIT': yieldAmount,
             }
           },
@@ -143,13 +143,16 @@ export const runYieldDistribution = async (io) => {
           }
         });
 
-        // Broadcast downstream context changes securely to client frames
+        // FIXED: Broadcast updated structural properties matching frontend definitions exactly
         if (io) {
           io.to(user._id.toString()).emit('balanceUpdate', {
             balances: {
               EUR: updatedUser.balances.EUR,
+              ROI: updatedUser.balances.ROI,
               TOTAL_PROFIT: updatedUser.balances.TOTAL_PROFIT,
               INVESTED: updatedUser.balances.INVESTED,
+              BTC: updatedUser.balances.BTC,
+              ETH: updatedUser.balances.ETH
             },
             message: `💰 Daily Yield Credited: +€${yieldAmount.toLocaleString('de-DE', { minimumFractionDigits: 2 })}`
           });

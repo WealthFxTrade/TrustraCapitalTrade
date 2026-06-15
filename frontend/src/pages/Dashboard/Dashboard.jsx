@@ -1,8 +1,8 @@
-// src/pages/Dashboard/Dashboard.jsx
+// src/pages/Dashboard/Dashboard.jsx                                                            
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '@/context/AuthContext';
-import api, { API_ENDPOINTS } from '@/api/api';
+import api, { API_ENDPOINTS } from '@/api/api';                                                 
 import { SOCKET_URL } from '@/constants/api';
 import toast from 'react-hot-toast';
 
@@ -16,7 +16,7 @@ import {
   Loader2,
   RefreshCw,
   LayoutDashboard,
-  Wallet,
+  Wallet,                                                                                                                     
   ArrowUpCircle,
   History,
   User as UserIcon,
@@ -33,10 +33,11 @@ export default function Dashboard() {
 
   const [dashboardData, setDashboardData] = useState({
     principal: 0,
-    availableBalance: 0,
+    availableBalance: 0,                                                                                                          
     accruedROI: 0,
     btcBalance: 0,
     ethBalance: 0,
+    usdtBalance: 0,
     transactions: [],
   });
 
@@ -50,6 +51,7 @@ export default function Dashboard() {
     accruedROI,
     btcBalance,
     ethBalance,
+    usdtBalance,
     transactions,
   } = dashboardData;
 
@@ -65,27 +67,35 @@ export default function Dashboard() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 45000);
 
-      const res = await api.get(API_ENDPOINTS.USER.STATS, {
+      // Secure target route declaration backup path string fallbacks
+      const targetEndpoint = API_ENDPOINTS?.USER?.STATS || '/users/stats';
+      const res = await api.get(targetEndpoint, {
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
-      if (res.data?.success) {
-        const data = res.data;
+      // Aggressive data parsing layout layers to guarantee object capture
+      const payload = res.data;
+      
+      if (payload) {
+        // Unify root payload or standard wrapper arrays nested beneath data properties
+        const nodeData = payload.success ? payload : (payload.data || payload);
+        const extractedBalances = nodeData.balances || nodeData.user?.balances || {};
 
         setDashboardData({
-          principal: Number(data.principal || data.balances?.INVESTED || 0),
-          availableBalance: Number(data.availableBalance || data.balances?.EUR || 0),
-          accruedROI: Number(data.accruedROI || data.balances?.TOTAL_PROFIT || 0),
-          btcBalance: Number(data.btcBalance || data.balances?.BTC || 0),
-          ethBalance: Number(data.ethBalance || data.balances?.ETH || 0),
-          transactions: Array.isArray(data.transactions) ? data.transactions : [],
+          principal: Number(nodeData.principal ?? nodeData.invested ?? extractedBalances.INVESTED ?? 0),
+          availableBalance: Number(nodeData.availableBalance ?? nodeData.available ?? extractedBalances.EUR ?? 0),
+          accruedROI: Number(nodeData.accruedROI ?? nodeData.totalProfit ?? extractedBalances.TOTAL_PROFIT ?? extractedBalances.ROI ?? 0),
+          btcBalance: Number(nodeData.btcBalance ?? extractedBalances.BTC ?? 0),
+          ethBalance: Number(nodeData.ethBalance ?? extractedBalances.ETH ?? 0),
+          usdtBalance: Number(nodeData.usdtBalance ?? extractedBalances.USDT ?? 0),
+          transactions: Array.isArray(nodeData.transactions) ? nodeData.transactions : (nodeData.user?.transactions || []),
         });
 
         setLastUpdated(new Date());
       } else {
-        throw new Error(res.data?.message || 'Failed to load dashboard data');
+        throw new Error('Empty synchronization stream parsed from backend application endpoint.');
       }
     } catch (err) {
       console.error("Dashboard Sync Error:", err);
@@ -112,7 +122,6 @@ export default function Dashboard() {
 
     const userId = user._id || user.id;
 
-    // Fixed up runtime variable lookup from custom SOCKET_URL environment parameter
     socketRef.current = io(SOCKET_URL, {
       withCredentials: true,
       transports: ['websocket', 'polling'],
@@ -134,7 +143,8 @@ export default function Dashboard() {
           availableBalance: Number(data.balances.EUR ?? prev.availableBalance),
           btcBalance: Number(data.balances.BTC ?? prev.btcBalance),
           ethBalance: Number(data.balances.ETH ?? prev.ethBalance),
-          accruedROI: Number(data.balances.TOTAL_PROFIT ?? prev.accruedROI),
+          usdtBalance: Number(data.balances.USDT ?? prev.usdtBalance),
+          accruedROI: Number(data.balances.TOTAL_PROFIT ?? data.balances.ROI ?? prev.accruedROI),
           principal: Number(data.balances.INVESTED ?? prev.principal),
         }));
       }
@@ -142,7 +152,7 @@ export default function Dashboard() {
       if (data.message) {
         toast.success(data.message, { icon: '💰' });
       }
-      
+
       setLastUpdated(new Date());
 
       if (data.fullRefresh) {
@@ -150,7 +160,7 @@ export default function Dashboard() {
       }
     });
 
-    socketRef.current.on('connect_error', (err) => {
+    socketRef.current.on('connect_error', (err) => {                                                                                  
       console.warn('Socket connection error:', err.message);
     });
 
@@ -159,11 +169,11 @@ export default function Dashboard() {
     });
 
     return () => {
-      if (socketRef.current) {
+      if (socketRef.current) {                                                                          
         socketRef.current.disconnect();
-        socketRef.current = null;
+        socketRef.current = null;                                                                     
       }
-    };
+    };                                                                                                
   }, [user, syncNodeData]);
 
   // ====================== INITIAL LOAD + AUTO REFRESH ======================
@@ -178,53 +188,55 @@ export default function Dashboard() {
 
     return () => {
       if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        clearInterval(intervalRef.current);                                                                           
       }
     };
   }, [user, syncNodeData]);
 
   // ====================== COMPUTED BALANCES ======================
-  const currentBalances = useMemo(() => ({
+  const currentBalances = useMemo(() => ({                                                                                         
     EUR: availableBalance,
     ROI: accruedROI,
+    TOTAL_PROFIT: accruedROI,                                                                                                     
     BTC: btcBalance,
     ETH: ethBalance,
+    USDT: usdtBalance,
     INVESTED: principal,
-  }), [availableBalance, accruedROI, btcBalance, ethBalance, principal]);
+  }), [availableBalance, accruedROI, btcBalance, ethBalance, usdtBalance, principal]);
 
   const tabs = useMemo(() => [
-    { id: 'Invest',    icon: LayoutDashboard, label: 'Invest' },
-    { id: 'Deposit',   icon: Wallet,          label: 'Deposit' },
-    { id: 'Withdraw',  icon: ArrowUpCircle,   label: 'Withdraw' },
-    { id: 'Ledger',    icon: History,         label: 'Ledger' },
-    { id: 'Profile',   icon: UserIcon,        label: 'Profile' },
+    { id: 'Invest',     icon: LayoutDashboard, label: 'Invest' },
+    { id: 'Deposit',    icon: Wallet,          label: 'Deposit' },
+    { id: 'Withdrawal', icon: ArrowUpCircle,   label: 'Withdraw' },
+    { id: 'Ledger',     icon: History,         label: 'Ledger' },
+    { id: 'Profile',    icon: UserIcon,        label: 'Profile' },
   ], []);
-
+                                                                                                  
   const renderTabContent = () => {
     if (loading && transactions.length === 0) {
-      return (
+      return (                                                                                                            
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 className="w-12 h-12 animate-spin text-emerald-500 mb-4" />
           <p className="text-gray-400">Synchronizing with Blockchain Nodes...</p>
         </div>
       );
     }
-
+                                                                                                    
     switch (activeTab) {
-      case 'Invest':    return <Invest balances={currentBalances} refreshBalances={syncNodeData} />;
-      case 'Deposit':   return <Deposit refreshBalances={syncNodeData} />;
-      case 'Withdraw':  return <Withdrawal balances={currentBalances} refreshBalances={syncNodeData} />;
-      case 'Ledger':    return <Ledger transactions={transactions} refreshBalances={syncNodeData} />;
-      case 'Profile':   return <Profile balances={currentBalances} refreshSession={refreshSession} />;
-      default:          return <div className="p-12 text-center text-gray-500">Tab content not available</div>;
-    }
+      case 'Invest':     return <Invest balances={currentBalances} refreshBalances={syncNodeData} />;
+      case 'Deposit':    return <Deposit refreshBalances={syncNodeData} />;
+      case 'Withdrawal': return <Withdrawal balances={currentBalances} refreshBalances={syncNodeData} />;
+      case 'Ledger':     return <Ledger transactions={transactions} refreshBalances={syncNodeData} />;
+      case 'Profile':    return <Profile balances={currentBalances} refreshSession={refreshSession} />;                                                                                                               
+      default:           return <div className="p-12 text-center text-gray-500">Tab content not available</div>;
+    }                                                                                             
   };
 
   // Global Error State
   if (error && !loading) {
     return (
       <div className="min-h-screen bg-[#020408] flex items-center justify-center p-6">
-        <div className="text-center max-w-md">
+        <div className="text-center max-w-md">                                                                             
           <p className="text-6xl mb-6">⚠️</p>
           <h2 className="text-2xl font-bold mb-4">Dashboard Sync Failed</h2>
           <p className="text-red-400 mb-8">{error}</p>
@@ -232,17 +244,17 @@ export default function Dashboard() {
             onClick={() => syncNodeData(true)}
             className="px-8 py-4 bg-white text-black font-bold rounded-2xl flex items-center gap-3 mx-auto hover:bg-gray-200 transition-all active:scale-95"
           >
-            <RefreshCw className="w-5 h-5" /> Retry Connection
+            <RefreshCw className="w-5 h-5" /> Retry Connection                                                                            
           </button>
         </div>
-      </div>
+      </div>                                                                                               
     );
   }
 
-  return (
+  return (                                                                                                            
     <div className="min-h-screen bg-[#020408] text-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Header */}                                                                                                  
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
@@ -261,17 +273,17 @@ export default function Dashboard() {
             Refresh
           </button>
         </div>
-
+                                                                                                    
         {/* Balance Overview Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
           <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Available</p>
-            <p className="text-3xl font-black mt-2">€{availableBalance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+            <p className="text-3xl font-black mt-2">€{availableBalance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>                                                                                                 
           </div>
 
           <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
             <p className="text-xs font-bold text-emerald-500 uppercase tracking-widest">Total Profit</p>
-            <p className="text-3xl font-black text-emerald-400 mt-2">€{accruedROI.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
+            <p className="text-3xl font-black text-emerald-400 mt-2">€{accruedROI.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>                                                                                              
           </div>
 
           <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
@@ -279,21 +291,21 @@ export default function Dashboard() {
             <p className="text-3xl font-black mt-2">€{principal.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
           </div>
 
-          <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
+          <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">                                                             
             <p className="text-xs font-bold text-orange-500 uppercase tracking-widest">Bitcoin</p>
-            <p className="text-3xl font-black mt-2">{btcBalance.toFixed(8)} BTC</p>
+            <p className="text-3xl font-black mt-2">{btcBalance.toFixed(8)} BTC</p>                                                      
           </div>
 
           <div className="bg-[#0a0c10] border border-white/10 rounded-3xl p-6">
             <p className="text-xs font-bold text-blue-500 uppercase tracking-widest">Ethereum</p>
             <p className="text-3xl font-black mt-2">{ethBalance.toFixed(8)} ETH</p>
-          </div>
+          </div>                                                                                                                     
         </div>
 
         {/* Tab Navigation */}
         <div className="flex overflow-x-auto gap-2 mb-8 pb-3 no-scrollbar border-b border-white/10">
           {tabs.map((tab) => {
-            const Icon = tab.icon;
+            const Icon = tab.icon;                                                                                                          
             return (
               <button
                 key={tab.id}
@@ -306,8 +318,8 @@ export default function Dashboard() {
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
-              </button>
-            );
+              </button>                                                                                                                                                                                                     
+            );                                                                                                                              
           })}
         </div>
 

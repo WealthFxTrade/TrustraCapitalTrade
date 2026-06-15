@@ -85,20 +85,29 @@ export default function LandingPage() {
   useEffect(() => {
     if (!selectedPlan) return;
 
-    if (!amount || amount <= 0) {
+    // FIXED: Support empty inputs during live editing instead of throwing immediate structural errors
+    if (amount === '' || amount === 0) {
       setValidationError('Enter a valid investment amount');
       setResult(null);
       return;
     }
 
-    if (amount < selectedPlan.min) {
-      setValidationError(`Minimum investment for ${selectedPlan.name} is €${selectedPlan.min.toLocaleString()}`);
+    const numericAmount = Number(amount);
+
+    if (isNaN(numericAmount) || numericAmount < 0) {
+      setValidationError('Enter a valid investment amount');
+      setResult(null);
+      return;
+    }
+
+    if (numericAmount < selectedPlan.min) {
+      setValidationError(`Minimum investment for ${selectedPlan.name} is €${selectedPlan.min.toLocaleString('de-DE')}`);
       setResult(null);
       return;
     }
 
     setValidationError(null);
-    const calc = calculateSimpleROI(amount, selectedPlan.roi, 1);
+    const calc = calculateSimpleROI(numericAmount, selectedPlan.roi, 1);
 
     setResult({
       monthly: calc.monthly.toFixed(2),
@@ -129,9 +138,6 @@ export default function LandingPage() {
     });
   };
 
-  // -----------------------------
-  // INIT CHECK
-  // -----------------------------
   if (!initialized) {
     return (
       <div className="min-h-screen bg-[#05070a] flex items-center justify-center text-emerald-500">
@@ -157,7 +163,7 @@ export default function LandingPage() {
             <a href="#calculator" className="hover:text-emerald-400 transition-colors">ROI Calculator</a>
 
             <span className="text-emerald-400 font-medium">
-              BTC €{btcPrice ? btcPrice.toLocaleString() : '--'}
+              BTC €{btcPrice ? btcPrice.toLocaleString('de-DE') : '--'}
               {loadingPrice && <span className="animate-pulse ml-1">↻</span>}
             </span>
 
@@ -234,7 +240,7 @@ export default function LandingPage() {
                 type="number"
                 value={amount}
                 min="100"
-                onChange={(e) => setAmount(Number(e.target.value))}
+                onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
                 className="w-full bg-black border border-white/10 rounded-2xl px-6 py-4 text-2xl focus:border-emerald-500 outline-none transition-colors"
               />
             </div>
@@ -244,10 +250,10 @@ export default function LandingPage() {
               <select
                 value={selectedPlanId}
                 onChange={(e) => setSelectedPlanId(e.target.value)}
-                className="w-full bg-black border border-white/10 rounded-2xl px-6 py-4 text-lg focus:border-emerald-500 outline-none transition-colors appearance-none"
+                className="w-full bg-black border border-white/10 rounded-2xl px-6 py-4 text-lg focus:border-emerald-500 outline-none transition-colors appearance-none text-white"
               >
                 {PLANS.map(p => (
-                  <option key={p.id} value={p.id}>
+                  <option key={p.id} value={p.id} className="bg-black text-white">
                     {p.name} — {p.roi}% Target Return
                   </option>
                 ))}
@@ -276,7 +282,7 @@ export default function LandingPage() {
                   <p className="text-emerald-400 text-xs uppercase tracking-widest font-bold mb-2">Projected Returns — {result.plan}</p>
                   <p className="text-4xl font-black text-white">€{Number(result.monthly).toLocaleString('de-DE', { minimumFractionDigits: 2 })} <span className="text-base font-normal text-gray-500">/ month</span></p>
                   <p className="text-xl text-gray-300 mt-1">€{Number(result.yearly).toLocaleString('de-DE', { minimumFractionDigits: 2 })} / year</p>
-                  
+
                   <div className="mt-4 pt-4 border-t border-emerald-500/10">
                     <p className="text-emerald-400 font-medium">Total Yield over 12 months: <span className="font-bold text-white">€{Number(result.total).toLocaleString('de-DE', { minimumFractionDigits: 2 })}</span></p>
                   </div>
@@ -305,7 +311,7 @@ export default function LandingPage() {
 
               <div>
                 <p className="text-sm text-gray-500 border-t border-white/5 pt-4">
-                  Minimum Capital: <span className="text-white font-semibold">€{plan.min.toLocaleString()}</span>
+                  Minimum Capital: <span className="text-white font-semibold">€{plan.min.toLocaleString('de-DE')}</span>
                 </p>
 
                 <button
@@ -337,7 +343,7 @@ export default function LandingPage() {
 
       {/* FOOTER */}
       <footer className="text-center text-gray-600 py-12 border-t border-white/5 text-sm">
-        © {new Date().getFullYear()} Trustra Capital • Institutional Asset Management Engine
+        © 2026 Trustra Capital • Institutional Asset Management Engine
       </footer>
 
     </div>

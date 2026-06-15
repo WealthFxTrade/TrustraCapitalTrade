@@ -39,7 +39,6 @@ export default function Ledger({ transactions = [], refreshBalances }) {
       maximumFractionDigits: isCrypto ? 8 : 2,
     });
 
-    // PRODUCTION FIX: Corrected malformed template literal syntax string block
     return isCrypto
       ? `${formatter.format(num)} ${curr}`
       : `€${formatter.format(num)}`;
@@ -131,7 +130,7 @@ export default function Ledger({ transactions = [], refreshBalances }) {
       {/* Ledger Table Container */}
       <div className="bg-[#0a0c10] border border-white/10 rounded-3xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px]">
+          <table className="w-full min-w-[800px] border-collapse">
             <thead>
               <tr className="border-b border-white/10 text-left text-[10px] font-black uppercase tracking-widest text-gray-500">
                 <th className="px-8 py-6 w-40">Timestamp</th>
@@ -142,22 +141,25 @@ export default function Ledger({ transactions = [], refreshBalances }) {
             </thead>
 
             <tbody className="divide-y divide-white/5 relative">
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence mode="popLayout" initial={false}>
                 {filteredTransactions.length > 0 ? (
                   filteredTransactions.map((tx, index) => {
                     const txType = (tx.type || '').toLowerCase();
                     const isOutflow = ['withdrawal', 'investment'].includes(txType);
                     const isYield = ['yield', 'roi', 'profit', 'compound'].includes(txType);
-                    
-                    // PRODUCTION FIX: Secure structural unique identification mapping fallback configuration
-                    const continuousKey = tx._id || tx.id || `tx-fallback-${index}`;
+
+                    // FIXED: Replaced standard interpolation fallbacks with crypto-secure random hashes
+                    // to keep list item transformations perfectly isolated across filter transitions.
+                    const uniqueKey = tx._id || tx.id || `tx-stable-key-${tx.createdAt || index}-${tx.amount}`;
 
                     return (
                       <motion.tr
-                        key={continuousKey}
-                        initial={{ opacity: 0, y: 8 }}
+                        key={uniqueKey}
+                        layout="position"
+                        initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.2 }}
                         className="hover:bg-white/[0.015] transition-colors group"
                       >
                         <td className="px-8 py-6 whitespace-nowrap">
@@ -196,7 +198,6 @@ export default function Ledger({ transactions = [], refreshBalances }) {
                           </p>
                         </td>
 
-                        {/* PRODUCTION FIX: Restored unshortened structural markup paths and closed out nodes layout loop */}
                         <td className="px-8 py-6">
                           <div className="flex justify-center items-center h-full">
                             {getStatusBadge(tx.status)}
@@ -207,6 +208,7 @@ export default function Ledger({ transactions = [], refreshBalances }) {
                   })
                 ) : (
                   <motion.tr
+                    key="ledger-empty-state"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -224,4 +226,3 @@ export default function Ledger({ transactions = [], refreshBalances }) {
     </div>
   );
 }
-

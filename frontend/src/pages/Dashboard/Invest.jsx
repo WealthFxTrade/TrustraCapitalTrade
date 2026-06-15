@@ -1,41 +1,45 @@
 // src/pages/Dashboard/Invest.jsx
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Calculator } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import api, { API_ENDPOINTS } from '@/api/api';
 import toast from 'react-hot-toast';
 import { calculateProfit } from '@/utils/investmentCalculator';
 
+// FIXED: Synchronized with identical Landing Page calculations & tiers
 const INVESTMENT_PLANS = [
-  { name: 'Tier I: Entry',       min: 100,   roi: '6–9%' },
-  { name: 'Tier II: Core',       min: 1000,  roi: '9–12%' },
-  { name: 'Tier III: Prime',     min: 5000,  roi: '12–16%' },
-  { name: 'Tier IV: Institutional', min: 15000, roi: '16–20%' },
-  { name: 'Tier V: Sovereign',   min: 50000, roi: '20–25%' },
+  { name: 'Tier I: Entry',           min: 100,    roi: '7%' },
+  { name: 'Tier II: Core',           min: 1000,   roi: '10%' },
+  { name: 'Tier III: Prime',          min: 5000,   roi: '14%' },
+  { name: 'Tier IV: Institutional', min: 15000, roi: '18%' },
+  { name: 'Tier V: Sovereign',     min: 50000, roi: '22%' },
 ];
 
 export default function Invest({ balances = {}, refreshBalances }) {
   const [loading, setLoading] = useState(false);
-  const [selectedPlanForCalc, setSelectedPlanForCalc] = useState(null);
 
   const availableEUR = Number(balances?.EUR || 0);
   const accruedProfit = Number(balances?.ROI || 0);
   const principal = Number(balances?.INVESTED || 0);
 
-  // Calculate realistic returns for selected plan
-  const getPlanProjection = (planName) => {
-    if (!planName) return null;
-    return calculateProfit({
-      amount: 10000,           // Example base amount for display
-      plan: planName,
-      durationMonths: 12,
-      compounding: 'daily'
-    });
+  const getPlanProjection = (plan) => {
+    if (!plan || !calculateProfit) return null;
+    try {
+      return calculateProfit({
+        amount: plan.min,
+        plan: plan.name,
+        durationMonths: 12,
+        compounding: 'daily'
+      });
+    } catch (e) {
+      console.warn("Calculation helper skipped:", e);
+      return null;
+    }
   };
 
   const handleInvest = async (plan) => {
     if (availableEUR < plan.min) {
-      toast.error(`Minimum investment for \( {plan.name} is € \){plan.min.toLocaleString('de-DE')}`);
+      toast.error(`Minimum investment for ${plan.name} is €${plan.min.toLocaleString('de-DE')}`);
       return;
     }
 
@@ -93,12 +97,12 @@ export default function Invest({ balances = {}, refreshBalances }) {
       <div className="grid md:grid-cols-3 gap-6">
         <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
           <p className="text-xs text-gray-500 uppercase tracking-widest">Available Capital</p>
-          <p className="text-5xl font-black mt-3">€{availableEUR.toLocaleString('de-DE')}</p>
+          <p className="text-5xl font-black mt-3">€{availableEUR.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
         </div>
 
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-3xl p-8">
           <p className="text-xs text-emerald-500 uppercase tracking-widest">Accrued Profit</p>
-          <p className="text-5xl font-black text-emerald-400 mt-3">€{accruedProfit.toLocaleString('de-DE')}</p>
+          <p className="text-5xl font-black text-emerald-400 mt-3">€{accruedProfit.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
 
           <button
             onClick={handleCompound}
@@ -111,7 +115,7 @@ export default function Invest({ balances = {}, refreshBalances }) {
 
         <div className="bg-white/5 border border-white/10 rounded-3xl p-8">
           <p className="text-xs text-gray-500 uppercase tracking-widest">Principal Invested</p>
-          <p className="text-5xl font-black mt-3">€{principal.toLocaleString('de-DE')}</p>
+          <p className="text-5xl font-black mt-3">€{principal.toLocaleString('de-DE', { minimumFractionDigits: 2 })}</p>
         </div>
       </div>
 
@@ -124,7 +128,7 @@ export default function Invest({ balances = {}, refreshBalances }) {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
           {INVESTMENT_PLANS.map((plan) => {
             const canActivate = availableEUR >= plan.min;
-            const projection = getPlanProjection(plan.name);
+            const projection = getPlanProjection(plan);
 
             return (
               <motion.div
@@ -144,9 +148,9 @@ export default function Invest({ balances = {}, refreshBalances }) {
 
                     {projection && (
                       <div className="pt-4 border-t border-white/10">
-                        <p className="text-xs text-gray-400">Projected (1 Year)</p>
+                        <p className="text-xs text-gray-400">Projected Base Return</p>
                         <p className="text-2xl font-bold text-emerald-400">
-                          +€{projection.monthlyProfit.toLocaleString('de-DE')} <span className="text-sm">/ month</span>
+                          +€{projection.monthlyProfit.toLocaleString('de-DE')} <span className="text-sm text-gray-500">/ mo</span>
                         </p>
                       </div>
                     )}
