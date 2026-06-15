@@ -1,19 +1,17 @@
 // frontend/src/constants/api.js
 
 export const getApiBaseUrl = () => {
-  // Point directly to Render in production to bypass Vercel rewrite issues
+  // Force direct absolute connection to Render to completely bypass broken Vercel rewrites
   if (import.meta.env.PROD) {
     return 'https://trustracapitaltrade-backend.onrender.com/api';
   }
 
-  // Respect explicit environment variables if present in dev
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL.endsWith('/')
       ? import.meta.env.VITE_API_URL.slice(0, -1)
       : import.meta.env.VITE_API_URL;
   }
 
-  // Strict local development fallback
   return 'http://localhost:10000/api';
 };
 
@@ -32,10 +30,10 @@ export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: '/auth/register',
     LOGIN: '/auth/login',
-    // FIX: Remapped to point to your standard login endpoint
-    ESTABLISH_SESSION: '/auth/login', 
-    AUTHORIZE_SESSION: '/auth/login',
-    VERIFY_SESSION: '/auth/profile', 
+    // MATCHES YOUR BACKEND ROUTE EXACTLY:
+    ESTABLISH_SESSION: '/auth/establish-session', 
+    AUTHORIZE_SESSION: '/auth/authorize-session',
+    VERIFY_SESSION: '/auth/verify-session',
     LOGOUT: '/auth/logout',
     PROFILE: '/auth/profile',
     REFRESH: '/auth/refresh',
