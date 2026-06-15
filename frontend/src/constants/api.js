@@ -1,61 +1,48 @@
-// src/constants/api.js
+// frontend/src/constants/api.js
 
-/* =========================
-   URL NORMALIZER
-========================= */
-const normalizeUrl = (url) => {
-  if (!url || typeof url !== 'string') return '';
-  return url.replace(/\/+$/, '').trim();
-};
-
-/* =========================
-   ENVIRONMENT
-========================= */
-const IS_DEV = import.meta.env.MODE === 'development';
-
-/* =========================
-   BASE API URL
-========================= */
 export const getApiBaseUrl = () => {
-  const envUrl = import.meta.env.VITE_API_URL;
-
-  if (envUrl) {
-    return normalizeUrl(envUrl);
+  // 1. Check your defined environment variable first (handles production & local dev smoothly)
+  if (import.meta.env.VITE_API_URL) {
+    const base = import.meta.env.VITE_API_URL.endsWith('/')
+      ? import.meta.env.VITE_API_URL.slice(0, -1)
+      : import.meta.env.VITE_API_URL;
+    return base;
   }
 
-  if (IS_DEV) {
+  // 2. Legacy fallback check in case VITE_API_BASE is ever used
+  if (import.meta.env.VITE_API_BASE) {
+    const base = import.meta.env.VITE_API_BASE.endsWith('/')
+      ? import.meta.env.VITE_API_BASE.slice(0, -1)
+      : import.meta.env.VITE_API_BASE;
+    return base.endsWith('/api') ? base : `${base}/api`;
+  }
+
+  // 3. Fallback if no env files are loaded/found
+  if (import.meta.env.DEV) {
     return 'http://localhost:10000/api';
   }
-
-  return 'https://trustracapitaltrade-backend.onrender.com/api';
+  return '/api';
 };
 
-/* =========================
-   SOCKET URL
-========================= */
 export const getSocketUrl = () => {
-  const envSocket = import.meta.env.VITE_SOCKET_URL;
-
-  if (envSocket) {
-    return normalizeUrl(envSocket);
+  // 1. Trust your .env environment configurations first
+  if (import.meta.env.VITE_SOCKET_URL) {
+    return import.meta.env.VITE_SOCKET_URL.endsWith('/')
+      ? import.meta.env.VITE_SOCKET_URL.slice(0, -1)
+      : import.meta.env.VITE_SOCKET_URL;
   }
 
-  if (IS_DEV) {
+  // 2. Fallback logic if environment files aren't read yet
+  if (import.meta.env.DEV) {
     return 'http://localhost:10000';
   }
-
-  return 'https://trustracapitaltrade-backend.onrender.com';
+  
+  const base = getApiBaseUrl();
+  return base.replace(/\/api$/, '');
 };
 
-/* =========================
-   FINAL RESOLVED VALUES
-========================= */
-export const API_BASE_URL = getApiBaseUrl();
 export const SOCKET_URL = getSocketUrl();
 
-/* =========================
-   API ENDPOINTS
-========================= */
 export const API_ENDPOINTS = {
   AUTH: {
     REGISTER: '/auth/register',
@@ -81,28 +68,19 @@ export const API_ENDPOINTS = {
   },
 
   ADMIN: {
-    USERS: '/admin/users',
     OVERVIEW: '/admin/overview',
+    HEALTH: '/admin/health',
     METRICS: '/admin/metrics',
+    USERS: '/admin/users',
+    KYC_PENDING: '/admin/kyc/pending',
+    DEPOSITS_PENDING: '/admin/deposits/pending',
+    WITHDRAWALS_PENDING: '/admin/withdrawals/pending',
   },
 
   PUBLIC: {
+    MARKET_DATA: '/public/market-data',
     PRICES: '/public/prices',
   },
 
   HEALTH: '/health',
 };
-
-/* =========================
-   DEFAULT EXPORT
-========================= */
-const apiConfig = {
-  IS_DEV,
-  API_BASE_URL,
-  SOCKET_URL,
-  API_ENDPOINTS,
-  getApiBaseUrl,
-  getSocketUrl,
-};
-
-export default apiConfig;

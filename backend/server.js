@@ -29,8 +29,13 @@ const PORT = process.env.PORT || 10000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 /* ================= SECURITY ================= */
-app.use(helmet({ contentSecurityPolicy: false }));
 app.set('trust proxy', 1);
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // keep safe if frontend uses external scripts
+  })
+);
 
 /* ================= RATE LIMIT ================= */
 const globalLimiter = rateLimit({
@@ -45,7 +50,7 @@ const authLimiter = rateLimit({
   max: 15,
   message: {
     success: false,
-    message: 'Too many login attempts. Try again later.'
+    message: 'Too many login attempts. Try again later.',
   },
 });
 
@@ -53,21 +58,20 @@ app.use(globalLimiter);
 
 /* ================= MIDDLEWARE ================= */
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '1mb' })); // FIX: 10mb is too risky for auth APIs
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+/* ================= SAFE TIMEOUT MIDDLEWARE ================= */
 const requestTimeout = (ms = 90000) => (req, res, next) => {
   const timer = setTimeout(() => {
     if (!res.headersSent) {
-      console.warn(`⏰ Request timeout: ${req.method} ${req.url}`);
+      console.warn(`⏰ Timeout: ${req.method} ${req.originalUrl}`);
 
       res.status(408).json({
         success: false,
-        message: 'Request timeout. Please try again.'
+        message: 'Request timeout. Please try again.',
       });
-
-      req.destroy();
     }
   }, ms);
 
@@ -79,7 +83,7 @@ app.use(requestTimeout(90000));
 
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-/* ================= CORS ================= */
+/* ================= CORS (FIXED + SAFE) ================= */
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
@@ -88,20 +92,25 @@ const allowedOrigins = [
   'https://trustra-capital-trade.vercel.app',
 ];
 
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  return (
+    allowedOrigins.includes(origin) ||
+    origin.includes('vercel.app') || // FIX: allow preview deployments
+    origin.startsWith('http://192.168.') ||
+    origin.startsWith('http://172.') ||
+    origin.startsWith('http://10.')
+  );
+};
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (
-        !origin ||
-        allowedOrigins.includes(origin) ||
-        origin.startsWith('http://192.168.') ||
-        origin.startsWith('http://172.') ||
-        origin.startsWith('http://10.')
-      ) {
+      if (isAllowedOrigin(origin)) {
         return callback(null, true);
       }
-
-      callback(new Error(`CORS blocked: ${origin}`));
+      return callback(null, false); // FIX: avoid crashing server
     },
     credentials: true,
   })
@@ -109,18 +118,26 @@ app.use(
 
 app.options('*', cors());
 
-/* ================= SOCKET.IO ================= */
+/* ================= SOCKET.IO (FIXED CORS MATCH) ================= */
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
     credentials: true,
   },
 });
 
 io.on('connection', (socket) => {
   socket.on('join', (userId) => {
-    if (mongoose.Types.ObjectId.isValid(userId)) {
-      socket.join(userId.toString());
+    const id = String(userId || '').trim();
+
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      socket.join(id);
     }
   });
 });
@@ -150,7 +167,7 @@ app.get('/api/health', (req, res) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     message: 'Trustra Capital API Running',
-    health: '/api/health'
+    health: '/api/health',
   });
 });
 
@@ -173,11 +190,9 @@ const startServer = async () => {
       console.log('====================================');
       console.log('🚀 Trustra Capital Backend Started');
       console.log('====================================');
-
       console.log(`✅ Running on port ${PORT} [${NODE_ENV}]`);
       console.log('🔗 Health Check: /api/health');
     });
-
   } catch (err) {
     console.error('❌ Failed to start server:', err.message);
     process.exit(1);
@@ -189,7 +204,13 @@ startServer();
 /* ================= GRACEFUL SHUTDOWN ================= */
 process.on('SIGINT', async () => {
   console.log('🛑 Shutting down server...');
-  await mongoose.connection.close();
+
+  try {
+    await mongoose.connection.close();
+    console.log('🟡 MongoDB closed');
+  } catch (err) {
+    console.error('MongoDB close error:', err.message);
+  }
 
   server.close(() => {
     console.log('✅ Server closed gracefully');
