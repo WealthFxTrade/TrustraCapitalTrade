@@ -85,11 +85,10 @@ export default function Signup() {
     setLoading(true);
     const toastId = toast.loading('Creating your account...');
 
-    // AbortController for timeout protection
     const controller = new AbortController();
 
     try {
-      const fullName = `\( {formData.firstName.trim()} \){formData.lastName.trim()}`;
+      const fullName = `${formData.firstName.trim()} ${formData.lastName.trim()}`;
 
       const payload = {
         name: fullName,
@@ -210,7 +209,7 @@ export default function Signup() {
                   onChange={handleChange}
                   disabled={loading}
                   className={`w-full bg-white/5 border ${errors.firstName ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 text-sm focus:border-emerald-500 outline-none`}
-                  placeholder="Ikenna"
+                  placeholder="John"
                 />
                 {errors.firstName && <p className="text-rose-500 text-xs">{errors.firstName}</p>}
               </div>
@@ -224,7 +223,7 @@ export default function Signup() {
                   onChange={handleChange}
                   disabled={loading}
                   className={`w-full bg-white/5 border ${errors.lastName ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 text-sm focus:border-emerald-500 outline-none`}
-                  placeholder="Prince"
+                  placeholder="Doe"
                 />
                 {errors.lastName && <p className="text-rose-500 text-xs">{errors.lastName}</p>}
               </div>
@@ -240,7 +239,7 @@ export default function Signup() {
                 onChange={handleChange}
                 disabled={loading}
                 className={`w-full bg-white/5 border ${errors.email ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 text-sm focus:border-emerald-500 outline-none`}
-                placeholder="kayblizz2015@gmail.com"
+                placeholder="client@trustracapital.com"
               />
               {errors.email && <p className="text-rose-500 text-xs">{errors.email}</p>}
             </div>
@@ -257,11 +256,11 @@ export default function Signup() {
                     onChange={handleChange}
                     disabled={loading}
                     className={`w-full bg-white/5 border ${errors.password ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 pr-12 text-sm focus:border-emerald-500 outline-none`}
-                    placeholder="Secure password"
+                    placeholder="••••••••••••"
                   />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowPassword(!showPassword)} 
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
                     disabled={loading}
                   >
@@ -281,11 +280,11 @@ export default function Signup() {
                     onChange={handleChange}
                     disabled={loading}
                     className={`w-full bg-white/5 border ${errors.confirmPassword ? 'border-rose-500' : 'border-white/10'} rounded-2xl px-6 py-4 pr-12 text-sm focus:border-emerald-500 outline-none`}
-                    placeholder="Confirm password"
+                    placeholder="••••••••••••"
                   />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)} 
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500"
                     disabled={loading}
                   >
